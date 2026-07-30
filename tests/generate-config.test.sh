@@ -40,6 +40,9 @@ validate_alloy() {
   TESTS=$((TESTS+1))
   local out
   out="$(docker run --rm -v "$tmp:/c:ro" "$ALLOY_IMAGE" run --server.http.listen-addr=0.0.0.0:0 --storage.path=/tmp/d /c/config.alloy 2>&1 & p=$!; sleep 4; kill $p 2>/dev/null; wait $p 2>/dev/null)"
+  # Drop network noise: the fleet cases deliberately point at an unresolvable host, so
+  # remotecfg polling fails. Config errors are reported at load time without these strings.
+  out="$(grep -viE 'no such host|connection refused|dial tcp|context deadline exceeded' <<<"$out" || true)"
   if grep -qiE 'error during the initial|could not perform|failed to (build|load)|unrecognized|parse error|expected .* but got|invalid (argument|expression)' <<<"$out"; then
     fail "alloy run reported config error ($name): $(grep -iE 'error|expected|invalid' <<<"$out" | head -3)"
   else
@@ -116,14 +119,66 @@ check_contains "$PROM_BLOCK" 'sys.env("PROMETHEUS_PASSWORD")'
 check_absent   "$PROM_BLOCK" 'LOKI_PASSWORD'
 validate_alloy "$OUT" "both-auth"
 
+echo "== fleet-only =="
+# .invalid never resolves, so `alloy run` fails DNS instead of reaching a real endpoint.
+OUT="$(gen LOG_LEVEL=info FLEET_URL=https://fleet-management-prod-001.example.invalid)"
+check_contains "$OUT" 'remotecfg {'
+check_contains "$OUT" 'url            = "https://fleet-management-prod-001.example.invalid"'
+check_contains "$OUT" 'id             = "homeassistant"'
+check_contains "$OUT" 'poll_frequency = "5m"'
+check_absent   "$OUT" 'loki.source.journal'
+check_absent   "$OUT" 'prometheus.exporter.unix'
+check_absent   "$OUT" 'attributes     = {'
+check_absent   "$OUT" 'name           ='
+check_absent   "$OUT" 'basic_auth {'
+validate_alloy "$OUT" "fleet-only"
+
+echo "== fleet with auth, name and attributes =="
+OUT="$(gen LOG_LEVEL=info FLEET_URL=https://fleet-management-prod-001.example.invalid \
+  FLEET_USERNAME=987654 FLEET_COLLECTOR_NAME="Home Assistant" \
+  FLEET_ATTRIBUTES=env=home,role=hass FLEET_POLL_FREQUENCY=30s INSTANCE_NAME=hass-test)"
+check_contains "$OUT" 'id             = "hass-test"'
+check_contains "$OUT" 'name           = "Home Assistant"'
+check_contains "$OUT" 'attributes     = {'
+check_contains "$OUT" '"env" = "home",'
+check_contains "$OUT" '"role" = "hass",'
+check_contains "$OUT" 'poll_frequency = "30s"'
+check_contains "$OUT" 'username = "987654"'
+check_contains "$OUT" 'password = sys.env("FLEET_PASSWORD")'
+validate_alloy "$OUT" "fleet-full"
+
+echo "== fleet, single attribute =="
+OUT="$(gen LOG_LEVEL=info FLEET_URL=https://fleet-management-prod-001.example.invalid FLEET_ATTRIBUTES=env=home)"
+check_contains "$OUT" 'attributes     = {'
+check_contains "$OUT" '"env" = "home",'
+check_absent   "$OUT" '"role"'
+
+echo "== all three backends (each secret confined to its own block) =="
+OUT="$(gen LOG_LEVEL=info LOKI_URL=https://logs.example.net/loki/api/v1/push LOKI_USERNAME=111 \
+  PROMETHEUS_URL=https://prom.example.net/api/prom/push PROMETHEUS_USERNAME=222 \
+  FLEET_URL=https://fleet-management-prod-001.example.invalid FLEET_USERNAME=333)"
+FLEET_BLOCK="$(block "$OUT" 'remotecfg {')"
+LOKI_BLOCK="$(block "$OUT" 'loki.write "loki" {')"
+PROM_BLOCK="$(block "$OUT" 'prometheus.remote_write "metrics" {')"
+check_contains "$FLEET_BLOCK" 'username = "333"'
+check_contains "$FLEET_BLOCK" 'sys.env("FLEET_PASSWORD")'
+check_absent   "$FLEET_BLOCK" 'LOKI_PASSWORD'
+check_absent   "$FLEET_BLOCK" 'PROMETHEUS_PASSWORD'
+check_absent   "$LOKI_BLOCK"  'FLEET_PASSWORD'
+check_absent   "$PROM_BLOCK"  'FLEET_PASSWORD'
+validate_alloy "$OUT" "all-three"
+
 echo "== passwords never reach the generated config =="
 # Passwords are in the generator's environment (as they are at runtime); the config
 # must reference them by env-var name only, never interpolate the value.
 OUT="$(gen LOG_LEVEL=info LOKI_URL=https://logs.example.net/loki/api/v1/push LOKI_USERNAME=111 \
   PROMETHEUS_URL=https://prom.example.net/api/prom/push PROMETHEUS_USERNAME=222 \
-  LOKI_PASSWORD=SENTINELLOKISECRET PROMETHEUS_PASSWORD=SENTINELPROMSECRET)"
+  FLEET_URL=https://fleet-management-prod-001.example.invalid FLEET_USERNAME=333 \
+  LOKI_PASSWORD=SENTINELLOKISECRET PROMETHEUS_PASSWORD=SENTINELPROMSECRET \
+  FLEET_PASSWORD=SENTINELFLEETSECRET)"
 check_absent "$OUT" 'SENTINELLOKISECRET'
 check_absent "$OUT" 'SENTINELPROMSECRET'
+check_absent "$OUT" 'SENTINELFLEETSECRET'
 
 echo ""
 echo "== RESULTS: $((TESTS-FAILS))/$TESTS checks passed =="

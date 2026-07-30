@@ -1,10 +1,11 @@
 name: Grafana Alloy
-version: "1.4.0"
+version: "1.5.0"
 slug: alloy
 description: >-
   Ship Home Assistant OS logs to Loki and host system metrics to Prometheus
-  using Grafana Alloy. Replacement for the deprecated Promtail add-on, plus
-  node_exporter-style host monitoring (CPU, memory, disk, network).
+  using Grafana Alloy, optionally managed from Grafana Fleet Management.
+  Replacement for the deprecated Promtail add-on, plus node_exporter-style
+  host monitoring (CPU, memory, disk, network).
 url: https://github.com/rknightion/ha-addon-alloy
 image: ghcr.io/rknightion/{arch}-addon-alloy
 codeowners:
@@ -31,6 +32,7 @@ options:
   loki_url: "http://localhost:3100/loki/api/v1/push"
   instance_name: homeassistant
   metrics_scrape_interval: 60s
+  fleet_poll_frequency: 5m
   log_level: info
 schema:
   loki_url: "url?"
@@ -41,6 +43,12 @@ schema:
   prometheus_password: "password?"
   instance_name: "str?"
   metrics_scrape_interval: "str?"
+  fleet_url: "url?"
+  fleet_username: "str?"
+  fleet_password: "password?"
+  fleet_collector_name: "str?"
+  fleet_attributes: "str?"
+  fleet_poll_frequency: "str?"
   log_level: "list(debug|info|warn|error)"
   additional_config: "str?"
 stage: experimental

@@ -30,12 +30,19 @@ INSTANCE_NAME=$(opt instance_name homeassistant)
 METRICS_SCRAPE_INTERVAL=$(opt metrics_scrape_interval 60s)
 LOG_LEVEL=$(opt log_level info)
 ADDITIONAL_CONFIG=$(opt additional_config)
+FLEET_URL=$(opt fleet_url)
+FLEET_USERNAME=$(opt fleet_username)
+FLEET_COLLECTOR_NAME=$(opt fleet_collector_name)
+FLEET_ATTRIBUTES=$(opt fleet_attributes)
+FLEET_POLL_FREQUENCY=$(opt fleet_poll_frequency 5m)
 export LOKI_URL LOKI_USERNAME PROMETHEUS_URL PROMETHEUS_USERNAME
 export INSTANCE_NAME METRICS_SCRAPE_INTERVAL LOG_LEVEL ADDITIONAL_CONFIG
+export FLEET_URL FLEET_USERNAME FLEET_COLLECTOR_NAME FLEET_ATTRIBUTES FLEET_POLL_FREQUENCY
 
-# Require at least one destination
-if [ -z "${LOKI_URL}" ] && [ -z "${PROMETHEUS_URL}" ]; then
-    echo "FATAL: set at least one of loki_url (logs) or prometheus_url (metrics)." >&2
+# Require at least one destination. Fleet Management alone is enough: the remote
+# configuration can supply a complete set of pipelines.
+if [ -z "${LOKI_URL}" ] && [ -z "${PROMETHEUS_URL}" ] && [ -z "${FLEET_URL}" ]; then
+    echo "FATAL: set at least one of loki_url (logs), prometheus_url (metrics) or fleet_url (Fleet Management)." >&2
     exit 1
 fi
 
@@ -57,6 +64,38 @@ check_auth_pair() {
 
 check_auth_pair loki
 check_auth_pair prometheus
+check_auth_pair fleet
+
+# Attributes are emitted verbatim into the Alloy config. A malformed pair would only
+# surface as a River syntax error when Alloy starts, which is far harder to read in the
+# add-on log than a named failure here.
+validate_attributes() {
+    [ -n "${FLEET_ATTRIBUTES}" ] || return 0
+    local -a pairs
+    IFS=',' read -r -a pairs <<<"${FLEET_ATTRIBUTES}"
+    local pair
+    for pair in "${pairs[@]}"; do
+        case "${pair}" in
+            *'"'*|*[\\]*)
+                echo "FATAL: fleet_attributes entry '${pair}' contains a quote or backslash." >&2
+                exit 1
+                ;;
+        esac
+        case "${pair}" in
+            *=*) ;;
+            *)
+                echo "FATAL: fleet_attributes entry '${pair}' is not key=value." >&2
+                exit 1
+                ;;
+        esac
+        if [ -z "${pair%%=*}" ]; then
+            echo "FATAL: fleet_attributes entry '${pair}' has an empty key." >&2
+            exit 1
+        fi
+    done
+}
+
+validate_attributes
 
 # Describe auth for the startup banner - never the secret itself.
 auth_note() {
@@ -73,6 +112,8 @@ echo "-----------------------------------------------------------"
 echo " Grafana Alloy for Home Assistant"
 [ -n "${LOKI_URL}" ]       && echo " Logs    -> Loki:       ${LOKI_URL} $(auth_note "${LOKI_USERNAME}")"
 [ -n "${PROMETHEUS_URL}" ] && echo " Metrics -> Prometheus: ${PROMETHEUS_URL} (every ${METRICS_SCRAPE_INTERVAL}) $(auth_note "${PROMETHEUS_USERNAME}")"
+[ -n "${FLEET_URL}" ]      && echo " Fleet   -> Fleet Mgmt:  ${FLEET_URL} (every ${FLEET_POLL_FREQUENCY}) $(auth_note "${FLEET_USERNAME}")"
+[ -n "${FLEET_ATTRIBUTES}" ] && echo " Fleet attributes: ${FLEET_ATTRIBUTES}"
 [ -n "${LOKI_URL}" ]       && echo " Journal path: ${JOURNAL_PATH}"
 echo " Instance: ${INSTANCE_NAME}"
 echo " Log level: ${LOG_LEVEL}"
