@@ -1,0 +1,42 @@
+name: Security and workflow lint
+
+# Calls the shared rknightion reusables so this repo inherits fleet-wide policy
+# instead of carrying its own copies. Reusables are pinned to a release SHA, as the
+# fleet requires (zizmor fails a reintroduced floating @main).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so newly disclosed CVEs in the add-on image surface without a push.
+    - cron: "42 5 * * 2"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # Workflow correctness, including ShellCheck over the embedded `run:` blocks.
+  actionlint:
+    permissions:
+      contents: read
+    uses: rknightion/.github/.github/workflows/actionlint.yml@0228d8b9f1e36ff3a1d0906574d70fa174ddc7bf # v1.5.1
+
+  # Actions security audit: unpinned refs, over-broad permissions, credential
+  # persistence. Guards against regressing the hardening in build.yaml.
+  zizmor:
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    uses: rknightion/.github/.github/workflows/zizmor.yml@0228d8b9f1e36ff3a1d0906574d70fa174ddc7bf # v1.5.1
+
+  # hadolint + Trivy over the add-on Dockerfile (apt-get layer, curl'd Alloy release).
+  # Skipped on pull_request: fork PRs cannot be granted security-events: write, so the
+  # SARIF upload would 403.
+  docker-security:
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      security-events: write
+    uses: rknightion/.github/.github/workflows/docker-security.yml@0228d8b9f1e36ff3a1d0906574d70fa174ddc7bf # v1.5.1

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.4.0 - 2026-07-30
+
+### Changed
+- The add-on now ships as a prebuilt image (`ghcr.io/rknightion/{arch}-addon-alloy`) built by
+  GitHub Actions, instead of being compiled on the Home Assistant device at install/update time.
+  Updates are a registry pull and no longer depend on the device's disk space, build timeout, or
+  network access to Debian/GitHub release mirrors.
+- Repository URLs and codeowner now point at `rknightion/ha-addon-alloy`
+
+### Added
+- CI: ShellCheck and the generator test suite run on every push and pull request. The Docker-based
+  `alloy fmt` / `alloy run` config validation, previously skipped in most environments, now runs.
+
 ## 1.3.0 - 2026-07-30
 
 ### Added

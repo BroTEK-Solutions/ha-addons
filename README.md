@@ -12,9 +12,13 @@ Grafana Alloy is the official successor to Promtail, Grafana Agent, and Grafana 
 
 1. Open **Settings** > **Add-ons** > **Add-on Store**
 2. Click the overflow menu (three dots, top-right) > **Repositories**
-3. Paste: `https://github.com/ecohash-co/ha-addon-alloy`
+3. Paste: `https://github.com/rknightion/ha-addon-alloy`
 4. Click **Add** > **Close**
 5. Find **Grafana Alloy** in the store and click **Install**
+
+Install and update pull a prebuilt image from `ghcr.io` (`{arch}-addon-alloy`), built by
+GitHub Actions for `amd64` and `aarch64` on every push to `main`. Nothing is compiled on your
+Home Assistant device.
 
 ## Configuration
 
