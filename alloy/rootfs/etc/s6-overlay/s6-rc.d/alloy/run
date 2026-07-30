@@ -1,6 +1,7 @@
 #!/usr/bin/with-contenv bash
-# The generated config references sys.env("PROMETHEUS_PASSWORD"); export it here
-# (init-alloy/run's env does not propagate to this long-running service).
+# The generated config references sys.env("LOKI_PASSWORD") / sys.env("PROMETHEUS_PASSWORD");
+# export them here (init-alloy/run's env does not propagate to this long-running service).
+export LOKI_PASSWORD=$(jq -r '.loki_password // ""' /data/options.json)
 export PROMETHEUS_PASSWORD=$(jq -r '.prometheus_password // ""' /data/options.json)
 exec /usr/bin/alloy run \
     --server.http.listen-addr=0.0.0.0:12345 \
