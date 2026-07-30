@@ -8,16 +8,30 @@ GENERATOR="/usr/share/alloy/generate-config.sh"
 
 mkdir -p "${CONFIG_DIR}" /data/alloy
 
-# Read options. Passwords are deliberately NOT read into variables here - they are
-# exported by the alloy service and referenced from the config via sys.env().
-export LOKI_URL=$(jq -r '.loki_url // ""' "${OPTIONS_FILE}")
-export LOKI_USERNAME=$(jq -r '.loki_username // ""' "${OPTIONS_FILE}")
-export PROMETHEUS_URL=$(jq -r '.prometheus_url // ""' "${OPTIONS_FILE}")
-export PROMETHEUS_USERNAME=$(jq -r '.prometheus_username // ""' "${OPTIONS_FILE}")
-export INSTANCE_NAME=$(jq -r '.instance_name // "homeassistant"' "${OPTIONS_FILE}")
-export METRICS_SCRAPE_INTERVAL=$(jq -r '.metrics_scrape_interval // "60s"' "${OPTIONS_FILE}")
-export LOG_LEVEL=$(jq -r '.log_level // "info"' "${OPTIONS_FILE}")
-export ADDITIONAL_CONFIG=$(jq -r '.additional_config // ""' "${OPTIONS_FILE}")
+# Read an option, falling back to $2 when unset or empty.
+opt() {
+    jq -r --arg k "$1" --arg d "${2:-}" '.[$k] // $d | if . == "" then $d else . end' "${OPTIONS_FILE}"
+}
+
+# True when the option is present and non-empty. Used to test secrets without ever
+# holding them in a variable.
+option_set() {
+    [ -n "$(opt "$1")" ]
+}
+
+# Read options. Assignment is kept separate from `export` so a jq failure is not
+# masked by export's exit status. Passwords are deliberately NOT read here - they
+# are exported by the alloy service and referenced from the config via sys.env().
+LOKI_URL=$(opt loki_url)
+LOKI_USERNAME=$(opt loki_username)
+PROMETHEUS_URL=$(opt prometheus_url)
+PROMETHEUS_USERNAME=$(opt prometheus_username)
+INSTANCE_NAME=$(opt instance_name homeassistant)
+METRICS_SCRAPE_INTERVAL=$(opt metrics_scrape_interval 60s)
+LOG_LEVEL=$(opt log_level info)
+ADDITIONAL_CONFIG=$(opt additional_config)
+export LOKI_URL LOKI_USERNAME PROMETHEUS_URL PROMETHEUS_USERNAME
+export INSTANCE_NAME METRICS_SCRAPE_INTERVAL LOG_LEVEL ADDITIONAL_CONFIG
 
 # Require at least one destination
 if [ -z "${LOKI_URL}" ] && [ -z "${PROMETHEUS_URL}" ]; then
@@ -25,18 +39,12 @@ if [ -z "${LOKI_URL}" ] && [ -z "${PROMETHEUS_URL}" ]; then
     exit 1
 fi
 
-# True when the option exists and is a non-empty string. Used to test secrets
-# without ever holding them in a variable.
-option_set() {
-    [ -n "$(jq -r --arg k "$1" '.[$k] // ""' "${OPTIONS_FILE}")" ]
-}
-
 # Basic auth needs both halves; half a pair would silently 401 against the backend.
 # $1 = option prefix (loki|prometheus)
 check_auth_pair() {
-    local user pass
-    option_set "${1}_username" && user=1 || user=""
-    option_set "${1}_password" && pass=1 || pass=""
+    local user="" pass=""
+    if option_set "${1}_username"; then user=1; fi
+    if option_set "${1}_password"; then pass=1; fi
     if [ -n "${user}" ] && [ -z "${pass}" ]; then
         echo "FATAL: ${1}_username is set but ${1}_password is empty." >&2
         exit 1
