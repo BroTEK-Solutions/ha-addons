@@ -71,7 +71,16 @@ jobs:
       - name: Build add-on
         # The image name and version come from alloy/config.yaml (`image:` and
         # `version:`), so this workflow has no second copy of either to drift.
-        uses: home-assistant/builder@4de35182ce1e329181bffcbcc84d33db5e2c7e10 # 2026.06.0
+        #
+        # The ref below is load-bearing beyond pinning: the action derives its
+        # builder image tag from the ref it was checked out at, i.e. it pulls
+        # ghcr.io/home-assistant/{arch}-builder:<this-ref>. Only refs that have a
+        # published builder image work. The newest release, 2026.06.0, has no
+        # builder image at all, so it fails with "manifest unknown"; 2026.03.2 is
+        # the newest that does, and its commit SHA is published as an image tag,
+        # which is what lets this stay hash-pinned. Verify any bump against
+        # ghcr.io/home-assistant/amd64-builder before merging it.
+        uses: home-assistant/builder@62a1597b84b3461abad9816d9cd92862a2b542c3 # 2026.03.2
         with:
           args: |
             --${{ matrix.arch }} \
