@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.5.0 - 2026-07-30
+
+### Added
+- Grafana Fleet Management support via Alloy's `remotecfg` block. New options: `fleet_url`,
+  `fleet_username`, `fleet_password`, `fleet_collector_name`, `fleet_attributes`,
+  `fleet_poll_frequency`. Remote configuration runs alongside the locally generated Loki and
+  Prometheus pipelines, never replacing them.
+- Startup validation of `fleet_attributes`, rejecting a segment that is not `key=value`, has an
+  empty key, or contains a quote or backslash (which would break Alloy's River string syntax),
+  instead of failing later as an Alloy syntax error
+- Startup banner reports the Fleet Management endpoint, poll frequency and attributes
+
+### Changed
+- `fleet_url` now counts as a destination: the add-on starts with only Fleet Management configured,
+  where previously at least one of `loki_url` or `prometheus_url` was required
+- The collector ID reported to Fleet Management is `instance_name`, matching the `instance` label
+  on metrics
+
+### Security
+- The Fleet Management token is passed to Alloy through an environment variable and referenced as
+  `sys.env("FLEET_PASSWORD")`, so it never lands in `/etc/alloy/config.alloy` - matching the
+  existing handling of the Loki and Prometheus passwords
+
 ## 1.4.0 - 2026-07-30
 
 ### Changed

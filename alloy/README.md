@@ -8,6 +8,7 @@ Prometheus** using Grafana Alloy.
 
 Replaces the deprecated Promtail add-on which fails on HAOS 11+ due to systemd 252+ compact
 journal format incompatibility, and adds node_exporter-style host monitoring (CPU, memory,
-disk, network). Set `prometheus_url` to enable metrics; see the **Documentation** tab.
+disk, network). Set `prometheus_url` to enable metrics; see the **Documentation** tab. Set
+`fleet_url` to manage this collector from Grafana Fleet Management.
 
 For full documentation, see the **Documentation** tab after installing.

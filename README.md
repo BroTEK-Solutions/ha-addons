@@ -31,7 +31,9 @@ instance_name: home-assistant
 log_level: info
 ```
 
-At least one of `loki_url` (logs) or `prometheus_url` (metrics) must be set. See the add-on's **Documentation** tab for the full metrics options and the host-filesystem caveat.
+At least one of `loki_url` (logs), `prometheus_url` (metrics) or `fleet_url` (Fleet Management)
+must be set. See the add-on's **Documentation** tab for the full metrics options and the
+host-filesystem caveat.
 
 ## Host metrics
 
@@ -39,6 +41,14 @@ When `prometheus_url` is set, the add-on collects host CPU, memory, disk I/O, lo
 network metrics via Alloy's `unix` exporter. HAOS add-ons cannot mount the host root filesystem,
 so filesystem usage is reported for the mapped HA volumes (`share`/`media`/`backup`, which sit on
 the data partition) rather than every host mount.
+
+## Fleet Management
+
+Set `fleet_url` (plus `fleet_username` and `fleet_password`) to register the collector with
+[Grafana Fleet Management](https://grafana.com/docs/grafana-cloud/send-data/fleet-management/).
+Alloy then runs the pipelines it receives from Grafana Cloud alongside the local ones configured
+above. Use `fleet_attributes` (`key=value` pairs) to control which pipelines this collector
+receives.
 
 ## What gets shipped
 

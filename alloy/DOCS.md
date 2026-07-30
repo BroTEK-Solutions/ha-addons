@@ -85,13 +85,77 @@ instance_name: home-assistant
 ### Credential handling
 
 Passwords are never written into the generated Alloy config. The add-on exports them as
-environment variables and the config references `sys.env("LOKI_PASSWORD")` /
-`sys.env("PROMETHEUS_PASSWORD")`, so `/etc/alloy/config.alloy` and the debug UI stay safe to
-share when troubleshooting. The startup banner prints the username but never the password.
+environment variables and the config references `sys.env("LOKI_PASSWORD")`,
+`sys.env("PROMETHEUS_PASSWORD")` and `sys.env("FLEET_PASSWORD")`, so `/etc/alloy/config.alloy` and
+the debug UI stay safe to share when troubleshooting. The startup banner prints the username but
+never the password.
 
 Note that Home Assistant stores add-on options (including `password`-typed ones) in plain text
 in the add-on's `/data/options.json` and in backups - the `password` schema type only masks the
 field in the UI.
+
+## Fleet Management
+
+Set `fleet_url` to have the add-on register with [Grafana Fleet
+Management](https://grafana.com/docs/grafana-cloud/send-data/fleet-management/). Alloy polls the
+endpoint and runs the configuration it receives **alongside** the local pipelines generated from
+the options above, in a separate controller. Nothing you configure locally is replaced or
+disabled by remote configuration.
+
+The fetched configuration is cached in the add-on's data directory, so it survives a restart and
+a temporary loss of connectivity to Grafana Cloud.
+
+### Options
+
+- **fleet_url**: the Fleet Management service URL, e.g.
+  `https://fleet-management-prod-001.grafana.net`. Copy it from the API tab of the Fleet
+  Management page in your Grafana Cloud stack rather than constructing it by hand - some regions
+  use a longer, nested hostname.
+- **fleet_username** / **fleet_password**: your numeric instance ID and an access token. The
+  predefined `set:alloy-data-write` scope covers both reading remote configuration and writing
+  telemetry. The token is passed to Alloy via an environment variable, not written into the
+  config file. Set both or neither.
+- **fleet_collector_name**: human-readable name for this collector in the Fleet Management UI,
+  e.g. `Home Assistant`. Optional.
+- **fleet_attributes**: comma-separated `key=value` pairs, e.g. `env=home,role=hass`. Fleet
+  Management uses these to decide which pipelines this collector receives. Optional, but without
+  them matching can only be done by collector ID.
+- **fleet_poll_frequency**: how often to check for configuration updates. Default: `5m`. Alloy
+  requires at least `10s`.
+
+The collector ID is not a separate option - it is `instance_name`, so the collector in Fleet
+Management and the `instance` label on your metrics carry the same name.
+
+`fleet_url` counts as a destination on its own: an add-on configured with only Fleet Management
+starts normally and runs whatever pipelines the remote configuration supplies.
+
+### Example: Grafana Cloud with logs, metrics and Fleet Management
+
+```yaml
+loki_url: "https://logs-prod-XX.grafana.net/loki/api/v1/push"
+loki_username: "654321"
+loki_password: "glc_your_access_policy_token"
+prometheus_url: "https://prometheus-prod-XX.grafana.net/api/prom/push"
+prometheus_username: "123456"
+prometheus_password: "glc_your_access_policy_token"
+fleet_url: "https://fleet-management-prod-001.grafana.net"
+fleet_username: "987654"
+fleet_password: "glc_your_access_policy_token"
+fleet_collector_name: "Home Assistant"
+fleet_attributes: "env=home,role=hass"
+instance_name: home-assistant
+```
+
+### Example: Fleet Management only
+
+```yaml
+loki_url: ""
+prometheus_url: ""
+fleet_url: "https://fleet-management-prod-001.grafana.net"
+fleet_username: "987654"
+fleet_password: "glc_your_access_policy_token"
+instance_name: home-assistant
+```
 
 ## Labels
 
@@ -133,6 +197,16 @@ Note: This is injected as-is into the config file. Syntax errors will prevent Al
   auth needs both values; fill in the missing one or clear both.
 - **Add-on crashes on start**: Check the add-on log for Alloy config errors. Set `log_level: debug` for verbose output.
 - **"timestamp too old" in Loki**: Normal on first start. Alloy reads the full journal history; Loki rejects entries outside its retention window. Resolves in 1-2 minutes.
+- **Add-on refuses to start with `FATAL: fleet_attributes entry '...' is not key=value`**: every
+  comma-separated segment of `fleet_attributes` must contain an `=` with a non-empty key. Write
+  `env=home,role=hass`, not `env home, role`.
+- **Collector does not appear in Fleet Management**: check the add-on log for the `Fleet` banner
+  line, confirm `fleet_url` matches the API tab exactly, and confirm the token carries the
+  `set:alloy-data-write` scope. A rejected token shows as a `401` from the Fleet Management host in
+  the add-on log.
+- **Collector appears but receives no pipelines**: matching is driven by `fleet_attributes` and the
+  collector ID (`instance_name`). Compare the `Fleet attributes:` banner line against the matchers
+  on your Fleet Management pipelines.
 
 ## Support
 
