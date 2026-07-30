@@ -1,13 +1,14 @@
 name: Grafana Alloy
-version: "1.3.0"
+version: "1.4.0"
 slug: alloy
 description: >-
   Ship Home Assistant OS logs to Loki and host system metrics to Prometheus
   using Grafana Alloy. Replacement for the deprecated Promtail add-on, plus
   node_exporter-style host monitoring (CPU, memory, disk, network).
-url: https://github.com/ecohash-co/ha-addon-alloy
+url: https://github.com/rknightion/ha-addon-alloy
+image: ghcr.io/rknightion/{arch}-addon-alloy
 codeowners:
-  - "@ecohash-co"
+  - "@rknightion"
 arch:
   - aarch64
   - amd64

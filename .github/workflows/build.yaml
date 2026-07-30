@@ -1,0 +1,63 @@
+name: Build add-on
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Lint and generator tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ShellCheck
+        # The s6 service scripts use a `#!/usr/bin/with-contenv bash` shebang that
+        # ShellCheck cannot recognise, hence the explicit `-s bash`.
+        run: |
+          shellcheck -s bash \
+            alloy/rootfs/usr/share/alloy/generate-config.sh \
+            alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run \
+            alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run \
+            tests/generate-config.test.sh
+
+      - name: Generator tests
+        # Docker is present on the runner, so this also runs the `alloy fmt` /
+        # `alloy run` validation that is skipped in environments without it.
+        run: bash tests/generate-config.test.sh
+
+  build:
+    name: Build ${{ matrix.arch }}
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [aarch64, amd64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        # Pull requests build only (--test below), so no credentials are needed.
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build add-on
+        # The image name and version come from alloy/config.yaml (`image:` and
+        # `version:`), so this workflow has no second copy of either to drift.
+        uses: home-assistant/builder@master
+        with:
+          args: |
+            --${{ matrix.arch }} \
+            --target /data/alloy \
+            ${{ github.event_name == 'pull_request' && '--test' || '' }} \
+            --addon
