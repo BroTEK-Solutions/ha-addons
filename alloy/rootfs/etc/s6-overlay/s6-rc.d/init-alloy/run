@@ -8,8 +8,10 @@ GENERATOR="/usr/share/alloy/generate-config.sh"
 
 mkdir -p "${CONFIG_DIR}" /data/alloy
 
-# Read options
+# Read options. Passwords are deliberately NOT read into variables here - they are
+# exported by the alloy service and referenced from the config via sys.env().
 export LOKI_URL=$(jq -r '.loki_url // ""' "${OPTIONS_FILE}")
+export LOKI_USERNAME=$(jq -r '.loki_username // ""' "${OPTIONS_FILE}")
 export PROMETHEUS_URL=$(jq -r '.prometheus_url // ""' "${OPTIONS_FILE}")
 export PROMETHEUS_USERNAME=$(jq -r '.prometheus_username // ""' "${OPTIONS_FILE}")
 export INSTANCE_NAME=$(jq -r '.instance_name // "homeassistant"' "${OPTIONS_FILE}")
@@ -23,6 +25,36 @@ if [ -z "${LOKI_URL}" ] && [ -z "${PROMETHEUS_URL}" ]; then
     exit 1
 fi
 
+# True when the option exists and is a non-empty string. Used to test secrets
+# without ever holding them in a variable.
+option_set() {
+    [ -n "$(jq -r --arg k "$1" '.[$k] // ""' "${OPTIONS_FILE}")" ]
+}
+
+# Basic auth needs both halves; half a pair would silently 401 against the backend.
+# $1 = option prefix (loki|prometheus)
+check_auth_pair() {
+    local user pass
+    option_set "${1}_username" && user=1 || user=""
+    option_set "${1}_password" && pass=1 || pass=""
+    if [ -n "${user}" ] && [ -z "${pass}" ]; then
+        echo "FATAL: ${1}_username is set but ${1}_password is empty." >&2
+        exit 1
+    fi
+    if [ -z "${user}" ] && [ -n "${pass}" ]; then
+        echo "FATAL: ${1}_password is set but ${1}_username is empty." >&2
+        exit 1
+    fi
+}
+
+check_auth_pair loki
+check_auth_pair prometheus
+
+# Describe auth for the startup banner - never the secret itself.
+auth_note() {
+    if [ -n "$1" ]; then echo "(auth: basic, user=$1)"; else echo "(no auth)"; fi
+}
+
 # Detect journal path (logs only)
 export JOURNAL_PATH="/var/log/journal"
 if [ ! -d "${JOURNAL_PATH}" ] || [ -z "$(ls -A "${JOURNAL_PATH}" 2>/dev/null)" ]; then
@@ -31,8 +63,8 @@ fi
 
 echo "-----------------------------------------------------------"
 echo " Grafana Alloy for Home Assistant"
-[ -n "${LOKI_URL}" ]       && echo " Logs    -> Loki:       ${LOKI_URL}"
-[ -n "${PROMETHEUS_URL}" ] && echo " Metrics -> Prometheus: ${PROMETHEUS_URL} (every ${METRICS_SCRAPE_INTERVAL})"
+[ -n "${LOKI_URL}" ]       && echo " Logs    -> Loki:       ${LOKI_URL} $(auth_note "${LOKI_USERNAME}")"
+[ -n "${PROMETHEUS_URL}" ] && echo " Metrics -> Prometheus: ${PROMETHEUS_URL} (every ${METRICS_SCRAPE_INTERVAL}) $(auth_note "${PROMETHEUS_USERNAME}")"
 [ -n "${LOKI_URL}" ]       && echo " Journal path: ${JOURNAL_PATH}"
 echo " Instance: ${INSTANCE_NAME}"
 echo " Log level: ${LOG_LEVEL}"

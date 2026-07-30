@@ -1,5 +1,5 @@
 name: Grafana Alloy
-version: "1.2.1"
+version: "1.3.0"
 slug: alloy
 description: >-
   Ship Home Assistant OS logs to Loki and host system metrics to Prometheus
@@ -33,6 +33,8 @@ options:
   log_level: info
 schema:
   loki_url: "url?"
+  loki_username: "str?"
+  loki_password: "password?"
   prometheus_url: "url?"
   prometheus_username: "str?"
   prometheus_password: "password?"

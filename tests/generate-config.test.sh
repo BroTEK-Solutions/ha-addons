@@ -18,6 +18,10 @@ check_absent()   { TESTS=$((TESTS+1)); if grep -qF -- "$2" <<<"$1"; then fail "S
 # explicit `export`s, so option vars reach the script and don't leak between cases.
 gen() { bash "$GEN"; }
 
+# Print one top-level config block: from the line starting with $2 to its closing
+# brace in column 0. Used to assert a secret is referenced in the right block only.
+block() { awk -v start="$2" 'index($0,start)==1{f=1} f{print} f&&/^}$/{exit}' <<<"$1"; }
+
 # Validate Alloy config syntax+semantics via Docker, if available.
 validate_alloy() {
   local cfg="$1" name="$2"
@@ -60,7 +64,16 @@ check_contains "$OUT" 'path         = "/var/log/journal"'
 check_contains "$OUT" 'loki.write "loki"'
 check_contains "$OUT" 'url = "http://loki:3100/loki/api/v1/push"'
 check_absent   "$OUT" 'prometheus.exporter.unix'
+check_absent   "$OUT" 'basic_auth {'
 validate_alloy "$OUT" "logs-only"
+
+echo "== logs-only (with basic auth) =="
+OUT="$(export LOG_LEVEL=info JOURNAL_PATH=/var/log/journal LOKI_URL=https://logs-prod.example.net/loki/api/v1/push LOKI_USERNAME=123456; gen)"
+check_contains "$OUT" 'loki.write "loki"'
+check_contains "$OUT" 'basic_auth {'
+check_contains "$OUT" 'username = "123456"'
+check_contains "$OUT" 'password = sys.env("LOKI_PASSWORD")'
+validate_alloy "$OUT" "logs-auth"
 
 echo "== metrics-only (with basic auth) =="
 OUT="$(export LOG_LEVEL=info PROMETHEUS_URL=http://prom:9090/api/v1/write PROMETHEUS_USERNAME=12345 INSTANCE_NAME=hass-test METRICS_SCRAPE_INTERVAL=30s; gen)"
@@ -88,6 +101,28 @@ check_contains "$OUT" 'replacement  = "homeassistant"'
 check_contains "$OUT" 'scrape_interval = "60s"'
 check_absent   "$OUT" 'basic_auth {'
 validate_alloy "$OUT" "both-noauth"
+
+echo "== both, both authed (each secret confined to its own block) =="
+OUT="$(export LOG_LEVEL=info LOKI_URL=https://logs-prod.example.net/loki/api/v1/push LOKI_USERNAME=111 \
+  PROMETHEUS_URL=https://prom-prod.example.net/api/prom/push PROMETHEUS_USERNAME=222; gen)"
+LOKI_BLOCK="$(block "$OUT" 'loki.write "loki" {')"
+PROM_BLOCK="$(block "$OUT" 'prometheus.remote_write "metrics" {')"
+check_contains "$LOKI_BLOCK" 'username = "111"'
+check_contains "$LOKI_BLOCK" 'sys.env("LOKI_PASSWORD")'
+check_absent   "$LOKI_BLOCK" 'PROMETHEUS_PASSWORD'
+check_contains "$PROM_BLOCK" 'username = "222"'
+check_contains "$PROM_BLOCK" 'sys.env("PROMETHEUS_PASSWORD")'
+check_absent   "$PROM_BLOCK" 'LOKI_PASSWORD'
+validate_alloy "$OUT" "both-auth"
+
+echo "== passwords never reach the generated config =="
+# Passwords are in the generator's environment (as they are at runtime); the config
+# must reference them by env-var name only, never interpolate the value.
+OUT="$(export LOG_LEVEL=info LOKI_URL=https://logs.example.net/loki/api/v1/push LOKI_USERNAME=111 \
+  PROMETHEUS_URL=https://prom.example.net/api/prom/push PROMETHEUS_USERNAME=222 \
+  LOKI_PASSWORD=SENTINELLOKISECRET PROMETHEUS_PASSWORD=SENTINELPROMSECRET; gen)"
+check_absent "$OUT" 'SENTINELLOKISECRET'
+check_absent "$OUT" 'SENTINELPROMSECRET'
 
 echo ""
 echo "== RESULTS: $((TESTS-FAILS))/$TESTS checks passed =="

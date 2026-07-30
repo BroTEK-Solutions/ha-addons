@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.3.0 - 2026-07-30
+
+### Added
+- HTTP basic auth for Loki via new `loki_username` / `loki_password` options (Grafana Cloud:
+  numeric Loki instance ID + access-policy token)
+- Startup validation rejecting a half-configured auth pair (username without password, or the
+  reverse) for both Loki and Prometheus, instead of failing silently with HTTP 401
+- Startup banner now reports whether each backend uses basic auth, showing the username only
+
+### Changed
+- Both backends now share one `basic_auth` emitter in the config generator; the Prometheus
+  output is unchanged
+
+### Security
+- The Loki password is passed to Alloy through an environment variable and referenced as
+  `sys.env("LOKI_PASSWORD")`, so it never lands in `/etc/alloy/config.alloy` - matching the
+  existing handling of the Prometheus password
+
 ## 1.2.1 - 2026-06-14
 
 ### Fixed
