@@ -155,7 +155,25 @@ expect_fatal "whitespace in an endpoint" \
 expect_fatal "backslash in an endpoint" \
   '{"fleet_url":"https://fleet.example.net\\\\x"}' \
   "fleet_url contains a quote, backslash or whitespace"
+expect_fatal "missing endpoint authority" \
+  '{"loki_url":"http:///loki/api/v1/push"}' \
+  "loki_url is not a valid HTTP(S) URL"
+expect_fatal "non-numeric endpoint port" \
+  '{"prometheus_url":"http://prom:abc/api/v1/write"}' \
+  "prometheus_url is not a valid HTTP(S) URL"
+expect_fatal "out-of-range endpoint port" \
+  '{"fleet_url":"https://fleet.example.net:65536"}' \
+  "fleet_url is not a valid HTTP(S) URL"
+expect_fatal "invalid endpoint escape" \
+  '{"loki_url":"http://loki:3100/%zz"}' \
+  "loki_url is not a valid HTTP(S) URL"
 expect_ok "a clean endpoint still starts" "{${LOKI}}" "loki.write"
+expect_ok "encoded path and query endpoint" \
+  '{"loki_url":"http://loki:3100/a%20path?query=a=b"}' \
+  'url = "http://loki:3100/a%20path?query=a=b"'
+expect_ok "bracketed IPv6 endpoint" \
+  '{"prometheus_url":"http://[2001:db8::1]:9090/api/v1/write"}' \
+  'url = "http://[2001:db8::1]:9090/api/v1/write"'
 
 echo
 echo "== the full Go duration grammar reaches Alloy unchanged =="
@@ -163,6 +181,12 @@ expect_ok "compound duration" \
   "{${PROM},\"metrics_scrape_interval\":\"1m30s\"}" 'scrape_interval = "1m30s"'
 expect_ok "fractional duration" \
   "{${PROM},\"metrics_scrape_interval\":\"1.5s\"}" 'scrape_interval = "1.5s"'
+expect_ok "leading-plus duration" \
+  "{${PROM},\"metrics_scrape_interval\":\"+15s\"}" 'scrape_interval = "+15s"'
+expect_ok "leading-decimal duration" \
+  "{${PROM},\"metrics_scrape_interval\":\".5s\"}" 'scrape_interval = ".5s"'
+expect_ok "microsecond duration" \
+  "{${PROM},\"metrics_scrape_interval\":\"100µs\"}" 'scrape_interval = "100µs"'
 
 echo
 echo "== fleet attributes are validated before Alloy sees them =="
@@ -178,6 +202,9 @@ expect_fatal "embedded quote breaks River syntax" \
 expect_ok "well-formed attributes" \
   "{${FLEET},\"fleet_attributes\":\"env=home,role=hass\"}" \
   '"env" = "home"' '"role" = "hass"'
+expect_ok "equals signs in attribute values" \
+  "{${FLEET},\"fleet_attributes\":\"query=a=b,token=YWJjZA==\"}" \
+  '"query" = "a=b"' '"token" = "YWJjZA=="'
 
 echo
 echo "== metric sources are opt-in and need a Prometheus endpoint =="

@@ -90,10 +90,9 @@ check_auth_pair loki
 check_auth_pair prometheus
 check_auth_pair fleet
 
-# Endpoints are interpolated into quoted River strings. The schema rejects a
-# quote, backslash or whitespace in the UI; repeat it here because options.json
-# can be edited outside the UI, and a bad character produces an Alloy parse
-# error that says nothing about which option caused it.
+# Endpoints are interpolated into quoted River strings. Repeat the schema's URL
+# checks here because options.json can be edited outside the UI, and an invalid
+# URL otherwise fails later with an error that does not name the add-on option.
 validate_url() {
     local name="${1}" value="${2}"
     [ -n "${value}" ] || return 0
@@ -103,6 +102,46 @@ validate_url() {
             bashio::exit.nok
             ;;
     esac
+
+    local rest authority port="" unescaped
+    case "${value}" in
+        http://*) rest="${value#http://}" ;;
+        https://*) rest="${value#https://}" ;;
+        *)
+            bashio::log.fatal "${name} is not a valid HTTP(S) URL: '${value}'"
+            bashio::exit.nok
+            ;;
+    esac
+
+    # Strip path, query and fragment, leaving the authority to validate. IPv6
+    # literals must be bracketed so their colons cannot be mistaken for a port.
+    authority="${rest%%[/?#]*}"
+    local ipv6_authority='^\[([0-9A-Fa-f:.]+)\](:([0-9]+))?$'
+    local host_authority='^[A-Za-z0-9._-]+(:([0-9]+))?$'
+    if [[ "${authority}" =~ ${ipv6_authority} ]]; then
+        port="${BASH_REMATCH[3]}"
+    elif [[ "${authority}" =~ ${host_authority} ]]; then
+        port="${BASH_REMATCH[2]}"
+    else
+        bashio::log.fatal "${name} is not a valid HTTP(S) URL: '${value}'"
+        bashio::exit.nok
+    fi
+
+    if [ -n "${port}" ] && { [ "${#port}" -gt 5 ] || ((10#${port} < 1 || 10#${port} > 65535)); }; then
+        bashio::log.fatal "${name} is not a valid HTTP(S) URL: '${value}'"
+        bashio::exit.nok
+    fi
+
+    # Remove valid percent escapes one at a time; any percent left afterwards
+    # begins an incomplete or non-hex escape.
+    unescaped="${value}"
+    while [[ "${unescaped}" =~ %[0-9A-Fa-f][0-9A-Fa-f] ]]; do
+        unescaped="${unescaped/"${BASH_REMATCH[0]}"/}"
+    done
+    if [[ "${unescaped}" == *%* ]]; then
+        bashio::log.fatal "${name} is not a valid HTTP(S) URL: '${value}'"
+        bashio::exit.nok
+    fi
 }
 
 validate_url loki_url "${LOKI_URL}"
