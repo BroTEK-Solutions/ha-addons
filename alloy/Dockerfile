@@ -6,7 +6,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 ARG BUILD_ARCH
+# The Alloy version lives here and nowhere else. The test suite parses it out of
+# this file so the validation container always matches the shipped binary.
 RUN set -eux; \
+    # renovate: datasource=github-releases depName=grafana/alloy
     ALLOY_VERSION="1.17.0"; \
     case "${BUILD_ARCH}" in \
         amd64)  ARCH="linux-amd64" ;; \

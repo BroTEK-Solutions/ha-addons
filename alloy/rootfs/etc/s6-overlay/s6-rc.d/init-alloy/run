@@ -1,40 +1,45 @@
-#!/usr/bin/with-contenv bash
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Reads the add-on options, validates them, and generates the Alloy config.
+# ==============================================================================
 set -e
 
-CONFIG_DIR="/etc/alloy"
+# Overridable so the test suite can run this script outside a container.
+CONFIG_DIR="${CONFIG_DIR:-/etc/alloy}"
+DATA_DIR="${DATA_DIR:-/data/alloy}"
+GENERATOR="${GENERATOR:-/usr/share/alloy/generate-config.sh}"
 CONFIG_FILE="${CONFIG_DIR}/config.alloy"
-OPTIONS_FILE="/data/options.json"
-GENERATOR="/usr/share/alloy/generate-config.sh"
 
-mkdir -p "${CONFIG_DIR}" /data/alloy
+mkdir -p "${CONFIG_DIR}" "${DATA_DIR}"
 
-# Read an option, falling back to $2 when unset or empty.
-opt() {
-    jq -r --arg k "$1" --arg d "${2:-}" '.[$k] // $d | if . == "" then $d else . end' "${OPTIONS_FILE}"
+# Read an option, falling back to $2 when it is unset, null or empty.
+# bashio::config.has_value is what distinguishes those three from a real value -
+# hand-rolling that check with jq is how the loki_url default ended up making a
+# supposedly optional option mandatory.
+config_or() {
+    if bashio::config.has_value "${1}"; then
+        bashio::config "${1}"
+    else
+        printf '%s' "${2:-}"
+    fi
 }
 
-# True when the option is present and non-empty. Used to test secrets without ever
-# holding them in a variable.
-option_set() {
-    [ -n "$(opt "$1")" ]
-}
-
-# Read options. Assignment is kept separate from `export` so a jq failure is not
-# masked by export's exit status. Passwords are deliberately NOT read here - they
-# are exported by the alloy service and referenced from the config via sys.env().
-LOKI_URL=$(opt loki_url)
-LOKI_USERNAME=$(opt loki_username)
-PROMETHEUS_URL=$(opt prometheus_url)
-PROMETHEUS_USERNAME=$(opt prometheus_username)
-INSTANCE_NAME=$(opt instance_name homeassistant)
-METRICS_SCRAPE_INTERVAL=$(opt metrics_scrape_interval 60s)
-LOG_LEVEL=$(opt log_level info)
-ADDITIONAL_CONFIG=$(opt additional_config)
-FLEET_URL=$(opt fleet_url)
-FLEET_USERNAME=$(opt fleet_username)
-FLEET_COLLECTOR_NAME=$(opt fleet_collector_name)
-FLEET_ATTRIBUTES=$(opt fleet_attributes)
-FLEET_POLL_FREQUENCY=$(opt fleet_poll_frequency 5m)
+# Passwords are deliberately NOT read here - they are exported by the alloy
+# service and referenced from the generated config via sys.env().
+LOKI_URL=$(config_or loki_url)
+LOKI_USERNAME=$(config_or loki_username)
+PROMETHEUS_URL=$(config_or prometheus_url)
+PROMETHEUS_USERNAME=$(config_or prometheus_username)
+INSTANCE_NAME=$(config_or instance_name homeassistant)
+METRICS_SCRAPE_INTERVAL=$(config_or metrics_scrape_interval 60s)
+LOG_LEVEL=$(config_or log_level info)
+ADDITIONAL_CONFIG=$(config_or additional_config)
+FLEET_URL=$(config_or fleet_url)
+FLEET_USERNAME=$(config_or fleet_username)
+FLEET_COLLECTOR_NAME=$(config_or fleet_collector_name)
+FLEET_ATTRIBUTES=$(config_or fleet_attributes)
+FLEET_POLL_FREQUENCY=$(config_or fleet_poll_frequency 5m)
 export LOKI_URL LOKI_USERNAME PROMETHEUS_URL PROMETHEUS_USERNAME
 export INSTANCE_NAME METRICS_SCRAPE_INTERVAL LOG_LEVEL ADDITIONAL_CONFIG
 export FLEET_URL FLEET_USERNAME FLEET_COLLECTOR_NAME FLEET_ATTRIBUTES FLEET_POLL_FREQUENCY
@@ -42,23 +47,24 @@ export FLEET_URL FLEET_USERNAME FLEET_COLLECTOR_NAME FLEET_ATTRIBUTES FLEET_POLL
 # Require at least one destination. Fleet Management alone is enough: the remote
 # configuration can supply a complete set of pipelines.
 if [ -z "${LOKI_URL}" ] && [ -z "${PROMETHEUS_URL}" ] && [ -z "${FLEET_URL}" ]; then
-    echo "FATAL: set at least one of loki_url (logs), prometheus_url (metrics) or fleet_url (Fleet Management)." >&2
-    exit 1
+    bashio::log.fatal "Set at least one of loki_url (logs), prometheus_url (metrics)"
+    bashio::log.fatal "or fleet_url (Fleet Management). All three are currently empty."
+    bashio::exit.nok
 fi
 
 # Basic auth needs both halves; half a pair would silently 401 against the backend.
-# $1 = option prefix (loki|prometheus)
+# $1 = option prefix (loki|prometheus|fleet)
 check_auth_pair() {
     local user="" pass=""
-    if option_set "${1}_username"; then user=1; fi
-    if option_set "${1}_password"; then pass=1; fi
+    if bashio::config.has_value "${1}_username"; then user=1; fi
+    if bashio::config.has_value "${1}_password"; then pass=1; fi
     if [ -n "${user}" ] && [ -z "${pass}" ]; then
-        echo "FATAL: ${1}_username is set but ${1}_password is empty." >&2
-        exit 1
+        bashio::log.fatal "${1}_username is set but ${1}_password is empty."
+        bashio::exit.nok
     fi
     if [ -z "${user}" ] && [ -n "${pass}" ]; then
-        echo "FATAL: ${1}_password is set but ${1}_username is empty." >&2
-        exit 1
+        bashio::log.fatal "${1}_password is set but ${1}_username is empty."
+        bashio::exit.nok
     fi
 }
 
@@ -66,9 +72,10 @@ check_auth_pair loki
 check_auth_pair prometheus
 check_auth_pair fleet
 
-# Attributes are emitted verbatim into the Alloy config. A malformed pair would only
-# surface as a River syntax error when Alloy starts, which is far harder to read in the
-# add-on log than a named failure here.
+# Attributes are emitted verbatim into the Alloy config. The schema already
+# rejects a malformed pair in the UI; this repeats the check because a quote or
+# backslash would break River string syntax, and because options.json can be
+# edited outside the UI.
 validate_attributes() {
     [ -n "${FLEET_ATTRIBUTES}" ] || return 0
     local -a pairs
@@ -77,20 +84,20 @@ validate_attributes() {
     for pair in "${pairs[@]}"; do
         case "${pair}" in
             *'"'*|*[\\]*)
-                echo "FATAL: fleet_attributes entry '${pair}' contains a quote or backslash." >&2
-                exit 1
+                bashio::log.fatal "fleet_attributes entry '${pair}' contains a quote or backslash."
+                bashio::exit.nok
                 ;;
         esac
         case "${pair}" in
             *=*) ;;
             *)
-                echo "FATAL: fleet_attributes entry '${pair}' is not key=value." >&2
-                exit 1
+                bashio::log.fatal "fleet_attributes entry '${pair}' is not key=value."
+                bashio::exit.nok
                 ;;
         esac
         if [ -z "${pair%%=*}" ]; then
-            echo "FATAL: fleet_attributes entry '${pair}' has an empty key." >&2
-            exit 1
+            bashio::log.fatal "fleet_attributes entry '${pair}' has an empty key."
+            bashio::exit.nok
         fi
     done
 }
@@ -108,20 +115,21 @@ if [ ! -d "${JOURNAL_PATH}" ] || [ -z "$(ls -A "${JOURNAL_PATH}" 2>/dev/null)" ]
     export JOURNAL_PATH="/run/log/journal"
 fi
 
-echo "-----------------------------------------------------------"
-echo " Grafana Alloy for Home Assistant"
-[ -n "${LOKI_URL}" ]       && echo " Logs    -> Loki:       ${LOKI_URL} $(auth_note "${LOKI_USERNAME}")"
-[ -n "${PROMETHEUS_URL}" ] && echo " Metrics -> Prometheus: ${PROMETHEUS_URL} (every ${METRICS_SCRAPE_INTERVAL}) $(auth_note "${PROMETHEUS_USERNAME}")"
-[ -n "${FLEET_URL}" ]      && echo " Fleet   -> Fleet Mgmt:  ${FLEET_URL} (every ${FLEET_POLL_FREQUENCY}) $(auth_note "${FLEET_USERNAME}")"
-[ -n "${FLEET_ATTRIBUTES}" ] && echo " Fleet attributes: ${FLEET_ATTRIBUTES}"
-[ -n "${LOKI_URL}" ]       && echo " Journal path: ${JOURNAL_PATH}"
-echo " Instance: ${INSTANCE_NAME}"
-echo " Log level: ${LOG_LEVEL}"
-echo "-----------------------------------------------------------"
+bashio::log.info "Grafana Alloy for Home Assistant"
+[ -n "${LOKI_URL}" ] && \
+    bashio::log.info "Logs    -> Loki:       ${LOKI_URL} $(auth_note "${LOKI_USERNAME}")"
+[ -n "${PROMETHEUS_URL}" ] && \
+    bashio::log.info "Metrics -> Prometheus: ${PROMETHEUS_URL} (every ${METRICS_SCRAPE_INTERVAL}) $(auth_note "${PROMETHEUS_USERNAME}")"
+[ -n "${FLEET_URL}" ] && \
+    bashio::log.info "Fleet   -> Fleet Mgmt: ${FLEET_URL} (every ${FLEET_POLL_FREQUENCY}) $(auth_note "${FLEET_USERNAME}")"
+[ -n "${FLEET_ATTRIBUTES}" ] && bashio::log.info "Fleet attributes: ${FLEET_ATTRIBUTES}"
+[ -n "${LOKI_URL}" ] && bashio::log.info "Journal path: ${JOURNAL_PATH}"
+bashio::log.info "Instance: ${INSTANCE_NAME}"
+bashio::log.info "Log level: ${LOG_LEVEL}"
 
 # Generate Alloy config.
 # Invoke via `bash` (not the shebang) so the exported options above are inherited;
 # the generator must NOT run under with-contenv, which would reset the environment.
 bash "${GENERATOR}" > "${CONFIG_FILE}"
 
-echo "Alloy config generated at ${CONFIG_FILE}"
+bashio::log.info "Alloy config generated at ${CONFIG_FILE}"

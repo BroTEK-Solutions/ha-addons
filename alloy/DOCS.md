@@ -18,8 +18,13 @@ add-on refuses to start with `FATAL: set at least one of loki_url (logs), promet
 (metrics) or fleet_url (Fleet Management).` Each destination generates its own pipelines
 independently, so a logs-only, metrics-only or Fleet-only deployment is equally valid.
 
-Note that the shipped default for `loki_url` is `http://localhost:3100/loki/api/v1/push`,
-which almost certainly is not your Loki. Point it at a real endpoint or clear it.
+None of the three has a default, so a fresh install starts with all of them empty and you fill
+in the ones you want. **Clearing a field disables that destination** - the add-on regenerates its
+Alloy config on every start, so removing a URL removes the corresponding pipelines.
+
+Options are validated when you save, before the add-on starts. A malformed URL, a duration
+without a unit (`60` rather than `60s`), an empty instance name, or a `fleet_attributes` entry
+that is not `key=value` is rejected in the UI rather than becoming a start-up failure.
 
 ### Logs
 
@@ -72,10 +77,10 @@ are excluded from the network stats, leaving the real host NICs.
 ### Filesystem caveat
 
 HAOS add-ons cannot mount the host root filesystem, so whole-host `df` is not available.
-Instead the add-on reports usage for the volumes it does map - `share`, `media`, `backup` and
-its own config folder - which all live on the HAOS data partition. In practice that is the
-data-partition fill level. Pseudo-filesystems and the container's own overlay rootfs are
-excluded, so they do not show up as phantom mounts.
+Instead the add-on reports usage for the three volumes it maps read-only - `share`, `media` and
+`backup` - which all live on the HAOS data partition. In practice that is the data-partition
+fill level. Pseudo-filesystems and the container's own overlay rootfs are excluded, so they do
+not show up as phantom mounts.
 
 ### Example: logs + self-hosted Prometheus
 
@@ -230,7 +235,8 @@ the add-on watchdog (`/-/ready`), so Home Assistant restarts the add-on if Alloy
 
 The generated config is written to `/etc/alloy/config.alloy` and is safe to read - no secret is
 ever interpolated into it. Alloy's own state, including the cached Fleet Management
-configuration, lives under `/data/alloy`.
+configuration, lives under `/data/alloy`, which is excluded from Home Assistant backups: it is
+rebuilt on start and the write-ahead log would otherwise grow your backups for no benefit.
 
 ## Advanced: Additional Config
 
@@ -244,9 +250,9 @@ loki.source.file "extra" { targets = local.file_match.extra.targets forward_to =
 
 Two constraints worth knowing before you write one:
 
-- **Only mapped paths are visible.** The add-on maps `share`, `media`, `backup` and its own
-  config folder (at `/config`). Home Assistant's own configuration directory is **not** mapped,
-  so `home-assistant.log` cannot be tailed from here.
+- **Only mapped paths are visible.** The add-on maps `share`, `media` and `backup`, all
+  read-only. Home Assistant's own configuration directory is **not** mapped, so
+  `home-assistant.log` cannot be tailed from here.
 - **Referenced components must exist.** `loki.write.loki.receiver` is only generated when
   `loki_url` is set, and `prometheus.remote_write.metrics.receiver` only when `prometheus_url`
   is - forwarding to one that was not generated is a config error.

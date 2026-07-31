@@ -1,0 +1,96 @@
+---
+configuration:
+  loki_url:
+    name: Loki push endpoint
+    description: >-
+      Full URL of your Loki push API, for example
+      http://192.168.1.45:3100/loki/api/v1/push. Leave empty to disable log
+      shipping. At least one of the Loki, Prometheus or Fleet Management
+      endpoints must be set.
+  loki_username:
+    name: Loki username
+    description: >-
+      Username for HTTP basic auth against Loki. On Grafana Cloud this is the
+      numeric Loki instance ID, not your email address. Set this and the
+      password together, or neither.
+  loki_password:
+    name: Loki password
+    description: >-
+      Password or access-policy token for Loki. Passed to Alloy through an
+      environment variable, so it is never written into the generated config.
+  prometheus_url:
+    name: Prometheus remote write endpoint
+    description: >-
+      Full URL of a Prometheus or Mimir remote_write endpoint, for example
+      http://192.168.1.45:9090/api/v1/write. Leave empty to disable host
+      metrics.
+  prometheus_username:
+    name: Prometheus username
+    description: >-
+      Username for HTTP basic auth against Prometheus. On Grafana Cloud this is
+      the numeric metrics instance ID. Set this and the password together, or
+      neither.
+  prometheus_password:
+    name: Prometheus password
+    description: >-
+      Password or access-policy token for Prometheus. Passed to Alloy through
+      an environment variable, so it is never written into the generated config.
+  instance_name:
+    name: Instance name
+    description: >-
+      Identifies this machine. Used as the instance label on every metric and
+      as the collector ID reported to Fleet Management.
+  metrics_scrape_interval:
+    name: Metrics scrape interval
+    description: >-
+      How often host metrics are collected, as a duration such as 30s, 60s or
+      5m. Only applies when a Prometheus endpoint is set.
+  fleet_url:
+    name: Fleet Management URL
+    description: >-
+      Grafana Fleet Management service URL, for example
+      https://fleet-management-prod-001.grafana.net. Copy it from the API tab
+      of the Fleet Management page rather than typing it by hand, as some
+      regions use a longer hostname. Alloy runs the pipelines it receives
+      alongside the local ones, never replacing them.
+  fleet_username:
+    name: Fleet Management username
+    description: >-
+      Numeric instance ID for Fleet Management. Set this and the password
+      together, or neither.
+  fleet_password:
+    name: Fleet Management token
+    description: >-
+      Access token for Fleet Management. The predefined set:alloy-data-write
+      scope covers both reading remote configuration and writing telemetry.
+  fleet_collector_name:
+    name: Fleet Management collector name
+    description: >-
+      Human-readable name for this collector in the Fleet Management UI, for
+      example Home Assistant. Optional.
+  fleet_attributes:
+    name: Fleet Management attributes
+    description: >-
+      Comma-separated key=value pairs, for example env=home,role=hass. Fleet
+      Management matches these against your pipelines to decide which ones this
+      collector receives.
+  fleet_poll_frequency:
+    name: Fleet Management poll frequency
+    description: >-
+      How often to check Fleet Management for configuration updates, as a
+      duration. Alloy requires at least 10s.
+  log_level:
+    name: Log level
+    description: >-
+      Verbosity of Alloy's own logging in the add-on log. This does not affect
+      which journal entries are shipped, only how much Alloy says about itself.
+  additional_config:
+    name: Additional Alloy configuration
+    description: >-
+      Extra Alloy configuration blocks, appended verbatim to the generated
+      config. Advanced use only, and a syntax error here stops the add-on from
+      starting.
+network:
+  12345/tcp:
+    description: >-
+      Alloy debug UI, for inspecting component health and the pipeline graph.

@@ -15,7 +15,7 @@ permissions: {}
 
 jobs:
   test:
-    name: Lint and generator tests
+    name: Lint and tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -26,20 +26,44 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
       - name: ShellCheck
-        # The s6 service scripts use a `#!/usr/bin/with-contenv bash` shebang that
-        # ShellCheck cannot recognise, hence the explicit `-s bash`.
+        # The s6 service scripts run under `with-contenv bashio`, a shebang
+        # ShellCheck cannot resolve; each carries a `# shellcheck shell=bash`
+        # directive instead, so no -s flag is needed here.
         run: |
-          shellcheck -s bash \
+          shellcheck \
             alloy/rootfs/usr/share/alloy/generate-config.sh \
             alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run \
             alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run \
-            alloy/tests/generate-config.test.sh
+            alloy/tests/generate-config.test.sh \
+            alloy/tests/init-alloy.test.sh
+
+      - name: Add-on options and schema tests
+        # Catches the schema mistakes Supervisor would only surface on a user's
+        # Home Assistant, including a default that silently makes an option
+        # required, and any option missing from translations/en.yaml.
+        run: |
+          python3 -m pip install --quiet voluptuous pyyaml
+          python3 alloy/tests/config-schema.test.py
 
       - name: Generator tests
         # Docker is present on the runner, so this also runs the `alloy fmt` /
         # `alloy run` validation that is skipped in environments without it.
         run: bash alloy/tests/generate-config.test.sh
+
+      - name: init-alloy service tests
+        # Run inside the real add-on base image: the service script needs bashio,
+        # which is not on the runner, and this exercises the same bashio the
+        # add-on ships with rather than a stand-in.
+        run: |
+          docker run --rm -v "${PWD}:/w" -w /w \
+            ghcr.io/home-assistant/amd64-base-debian:bookworm \
+            bash alloy/tests/init-alloy.test.sh
 
   build:
     name: Build ${{ matrix.arch }}

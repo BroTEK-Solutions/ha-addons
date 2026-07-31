@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.6.0 - 2026-07-31
+
+### Fixed
+- **A metrics-only or Fleet Management-only install could not be configured.** `loki_url` carried
+  a default in `options:`, and a default overrides the `?` in `schema:` and makes an option
+  required. Supervisor validates a `url` with voluptuous, which rejects an empty string, so
+  clearing the field failed validation and leaving it set pointed the add-on at a Loki that was
+  not there. The default is gone, and the three endpoint options now use a pattern that accepts
+  an empty value, so clearing one in the UI disables that destination
+
+### Added
+- `translations/en.yaml`, giving every option a readable name and description in the add-on
+  configuration UI instead of a raw snake_case key
+- `icon.png` and `logo.png`, so the add-on is no longer a blank tile in the store
+- An `OPEN WEB UI` button for the Alloy debug UI, via the `webui` option
+- Option validation in the UI: endpoints must look like URLs, `metrics_scrape_interval` and
+  `fleet_poll_frequency` must carry a unit, `instance_name` cannot be empty, and
+  `fleet_attributes` must be well-formed `key=value` pairs. Previously these were accepted and
+  became a start-up failure
+- `alloy/tests/config-schema.test.py`, which validates the options and schema against
+  Supervisor's own `RE_SCHEMA_ELEMENT` and voluptuous, so this class of bug fails in CI
+- `alloy/tests/init-alloy.test.sh`, covering the service script's start-up validation - every
+  refuse-to-start path and each destination working on its own. It had no tests before
+- A Renovate configuration that tracks the pinned Alloy release
+
+### Changed
+- The service scripts now use `bashio` rather than hand-rolled `jq`. `bashio::config.has_value`
+  distinguishes unset from null from empty, which is the distinction the `loki_url` bug turned on
+- `/data/alloy` is excluded from Home Assistant backups. It holds Alloy's write-ahead log and its
+  cached Fleet Management configuration, both rebuilt on start
+- The Alloy version is now defined only in `alloy/Dockerfile`; the test suite parses it from
+  there rather than keeping a second copy
+- `map` uses the current list syntax with explicit `read_only`, and no longer requests write
+  access to the add-on config folder, which nothing used
+- `ports_description` moved into `translations/en.yaml`
+
 ## 1.5.1 - 2026-07-31
 
 ### Changed

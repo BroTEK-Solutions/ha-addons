@@ -1,0 +1,25 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track the Grafana Alloy release pinned in the add-on Dockerfile. This is the single source of truth for the version - alloy/tests/generate-config.test.sh parses it out of the same line.",
+      "managerFilePatterns": ["/^alloy/Dockerfile$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+ALLOY_VERSION=\"(?<currentValue>[^\"]+)\""
+      ],
+      "extractVersionTemplate": "^v?(?<version>.*)$"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "home-assistant/builder must stay on a ref that has a published builder image; see the comment in .github/workflows/build.yaml before taking a bump.",
+      "matchDepNames": ["home-assistant/builder"],
+      "dependencyDashboardApproval": true
+    }
+  ]
+}

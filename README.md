@@ -53,8 +53,8 @@ label is derived.
 When `prometheus_url` is set, the add-on collects host CPU, memory, disk I/O, load average, and
 network metrics via Alloy's `unix` exporter, under the job name `integrations/node_exporter`.
 HAOS add-ons cannot mount the host root filesystem, so filesystem usage is reported for the
-mapped HA volumes (`share`/`media`/`backup` and the add-on's own config folder, which sit on the
-data partition) rather than every host mount.
+mapped HA volumes (`share`/`media`/`backup`, which sit on the data partition) rather than every
+host mount.
 
 ## Fleet Management
 
@@ -82,14 +82,36 @@ Access the Alloy pipeline inspector at `http://<haos-ip>:12345`.
 ## Development
 
 ```bash
-shellcheck -s bash alloy/rootfs/usr/share/alloy/generate-config.sh \
-  alloy/rootfs/etc/s6-overlay/s6-rc.d/*/run alloy/tests/generate-config.test.sh
+shellcheck alloy/rootfs/usr/share/alloy/generate-config.sh \
+  alloy/rootfs/etc/s6-overlay/s6-rc.d/*/run alloy/tests/*.sh
+
+# Add-on options and schema, the way Supervisor validates them
+python3 -m pip install voluptuous pyyaml
+python3 alloy/tests/config-schema.test.py
+
+# Config generator, with `alloy fmt` / `alloy run` validation when Docker is present
 bash alloy/tests/generate-config.test.sh
+
+# The init-alloy service script, run inside the real add-on base image for bashio
+docker run --rm -v "${PWD}:/w" -w /w \
+  ghcr.io/home-assistant/amd64-base-debian:bookworm \
+  bash alloy/tests/init-alloy.test.sh
 ```
 
-The test suite drives the config generator through its option combinations and, when Docker is
-available, validates each generated config with `alloy fmt` and `alloy run`. Both commands run in
-CI on every push and pull request.
+Three suites, all run in CI on every push and pull request:
+
+- **`config-schema.test.py`** validates `config.yaml` against Supervisor's own
+  `RE_SCHEMA_ELEMENT` and voluptuous. It enforces the rule that a default in `options:` makes an
+  option required regardless of the `?` in `schema:` — the trap that once made a Fleet-only
+  install impossible to configure — and fails if an option has no `translations/en.yaml` entry.
+- **`generate-config.test.sh`** drives the config generator through its option combinations and
+  validates each generated config with `alloy fmt` and `alloy run`.
+- **`init-alloy.test.sh`** runs the real service script against seeded add-on options, covering
+  every way it can refuse to start. It needs bashio, so it runs inside the add-on base image;
+  outside a container, point `BASHIO_BIN` at a checkout of `hassio-addons/bashio`.
+
+The Alloy version is pinned in `alloy/Dockerfile` and nowhere else — the test suite parses it
+out of that file, and Renovate tracks it there.
 
 ## License
 

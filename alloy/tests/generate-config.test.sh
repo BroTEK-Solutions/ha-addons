@@ -5,7 +5,14 @@ set -u
 
 ADDON_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GEN="${ADDON_ROOT}/rootfs/usr/share/alloy/generate-config.sh"
-ALLOY_IMAGE="grafana/alloy:v1.17.0"
+# Parsed from the Dockerfile rather than duplicated, so the container used to
+# validate the generated config can never drift from the shipped binary.
+ALLOY_VERSION="$(sed -n 's/^[[:space:]]*ALLOY_VERSION="\([^"]*\)".*/\1/p' "${ADDON_ROOT}/Dockerfile")"
+if [ -z "${ALLOY_VERSION}" ]; then
+  echo "FATAL: could not parse ALLOY_VERSION out of ${ADDON_ROOT}/Dockerfile" >&2
+  exit 1
+fi
+ALLOY_IMAGE="grafana/alloy:v${ALLOY_VERSION}"
 FAILS=0
 TESTS=0
 
