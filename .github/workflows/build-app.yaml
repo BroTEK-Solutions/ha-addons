@@ -1,0 +1,183 @@
+# yamllint disable rule:line-length
+name: Build app
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: build-app-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: YAMLLint
+        # The lint the Home Assistant Community Add-ons repository runs across
+        # its own YAML. --strict so warnings fail rather than scroll past.
+        run: |
+          python3 -m pip install --quiet yamllint
+          yamllint --strict .
+
+      - name: Home Assistant app lint
+        uses: frenck/action-addon-linter@f995494fd84fae6310d23617e66d0e37de4f14eb # v2.21.0
+        with:
+          path: "./alloy"
+
+      - name: ShellCheck
+        # The s6 service scripts run under `with-contenv bashio`, a shebang
+        # ShellCheck cannot resolve; each carries a `# shellcheck shell=bash`
+        # directive instead, so no -s flag is needed here.
+        run: |
+          shellcheck \
+            alloy/rootfs/usr/share/alloy/generate-config.sh \
+            alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run \
+            alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run \
+            alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish \
+            alloy/tests/generate-config.test.sh \
+            alloy/tests/init-alloy.test.sh
+
+      - name: App metadata contract test
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 tests/app_metadata_contract_test.py
+
+      - name: Add-on options and schema tests
+        # Catches the schema mistakes Supervisor would only surface on a user's
+        # Home Assistant, including a default that silently makes an option
+        # required, and any option missing from translations/en.yaml.
+        run: |
+          python3 -m pip install --quiet voluptuous pyyaml
+          python3 alloy/tests/config-schema.test.py
+
+      - name: Generator tests
+        # Docker is present on the runner, so this also runs the `alloy fmt` /
+        # `alloy run` validation that is skipped in environments without it.
+        run: bash alloy/tests/generate-config.test.sh
+
+      - name: init-alloy service tests
+        # Run inside the real app base image: the service script needs bashio,
+        # which is not on the runner, and this exercises the same bashio the
+        # app ships with rather than a stand-in.
+        run: |
+          docker run --rm -v "${PWD}:/w" -w /w \
+            ghcr.io/home-assistant/base-debian:bookworm@sha256:8c7a9e207425e79b6b2ed1628a2b6727fa6e518d9fdddcbe3b1ac20440e70492 \
+            bash alloy/tests/init-alloy.test.sh
+
+  prepare:
+    name: Prepare app build
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      architectures: ${{ steps.info.outputs.architectures }}
+      build_matrix: ${{ steps.matrix.outputs.matrix }}
+      image_name: ${{ steps.normalize.outputs.image_name }}
+      registry_prefix: ${{ steps.normalize.outputs.registry_prefix }}
+      version: ${{ steps.info.outputs.version }}
+      name: ${{ steps.info.outputs.name }}
+      description: ${{ steps.info.outputs.description }}
+      url: ${{ steps.info.outputs.url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read app metadata
+        id: info
+        uses: home-assistant/actions/helpers/info@ab22029681aa532bfe7de5774a9972d67bfbd2c0 # master
+        with:
+          path: ./alloy
+
+      - name: Normalize image metadata
+        id: normalize
+        shell: bash
+        env:
+          IMAGE: ${{ steps.info.outputs.image }}
+        run: |
+          echo "image_name=${IMAGE##*/}" >> "$GITHUB_OUTPUT"
+          echo "registry_prefix=${IMAGE%/*}" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare build matrix
+        id: matrix
+        uses: home-assistant/builder/actions/prepare-multi-arch-matrix@4de35182ce1e329181bffcbcc84d33db5e2c7e10 # 2026.06.0
+        with:
+          architectures: ${{ steps.info.outputs.architectures }}
+          image-name: ${{ steps.normalize.outputs.image_name }}
+          registry-prefix: ${{ steps.normalize.outputs.registry_prefix }}
+
+  build:
+    name: Build ${{ matrix.arch }} image
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write # Required for keyless Cosign signatures.
+      packages: write # Required to push per-architecture images to GHCR.
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.build_matrix) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build and publish image
+        uses: home-assistant/builder/actions/build-image@4de35182ce1e329181bffcbcc84d33db5e2c7e10 # 2026.06.0
+        with:
+          arch: ${{ matrix.arch }}
+          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
+          context: ./alloy
+          cosign: "true"
+          image: ${{ matrix.image }}
+          image-tags: |
+            ${{ needs.prepare.outputs.version }}
+            latest
+          labels: |
+            io.hass.type=app
+            io.hass.name=${{ needs.prepare.outputs.name }}
+            io.hass.description=${{ needs.prepare.outputs.description }}
+            ${{ needs.prepare.outputs.url && format('io.hass.url={0}', needs.prepare.outputs.url) || '' }}
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          version: ${{ needs.prepare.outputs.version }}
+
+  manifest:
+    name: Publish multi-arch manifest
+    needs: [prepare, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Required to sign the manifest with keyless Cosign.
+      packages: write # Required to publish the generic manifest to GHCR.
+    steps:
+      - name: Publish and sign multi-arch manifest
+        uses: home-assistant/builder/actions/publish-multi-arch-manifest@4de35182ce1e329181bffcbcc84d33db5e2c7e10 # 2026.06.0
+        with:
+          architectures: ${{ needs.prepare.outputs.architectures }}
+          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
+          cosign: "true"
+          image-name: ${{ needs.prepare.outputs.image_name }}
+          image-tags: |
+            ${{ needs.prepare.outputs.version }}
+            latest
+          registry-prefix: ${{ needs.prepare.outputs.registry_prefix }}

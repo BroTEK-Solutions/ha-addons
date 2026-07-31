@@ -17,9 +17,14 @@
   ],
   "packageRules": [
     {
-      "description": "home-assistant/builder must stay on a ref that has a published builder image; see the comment in .github/workflows/build.yaml before taking a bump.",
-      "matchDepNames": ["home-assistant/builder"],
-      "dependencyDashboardApproval": true
+      "description": "Keep the App build, manifest, and multi-architecture matrix actions on one Home Assistant builder release.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": [
+        "home-assistant/builder/actions/build-image",
+        "home-assistant/builder/actions/prepare-multi-arch-matrix",
+        "home-assistant/builder/actions/publish-multi-arch-manifest"
+      ],
+      "groupName": "Home Assistant builder App actions"
     }
   ]
 }

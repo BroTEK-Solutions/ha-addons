@@ -7,7 +7,7 @@ description: >-
   Replacement for the deprecated Promtail add-on, plus node_exporter-style
   host monitoring (CPU, memory, disk, network).
 url: https://github.com/BroTEK-Solutions/ha-addons
-image: ghcr.io/brotek-solutions/{arch}-addon-alloy
+image: ghcr.io/brotek-solutions/app-alloy
 arch:
   - aarch64
   - amd64

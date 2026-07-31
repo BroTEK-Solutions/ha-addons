@@ -27,8 +27,8 @@ jobs:
   zizmor:
     permissions:
       contents: read
-      security-events: write
-      actions: read
+      security-events: write # Required to upload zizmor SARIF findings.
+      actions: read # Required to read workflow metadata during the audit.
     uses: rknightion/.github/.github/workflows/zizmor.yml@0228d8b9f1e36ff3a1d0906574d70fa174ddc7bf # v1.5.1
 
   # hadolint + Trivy over the add-on Dockerfile (apt-get layer, curl'd Alloy release).
@@ -38,5 +38,5 @@ jobs:
     if: github.event_name != 'pull_request'
     permissions:
       contents: read
-      security-events: write
+      security-events: write # Required to upload Docker scan SARIF findings.
     uses: rknightion/.github/.github/workflows/docker-security.yml@0228d8b9f1e36ff3a1d0906574d70fa174ddc7bf # v1.5.1
