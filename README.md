@@ -12,7 +12,7 @@ Grafana Alloy is the official successor to Promtail, Grafana Agent, and Grafana 
 
 1. Open **Settings** > **Add-ons** > **Add-on Store**
 2. Click the overflow menu (three dots, top-right) > **Repositories**
-3. Paste: `https://github.com/rknightion/ha-addon-alloy`
+3. Paste: `https://github.com/BroTEK-Solutions/ha-addons`
 4. Click **Add** > **Close**
 5. Find **Grafana Alloy** in the store and click **Install**
 

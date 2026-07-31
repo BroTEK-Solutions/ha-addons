@@ -210,4 +210,4 @@ Note: This is injected as-is into the config file. Syntax errors will prevent Al
 
 ## Support
 
-Report issues at: https://github.com/rknightion/ha-addon-alloy/issues
+Report issues at: https://github.com/BroTEK-Solutions/ha-addons/issues

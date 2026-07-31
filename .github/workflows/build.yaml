@@ -34,12 +34,12 @@ jobs:
             alloy/rootfs/usr/share/alloy/generate-config.sh \
             alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run \
             alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run \
-            tests/generate-config.test.sh
+            alloy/tests/generate-config.test.sh
 
       - name: Generator tests
         # Docker is present on the runner, so this also runs the `alloy fmt` /
         # `alloy run` validation that is skipped in environments without it.
-        run: bash tests/generate-config.test.sh
+        run: bash alloy/tests/generate-config.test.sh
 
   build:
     name: Build ${{ matrix.arch }}

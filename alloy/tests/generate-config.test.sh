@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Test harness for generate-config.sh
-# Usage: tests/generate-config.test.sh
+# Usage: alloy/tests/generate-config.test.sh
 set -u
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GEN="${REPO_ROOT}/alloy/rootfs/usr/share/alloy/generate-config.sh"
+ADDON_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+GEN="${ADDON_ROOT}/rootfs/usr/share/alloy/generate-config.sh"
 ALLOY_IMAGE="grafana/alloy:v1.17.0"
 FAILS=0
 TESTS=0

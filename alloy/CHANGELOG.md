@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.5.1 - 2026-07-31
+
+### Changed
+- The add-on now lives in `BroTEK-Solutions/ha-addons`. **Existing installations must remove the old
+  `rknightion/ha-addon-alloy` repository from the add-on store and add
+  `https://github.com/BroTEK-Solutions/ha-addons` instead** - the old repository no longer exists.
+- The image moved to `ghcr.io/brotek-solutions/{arch}-addon-alloy`. Images already published under
+  `ghcr.io/rknightion/` are left in place but receive no further updates.
+- Add-on tests moved from `tests/` to `alloy/tests/`, so each add-on in the repository owns its own.
+
 ## 1.5.0 - 2026-07-30
 
 ### Added
