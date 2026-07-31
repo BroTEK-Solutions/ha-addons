@@ -83,7 +83,8 @@ Access the Alloy pipeline inspector at `http://<haos-ip>:12345`.
 
 ```bash
 shellcheck alloy/rootfs/usr/share/alloy/generate-config.sh \
-  alloy/rootfs/etc/s6-overlay/s6-rc.d/*/run alloy/tests/*.sh
+  alloy/rootfs/etc/s6-overlay/s6-rc.d/*/run \
+  alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish alloy/tests/*.sh
 
 # Add-on options and schema, the way Supervisor validates them
 python3 -m pip install voluptuous pyyaml

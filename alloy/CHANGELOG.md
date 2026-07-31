@@ -24,6 +24,12 @@
 - `alloy/tests/init-alloy.test.sh`, covering the service script's start-up validation - every
   refuse-to-start path and each destination working on its own. It had no tests before
 - A Renovate configuration that tracks the pinned Alloy release
+- The add-on now stops, reporting the exit code, when Alloy exits on its own - most often an
+  `additional_config` that does not parse. Previously s6 restarted it indefinitely while the
+  add-on still reported itself as running
+- CI runs the Home Assistant add-on linter, which validates `config.yaml` and `build.yaml`
+  against the add-on JSON schemas
+- OCI image labels (source, documentation, licence) on the published images
 
 ### Changed
 - The service scripts now use `bashio` rather than hand-rolled `jq`. `bashio::config.has_value`
@@ -35,6 +41,14 @@
 - `map` uses the current list syntax with explicit `read_only`, and no longer requests write
   access to the add-on config folder, which nothing used
 - `ports_description` moved into `translations/en.yaml`
+- Health is now reported through a Docker `HEALTHCHECK` rather than the obsolete `watchdog`
+  config key. Supervisor reads the container's health status, so the Watchdog toggle behaves as
+  before
+
+### Removed
+- `codeowners`, which is a Community Add-ons extension rather than a Home Assistant add-on option
+  and was inherited from the upstream fork
+- `boot: auto`, which only restated the default
 
 ## 1.5.1 - 2026-07-31
 

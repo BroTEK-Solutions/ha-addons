@@ -1,0 +1,20 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Takes the s6 supervision tree down when Alloy exits abnormally.
+# ==============================================================================
+# Without this, s6 restarts Alloy forever and the add-on keeps reporting itself
+# as running. A config Alloy refuses to load - most likely from
+# additional_config - would then be an invisible restart loop rather than a
+# stopped add-on with the error in the log.
+declare exit_code="${1}"
+
+# 256 means the service was terminated by a signal, which is how a normal
+# add-on stop looks. Anything else is Alloy failing on its own.
+if [[ "${exit_code}" -ne 0 ]] && [[ "${exit_code}" -ne 256 ]]; then
+    bashio::log.fatal "Alloy exited with code ${exit_code}; stopping the add-on."
+    echo "${exit_code}" >/run/s6-linux-init-container-results/exitcode
+    exec /run/s6/basedir/bin/halt
+fi
+
+bashio::log.info "Alloy stopped."

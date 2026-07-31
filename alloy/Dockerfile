@@ -24,6 +24,12 @@ RUN set -eux; \
 
 COPY rootfs /
 
+# Supervisor reads the container's Docker health status and surfaces it as the
+# add-on's health, which is what the user-facing Watchdog toggle acts on. This
+# replaces the `watchdog:` config key, which is obsolete.
+HEALTHCHECK --start-period=30s --interval=30s --timeout=5s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:12345/-/ready || exit 1
+
 ARG BUILD_DATE
 ARG BUILD_VERSION
 LABEL \

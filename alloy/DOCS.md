@@ -230,8 +230,12 @@ limited to what survives in the volatile journal across a reboot - which is noth
 ## Debug UI
 
 The Alloy debug UI is available at `http://<haos-ip>:12345` when the add-on is running. Use it to
-inspect component health, view the pipeline DAG, and troubleshoot issues. The same endpoint backs
-the add-on watchdog (`/-/ready`), so Home Assistant restarts the add-on if Alloy stops responding.
+inspect component health, view the pipeline DAG, and troubleshoot issues. The same server backs
+the container health check (`/-/ready`), which Home Assistant surfaces as the add-on's health -
+so with the **Watchdog** toggle on, it restarts the add-on if Alloy stops responding.
+
+If Alloy exits on its own rather than hanging - most often because `additional_config` does not
+parse - the add-on stops outright and reports the exit code, instead of quietly restart-looping.
 
 The generated config is written to `/etc/alloy/config.alloy` and is safe to read - no secret is
 ever interpolated into it. Alloy's own state, including the cached Fleet Management

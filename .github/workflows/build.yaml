@@ -31,6 +31,15 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Home Assistant add-on lint
+        # Validates config.yaml and build.yaml against the add-on JSON schemas:
+        # unknown keys, keys set to their default, and obsolete options. Not
+        # community mode - this is not a Community Add-ons repository, so
+        # extensions like `codeowners` are correctly rejected.
+        uses: frenck/action-addon-linter@f995494fd84fae6310d23617e66d0e37de4f14eb # v2.21.0
+        with:
+          path: "./alloy"
+
       - name: ShellCheck
         # The s6 service scripts run under `with-contenv bashio`, a shebang
         # ShellCheck cannot resolve; each carries a `# shellcheck shell=bash`
@@ -40,6 +49,7 @@ jobs:
             alloy/rootfs/usr/share/alloy/generate-config.sh \
             alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run \
             alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run \
+            alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish \
             alloy/tests/generate-config.test.sh \
             alloy/tests/init-alloy.test.sh
 
