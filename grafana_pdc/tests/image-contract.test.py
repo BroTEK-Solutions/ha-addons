@@ -107,6 +107,12 @@ def main() -> None:
         "profile grafana_pdc flags=(attach_disconnected,mediate_deleted)",
         "AppArmor must define the grafana_pdc profile using HA's required flags",
     )
+    outer_profile = apparmor.split("profile pdc", maxsplit=1)[0]
+    require(
+        outer_profile,
+        "network inet stream,",
+        "outer AppArmor profile must permit the loopback Docker health probe",
+    )
     for rule in (
         "/init ix,",
         "/run/{s6,s6-rc*,service}/** ix,",

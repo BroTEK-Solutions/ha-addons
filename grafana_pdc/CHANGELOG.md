@@ -11,3 +11,5 @@ Initial release of the Grafana Private Data Source Connect Home Assistant App.
   security boundaries.
 - Stops the App after an unexpected terminating signal instead of treating every signal as an
   intentional shutdown and silently restarting the PDC agent. SIGTERM remains a clean stop.
+- Permits the outer AppArmor profile to make the IPv4 loopback connection used by the container
+  health check; the PDC service continues to run under its separate constrained profile.
