@@ -7,14 +7,25 @@
 # as running. A config Alloy refuses to load - most likely from
 # additional_config - would then be an invisible restart loop rather than a
 # stopped add-on with the error in the log.
-declare exit_code="${1}"
+declare exit_code="${1:-1}"
+declare exit_signal="${2:-0}"
+declare results_dir="${S6_RESULTS_DIR:-/run/s6-linux-init-container-results}"
+declare halt_command="${S6_HALT:-/run/s6/basedir/bin/halt}"
 
-# 256 means the service was terminated by a signal, which is how a normal
-# add-on stop looks. Anything else is Alloy failing on its own.
+# s6 passes 256 in $1 and the signal number in $2 when the service was killed.
+# SIGTERM is how an intentional service shutdown looks; any other signal means
+# Alloy crashed and must stop the App instead of being restarted forever.
+if [[ "${exit_code}" -eq 256 ]] && [[ "${exit_signal}" -ne 15 ]]; then
+    declare reported_exit=$((128 + exit_signal))
+    bashio::log.fatal "Alloy exited on signal ${exit_signal}; stopping the add-on."
+    printf '%s\n' "${reported_exit}" >"${results_dir}/exitcode"
+    exec "${halt_command}"
+fi
+
 if [[ "${exit_code}" -ne 0 ]] && [[ "${exit_code}" -ne 256 ]]; then
     bashio::log.fatal "Alloy exited with code ${exit_code}; stopping the add-on."
-    echo "${exit_code}" >/run/s6-linux-init-container-results/exitcode
-    exec /run/s6/basedir/bin/halt
+    printf '%s\n' "${exit_code}" >"${results_dir}/exitcode"
+    exec "${halt_command}"
 fi
 
 bashio::log.info "Alloy stopped."

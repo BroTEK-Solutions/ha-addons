@@ -54,6 +54,9 @@ CASES: list[tuple[str, object, bool]] = [
     ("loki_url", "http://[2001:db8::1]:3100/loki/api/v1/push", True),
     ("loki_url", "http://[::1]:3100/loki/api/v1/push", True),
     ("loki_url", "http://[1:2:3:4:5:6:7:8]/loki/api/v1/push", True),
+    ("loki_url", "http://[fe80::1%25eth0]:3100/loki/api/v1/push", True),
+    ("loki_url", "http://[::ffff:192.0.2.1]:3100/loki/api/v1/push", True),
+    ("loki_url", "http://[2001:db8::192.0.2.1]:3100/loki/api/v1/push", True),
     ("prometheus_url", "https://prometheus-prod-01.grafana.net/api/prom/push", True),
     ("fleet_url", "https://fleet-management-prod-001.grafana.net", True),
     ("loki_url", "not-a-url", False),
@@ -66,6 +69,9 @@ CASES: list[tuple[str, object, bool]] = [
     ("loki_url", "http://[1:2:3]/loki/api/v1/push", False),
     ("loki_url", "http://[1:2:3:4:5:6:7:8:9]/loki/api/v1/push", False),
     ("loki_url", "http://[gggg::1]/loki/api/v1/push", False),
+    ("loki_url", "http://[fe80::1%eth0]/loki/api/v1/push", False),
+    ("loki_url", "http://[fe80::1%25]/loki/api/v1/push", False),
+    ("loki_url", "http://[::ffff:999.0.2.1]/loki/api/v1/push", False),
     # The endpoints are interpolated into quoted River strings, so anything that
     # would break the generated config has to be refused at save time.
     ("loki_url", "https://exa mple.com", False),

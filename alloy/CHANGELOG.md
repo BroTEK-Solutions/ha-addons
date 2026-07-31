@@ -2,6 +2,11 @@
 
 ## 1.7.0 - 2026-07-31
 
+### Fixed
+- Alloy now stops the App after an unexpected terminating signal instead of treating every
+  signal as an intentional shutdown and entering an invisible restart loop. SIGTERM remains a
+  clean stop; crash signals are reported using the conventional `128 + signal` exit code
+
 ### Added
 - **Home Assistant Core metrics.** New `homeassistant_metrics` option, off by default, scrapes
   Core's own Prometheus endpoint through the Supervisor proxy for entity states and Core
@@ -24,7 +29,9 @@
   `otelcol.*` components, none of which this add-on uses
 - The endpoint options now reject missing authorities, non-numeric or out-of-range ports,
   invalid percent escapes, malformed bracketed IPv6 literals, whitespace, double quotes and
-  backslashes. The same checks run at start-up because `options.json` can be edited outside the UI
+  backslashes. Valid RFC 6874 scoped literals such as `[fe80::1%25eth0]` and IPv4-embedded IPv6
+  literals remain accepted. The same checks run at start-up because `options.json` can be edited
+  outside the UI
 - `metrics_scrape_interval` and `fleet_poll_frequency` accept positive Go duration forms such as
   `+1m30s`, `.5s`, `1.s`, `100us`, `100µs` and `100μs`. Zero and negative intervals are rejected.
   The 1.6.0 pattern allowed only one unsigned decimal and one unit, which would have rejected

@@ -11,6 +11,7 @@ set -u
 
 ADDON_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INIT="${ADDON_ROOT}/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run"
+FINISH="${ADDON_ROOT}/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish"
 GENERATOR="${ADDON_ROOT}/rootfs/usr/share/alloy/generate-config.sh"
 FAILS=0
 TESTS=0
@@ -180,6 +181,21 @@ expect_ok "bracketed IPv6 endpoint" \
 expect_ok "IPv6 loopback endpoint" \
   '{"prometheus_url":"http://[::1]:9090/api/v1/write"}' \
   'url = "http://[::1]:9090/api/v1/write"'
+expect_ok "scoped IPv6 endpoint" \
+  '{"prometheus_url":"http://[fe80::1%25eth0]:9090/api/v1/write"}' \
+  'url = "http://[fe80::1%25eth0]:9090/api/v1/write"'
+expect_ok "IPv4-embedded IPv6 endpoint" \
+  '{"prometheus_url":"http://[::ffff:192.0.2.1]:9090/api/v1/write"}' \
+  'url = "http://[::ffff:192.0.2.1]:9090/api/v1/write"'
+expect_fatal "unencoded IPv6 scope identifier" \
+  '{"loki_url":"http://[fe80::1%eth0]/loki/api/v1/push"}' \
+  "loki_url is not a valid HTTP(S) URL"
+expect_fatal "empty IPv6 scope identifier" \
+  '{"loki_url":"http://[fe80::1%25]/loki/api/v1/push"}' \
+  "loki_url is not a valid HTTP(S) URL"
+expect_fatal "out-of-range embedded IPv4 address" \
+  '{"loki_url":"http://[::ffff:999.0.2.1]/loki/api/v1/push"}' \
+  "loki_url is not a valid HTTP(S) URL"
 
 echo
 echo "== the full Go duration grammar reaches Alloy unchanged =="
@@ -278,6 +294,49 @@ if grep -qF "SENTINELSECRET" <<<"${RUN_CONFIG}"; then
   fail "the password leaked into the config"
 else
   pass "the password is absent from the config"
+fi
+
+echo
+echo "== finish distinguishes shutdown signals from crashes =="
+run_finish() {
+  local tmp
+  tmp="$(mktemp -d)"
+  mkdir -p "${tmp}/results"
+  # The generated helper expands ALLOY_TEST_HALT when it runs, not here.
+  # shellcheck disable=SC2016
+  printf '#!/usr/bin/env bash\nprintf halted >"${ALLOY_TEST_HALT}"\n' >"${tmp}/halt"
+  chmod +x "${tmp}/halt"
+  FINISH_OUT="$(
+    ALLOY_TEST_HALT="${tmp}/halted" \
+    S6_RESULTS_DIR="${tmp}/results" \
+    S6_HALT="${tmp}/halt" \
+      "${BASHIO_BIN}" "${FINISH}" "$@" 2>&1
+  )"
+  FINISH_RC=$?
+  FINISH_HALTED=false
+  [ -e "${tmp}/halted" ] && FINISH_HALTED=true
+  FINISH_EXIT_CODE="$(cat "${tmp}/results/exitcode" 2>/dev/null || true)"
+  rm -rf "${tmp}"
+}
+
+TESTS=$((TESTS + 1))
+run_finish 256 15
+if [ "${FINISH_RC}" -eq 0 ] && [ "${FINISH_HALTED}" = false ] && [ -z "${FINISH_EXIT_CODE}" ]; then
+  pass "SIGTERM is treated as an intentional shutdown"
+else
+  fail "SIGTERM attempted to halt the App"
+fi
+
+TESTS=$((TESTS + 1))
+run_finish 256 11
+if [ "${FINISH_RC}" -ne 0 ]; then
+  fail "SIGSEGV finish did not hand off to halt"
+elif [ "${FINISH_HALTED}" != true ] || [ "${FINISH_EXIT_CODE}" != 139 ]; then
+  fail "SIGSEGV finish did not preserve exit code 139 and halt the App"
+elif ! grep -qF "signal 11" <<<"${FINISH_OUT}"; then
+  fail "SIGSEGV finish did not report signal 11"
+else
+  pass "SIGSEGV stops the App with exit code 139"
 fi
 
 echo
