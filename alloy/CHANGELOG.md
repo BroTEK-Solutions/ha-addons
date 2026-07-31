@@ -10,6 +10,19 @@
   `ghcr.io/rknightion/` are left in place but receive no further updates.
 - Add-on tests moved from `tests/` to `alloy/tests/`, so each add-on in the repository owns its own.
 
+### Documentation
+- Corrected the `level` label description: it is regex-extracted from Home Assistant's log line
+  format, not the systemd priority field, and is absent on lines that do not match - so a query
+  filtering on `level` silently drops kernel and Supervisor output
+- Corrected the options reference, which listed `loki_url` as required and then contradicted
+  itself two paragraphs later. At least one of `loki_url`, `prometheus_url` or `fleet_url` is
+  required; none is required individually
+- Corrected the `additional_config` example, which tailed `/config/home-assistant.log` - Home
+  Assistant's config directory is not mapped into the add-on, so that path does not exist
+- Documented the journal path fallback, the disabled collectors and excluded network interfaces,
+  the `integrations/node_exporter` job name, the watchdog endpoint, and the basic-auth pairing
+  rule on `prometheus_*` (previously only stated for `loki_*`)
+
 ## 1.5.0 - 2026-07-30
 
 ### Added

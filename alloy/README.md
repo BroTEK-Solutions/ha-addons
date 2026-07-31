@@ -11,4 +11,7 @@ journal format incompatibility, and adds node_exporter-style host monitoring (CP
 disk, network). Set `prometheus_url` to enable metrics; see the **Documentation** tab. Set
 `fleet_url` to manage this collector from Grafana Fleet Management.
 
+At least one of `loki_url`, `prometheus_url` or `fleet_url` must be set - the add-on will not
+start without a destination.
+
 For full documentation, see the **Documentation** tab after installing.

@@ -25,7 +25,7 @@ ARG BUILD_DATE
 ARG BUILD_VERSION
 LABEL \
     io.hass.name="Grafana Alloy" \
-    io.hass.description="Ship HAOS logs to Loki via Grafana Alloy" \
+    io.hass.description="Ship HAOS logs to Loki and host metrics to Prometheus via Grafana Alloy" \
     io.hass.arch="${BUILD_ARCH}" \
     io.hass.type="addon" \
     io.hass.version=${BUILD_VERSION}
