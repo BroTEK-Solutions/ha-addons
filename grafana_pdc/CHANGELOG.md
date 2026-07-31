@@ -9,3 +9,5 @@ Initial release of the Grafana Private Data Source Connect Home Assistant App.
   metrics on the internal App network.
 - Documents Home Assistant networking, PDC endpoint configuration, operational recovery, and
   security boundaries.
+- Stops the App after an unexpected terminating signal instead of treating every signal as an
+  intentional shutdown and silently restarting the PDC agent. SIGTERM remains a clean stop.

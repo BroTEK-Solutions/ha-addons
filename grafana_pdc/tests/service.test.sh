@@ -288,6 +288,34 @@ fi
 FINISH_OUT="$(
     CACHE_DIR="${tmp}/cache" PDC_TEST_HALT="${tmp}/halted" \
         S6_RESULTS_DIR="${tmp}/results" S6_HALT="${tmp}/bin/halt" \
+        "${BASHIO_BIN}" "${FINISH}" 256 15 2>&1
+)"
+FINISH_RC=$?
+TESTS=$((TESTS + 1))
+if [ "${FINISH_RC}" -ne 0 ] || [ -e "${tmp}/halted" ] || [ -e "${tmp}/results/exitcode" ]; then
+    fail "SIGTERM finish attempted to halt the App"
+else
+    pass "SIGTERM finish exits without halting the App"
+fi
+FINISH_OUT="$(
+    CACHE_DIR="${tmp}/cache" PDC_TEST_HALT="${tmp}/halted" \
+        S6_RESULTS_DIR="${tmp}/results" S6_HALT="${tmp}/bin/halt" \
+        "${BASHIO_BIN}" "${FINISH}" 256 11 2>&1
+)"
+FINISH_RC=$?
+TESTS=$((TESTS + 1))
+if [ "${FINISH_RC}" -ne 0 ]; then
+    fail "SIGSEGV finish did not hand off to halt"
+elif [ ! -e "${tmp}/halted" ] || [ "$(cat "${tmp}/results/exitcode" 2>/dev/null)" != 139 ]; then
+    fail "SIGSEGV finish did not preserve exit code 139 and halt the App"
+elif ! grep -qF "signal 11" <<<"${FINISH_OUT}"; then
+    fail "SIGSEGV finish did not report signal 11"
+else
+    pass "SIGSEGV finish preserves exit code 139 and halts the App"
+fi
+FINISH_OUT="$(
+    CACHE_DIR="${tmp}/cache" PDC_TEST_HALT="${tmp}/halted" \
+        S6_RESULTS_DIR="${tmp}/results" S6_HALT="${tmp}/bin/halt" \
         "${BASHIO_BIN}" "${FINISH}" 7 2>&1
 )"
 FINISH_RC=$?
