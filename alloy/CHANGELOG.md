@@ -22,6 +22,15 @@
 ### Changed
 - Alloy updated to **1.18.0** (from 1.17.0). The breaking changes in that release are all in
   `otelcol.*` components, none of which this add-on uses
+- The endpoint options now reject whitespace, double quotes and backslashes. They are
+  interpolated into quoted River strings, so those characters produced a configuration Alloy
+  could not parse, with an error that named neither the option nor the character. Also rejected
+  at start-up, since `options.json` can be edited outside the UI
+- `metrics_scrape_interval` and `fleet_poll_frequency` accept the full Go duration grammar, so
+  `1m30s`, `1.5s` and `100us` are valid. The 1.6.0 pattern allowed only one integer and one unit,
+  which would have rejected working configurations on upgrade
+- `fleet_attributes` rejects quotes and backslashes in the UI, matching what start-up validation
+  already refused. Previously such a value saved successfully and then stopped the add-on
 - The add-on's own configuration folder is mapped read-write again, to hold the override file
 
 ### Removed

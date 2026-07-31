@@ -53,22 +53,33 @@ schema:
   # with voluptuous' Url(), which rejects an empty string, so clearing the field
   # in the UI produces a validation error instead of disabling the destination.
   # This pattern accepts an empty value and still catches a malformed URL.
-  loki_url: "match(^$|^https?://.+$)?"
+  #
+  # Whitespace, double quotes and backslashes are excluded rather than using a
+  # bare `.+`: the generator interpolates these values into quoted River
+  # strings, so a quote or backslash would produce a config Alloy cannot parse,
+  # and whitespace is not valid in a URL anyway. Single-quoted YAML below so the
+  # backslashes reach the regex intact.
+  loki_url: 'match(^$|^https?://[^\s"\\]+$)?'
   loki_username: "str?"
   loki_password: "password?"
-  prometheus_url: "match(^$|^https?://.+$)?"
+  prometheus_url: 'match(^$|^https?://[^\s"\\]+$)?'
   prometheus_username: "str?"
   prometheus_password: "password?"
   instance_name: "str(1,)"
-  metrics_scrape_interval: "match(^[0-9]+(ms|s|m|h)$)"
+  # The full Go duration grammar Alloy accepts, so `1m30s`, `1.5s` and `100us`
+  # stay valid - a stricter integer-plus-one-unit pattern would reject configs
+  # that already work.
+  metrics_scrape_interval: 'match(^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$)'
   host_metrics: "bool"
   homeassistant_metrics: "bool"
-  fleet_url: "match(^$|^https?://.+$)?"
+  fleet_url: 'match(^$|^https?://[^\s"\\]+$)?'
   fleet_username: "str?"
   fleet_password: "password?"
   fleet_collector_name: "str?"
-  fleet_attributes: "match(^$|^[^=,]+=[^=,]*(,[^=,]+=[^=,]*)*$)?"
-  fleet_poll_frequency: "match(^[0-9]+(ms|s|m|h)$)"
+  # Quotes and backslashes are excluded here too, so the UI rejects what
+  # init-alloy/run would otherwise refuse to start on.
+  fleet_attributes: 'match(^$|^[^=,"\\]+=[^=,"\\]*(,[^=,"\\]+=[^=,"\\]*)*$)?'
+  fleet_poll_frequency: 'match(^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$)'
   log_level: "list(debug|info|warn|error)"
   alloy_stability_level: "list(generally-available|public-preview|experimental)"
   alloy_disable_telemetry: "bool"

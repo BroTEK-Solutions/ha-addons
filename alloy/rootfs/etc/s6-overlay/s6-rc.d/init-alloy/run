@@ -90,6 +90,25 @@ check_auth_pair loki
 check_auth_pair prometheus
 check_auth_pair fleet
 
+# Endpoints are interpolated into quoted River strings. The schema rejects a
+# quote, backslash or whitespace in the UI; repeat it here because options.json
+# can be edited outside the UI, and a bad character produces an Alloy parse
+# error that says nothing about which option caused it.
+validate_url() {
+    local name="${1}" value="${2}"
+    [ -n "${value}" ] || return 0
+    case "${value}" in
+        *'"'*|*[\\]*|*[[:space:]]*)
+            bashio::log.fatal "${name} contains a quote, backslash or whitespace: '${value}'"
+            bashio::exit.nok
+            ;;
+    esac
+}
+
+validate_url loki_url "${LOKI_URL}"
+validate_url prometheus_url "${PROMETHEUS_URL}"
+validate_url fleet_url "${FLEET_URL}"
+
 # Both metric sources forward to the Prometheus remote_write receiver, which
 # only exists when prometheus_url is set. Enabling one without it would silently
 # collect nothing.

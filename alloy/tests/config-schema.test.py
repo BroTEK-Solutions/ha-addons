@@ -54,14 +54,28 @@ CASES: list[tuple[str, object, bool]] = [
     ("fleet_url", "https://fleet-management-prod-001.grafana.net", True),
     ("loki_url", "not-a-url", False),
     ("loki_url", "192.168.1.45:3100", False),
+    # The endpoints are interpolated into quoted River strings, so anything that
+    # would break the generated config has to be refused at save time.
+    ("loki_url", "https://exa mple.com", False),
+    ("loki_url", 'http://host/"', False),
+    ("loki_url", "http://host/\\", False),
+    ("prometheus_url", 'http://host/"', False),
+    ("fleet_url", "https://fleet.example.net/a b", False),
     # An empty instance name would produce a blank `instance` label everywhere.
     ("instance_name", "", False),
     ("instance_name", "home-assistant", True),
-    # Durations must carry a unit or Alloy fails at startup instead.
+    # Durations must carry a unit or Alloy fails at startup instead, but the
+    # whole Go duration grammar Alloy accepts has to stay valid.
     ("metrics_scrape_interval", "60s", True),
     ("metrics_scrape_interval", "1m", True),
+    ("metrics_scrape_interval", "1m30s", True),
+    ("metrics_scrape_interval", "1.5s", True),
+    ("metrics_scrape_interval", "500ms", True),
+    ("metrics_scrape_interval", "100us", True),
     ("metrics_scrape_interval", "60", False),
+    ("metrics_scrape_interval", "1x", False),
     ("fleet_poll_frequency", "5m", True),
+    ("fleet_poll_frequency", "2h45m", True),
     ("fleet_poll_frequency", "abc", False),
     # Fleet attributes are emitted verbatim into River strings.
     ("fleet_attributes", "", True),
@@ -69,6 +83,10 @@ CASES: list[tuple[str, object, bool]] = [
     ("fleet_attributes", "env=home,role=hass", True),
     ("fleet_attributes", "env=home,role", False),
     ("fleet_attributes", "=home", False),
+    # init-alloy/run refuses to start on these, so the UI must not accept them.
+    ("fleet_attributes", 'env=ho"me', False),
+    ("fleet_attributes", "env=ho\\me", False),
+    ('fleet_attributes', 'ho"me=x', False),
     ("log_level", "info", True),
     ("log_level", "debug", True),
     ("log_level", "trace", False),

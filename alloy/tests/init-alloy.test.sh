@@ -144,6 +144,27 @@ expect_ok "both halves present" \
   'username = "123"'
 
 echo
+echo "== endpoints that would corrupt the generated config are refused =="
+# The schema rejects these in the UI; options.json can still be hand-edited.
+expect_fatal "quote in an endpoint" \
+  '{"loki_url":"http://loki:3100/\""}' \
+  "loki_url contains a quote, backslash or whitespace"
+expect_fatal "whitespace in an endpoint" \
+  '{"prometheus_url":"http://prom :9090/api/v1/write"}' \
+  "prometheus_url contains a quote, backslash or whitespace"
+expect_fatal "backslash in an endpoint" \
+  '{"fleet_url":"https://fleet.example.net\\\\x"}' \
+  "fleet_url contains a quote, backslash or whitespace"
+expect_ok "a clean endpoint still starts" "{${LOKI}}" "loki.write"
+
+echo
+echo "== the full Go duration grammar reaches Alloy unchanged =="
+expect_ok "compound duration" \
+  "{${PROM},\"metrics_scrape_interval\":\"1m30s\"}" 'scrape_interval = "1m30s"'
+expect_ok "fractional duration" \
+  "{${PROM},\"metrics_scrape_interval\":\"1.5s\"}" 'scrape_interval = "1.5s"'
+
+echo
 echo "== fleet attributes are validated before Alloy sees them =="
 expect_fatal "not key=value" \
   "{${FLEET},\"fleet_attributes\":\"env=home,role\"}" \
