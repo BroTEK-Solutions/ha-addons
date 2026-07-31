@@ -19,7 +19,30 @@ PROMETHEUS_PASSWORD=$(secret prometheus_password)
 FLEET_PASSWORD=$(secret fleet_password)
 export LOKI_PASSWORD PROMETHEUS_PASSWORD FLEET_PASSWORD
 
-exec /usr/bin/alloy run \
-    --server.http.listen-addr=0.0.0.0:12345 \
-    --storage.path=/data/alloy \
-    /etc/alloy/config.alloy
+# Startup flags. The first three are fixed: the listen address is what the
+# ingress-free debug UI and the health check both use, and the storage path is
+# the one excluded from backups.
+declare -a args=(
+    --server.http.listen-addr=0.0.0.0:12345
+    --storage.path=/data/alloy
+)
+
+# Alloy refuses to load a component below the permitted stability level, so this
+# is the switch that makes public-preview and experimental components usable.
+args+=("--stability.level=$(bashio::config 'alloy_stability_level' 'generally-available')")
+
+# Alloy reports anonymous usage statistics to Grafana by default.
+if bashio::config.true 'alloy_disable_telemetry'; then
+    args+=(--disable-reporting)
+fi
+
+# Anything else the user wants to pass. Split on whitespace, which is what a
+# flag string looks like; a flag whose value contains a space needs the
+# config.alloy override instead.
+if bashio::config.has_value 'alloy_additional_args'; then
+    read -r -a extra_args <<<"$(bashio::config 'alloy_additional_args')"
+    args+=("${extra_args[@]}")
+    bashio::log.info "Extra Alloy flags: ${extra_args[*]}"
+fi
+
+exec /usr/bin/alloy run "${args[@]}" /etc/alloy/config.alloy

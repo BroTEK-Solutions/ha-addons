@@ -41,10 +41,16 @@ run_init() {
   chmod 0700 "${tmp}/cache"
   printf '%s' "$1" >"${tmp}/cache/addons.self.options.config.cache"
 
+  # $2, when given, is written to the add-on config folder as a config.alloy
+  # override.
+  mkdir -p "${tmp}/addon_config"
+  [ -n "${2:-}" ] && printf '%s' "$2" >"${tmp}/addon_config/config.alloy"
+
   RUN_OUT="$(
     CACHE_DIR="${tmp}/cache" \
     CONFIG_DIR="${tmp}/etc" \
     DATA_DIR="${tmp}/data" \
+    ADDON_CONFIG_DIR="${tmp}/addon_config" \
     GENERATOR="${GENERATOR}" \
       "${BASHIO_BIN}" "${INIT}" 2>&1
   )"
@@ -151,6 +157,62 @@ expect_fatal "embedded quote breaks River syntax" \
 expect_ok "well-formed attributes" \
   "{${FLEET},\"fleet_attributes\":\"env=home,role=hass\"}" \
   '"env" = "home"' '"role" = "hass"'
+
+echo
+echo "== metric sources are opt-in and need a Prometheus endpoint =="
+expect_ok "host metrics on by default" "{${PROM}}" "prometheus.exporter.unix"
+TESTS=$((TESTS + 1))
+run_init "{${PROM},\"host_metrics\":false}"
+if grep -qF "prometheus.exporter.unix" <<<"${RUN_CONFIG}"; then
+  fail "host_metrics=false still emitted the unix exporter"
+elif ! grep -qF "prometheus.remote_write" <<<"${RUN_CONFIG}"; then
+  fail "host_metrics=false dropped remote_write as well"
+else
+  pass "host_metrics=false removes the exporter but keeps remote_write"
+fi
+expect_ok "home assistant metrics" "{${PROM},\"homeassistant_metrics\":true}" \
+  'prometheus.scrape "homeassistant"' \
+  'metrics_path    = "/core/api/prometheus"' \
+  'bearer_token    = sys.env("SUPERVISOR_TOKEN")'
+TESTS=$((TESTS + 1))
+run_init "{${PROM}}"
+if grep -qF 'prometheus.scrape "homeassistant"' <<<"${RUN_CONFIG}"; then
+  fail "home assistant metrics were emitted without being enabled"
+else
+  pass "home assistant metrics are off by default"
+fi
+expect_fatal "home assistant metrics without a Prometheus endpoint" \
+  "{${LOKI},\"homeassistant_metrics\":true}" \
+  "homeassistant_metrics is enabled but prometheus_url is empty"
+
+echo
+echo "== a user config.alloy replaces the generated one =="
+TESTS=$((TESTS + 1))
+run_init "{${LOKI}}" 'logging { level = "debug" }'
+if [ "${RUN_RC}" -ne 0 ]; then
+  fail "override run exited ${RUN_RC}"
+  indent "${RUN_OUT}"
+elif [ "${RUN_CONFIG}" != 'logging { level = "debug" }' ]; then
+  fail "override was not used verbatim, got: ${RUN_CONFIG}"
+else
+  pass "the override is copied verbatim"
+fi
+TESTS=$((TESTS + 1))
+if grep -qF "Add-on options are ignored" <<<"${RUN_OUT}"; then
+  pass "the override is announced in the log"
+else
+  fail "the override was silent"
+fi
+# With an override the options no longer describe what Alloy does, so the
+# destination requirement must not be enforced.
+TESTS=$((TESTS + 1))
+run_init '{"instance_name":"hass"}' 'logging { level = "info" }'
+if [ "${RUN_RC}" -eq 0 ]; then
+  pass "an override starts with no destination configured"
+else
+  fail "an override with no destination was rejected"
+  indent "${RUN_OUT}"
+fi
 
 echo
 echo "== secrets never reach the generated config =="

@@ -31,6 +31,13 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: YAMLLint
+        # The lint the Home Assistant Community Add-ons repository runs across
+        # its own YAML. --strict so warnings fail rather than scroll past.
+        run: |
+          python3 -m pip install --quiet yamllint
+          yamllint --strict .
+
       - name: Home Assistant add-on lint
         # Validates config.yaml and build.yaml against the add-on JSON schemas:
         # unknown keys, keys set to their default, and obsolete options. Not

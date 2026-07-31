@@ -45,6 +45,19 @@ configuration:
     description: >-
       How often host metrics are collected, as a duration such as 30s, 60s or
       5m. Only applies when a Prometheus endpoint is set.
+  host_metrics:
+    name: Collect host metrics
+    description: >-
+      Collect CPU, memory, disk, load and network metrics for the machine
+      running Home Assistant, using Alloy's unix exporter. Requires a Prometheus
+      endpoint.
+  homeassistant_metrics:
+    name: Collect Home Assistant metrics
+    description: >-
+      Scrape Home Assistant Core's own Prometheus endpoint, which exposes entity
+      states and Core internals. Requires a Prometheus endpoint here and the
+      prometheus integration enabled in Home Assistant, otherwise the scrape
+      returns 404.
   fleet_url:
     name: Fleet Management URL
     description: >-
@@ -84,6 +97,23 @@ configuration:
     description: >-
       Verbosity of Alloy's own logging in the add-on log. This does not affect
       which journal entries are shipped, only how much Alloy says about itself.
+  alloy_stability_level:
+    name: Alloy stability level
+    description: >-
+      The lowest component stability Alloy will load. Raise it to
+      public-preview or experimental only if a component you need in
+      additional_config requires it - Alloy refuses to start otherwise.
+  alloy_disable_telemetry:
+    name: Disable Alloy usage reporting
+    description: >-
+      Alloy reports anonymous usage statistics to Grafana by default. Leave this
+      on to pass --disable-reporting and send nothing.
+  alloy_additional_args:
+    name: Additional Alloy startup flags
+    description: >-
+      Extra command-line flags for Alloy, separated by spaces, for example
+      --server.http.enable-pprof=false. Advanced use only; a bad flag stops the
+      add-on from starting.
   additional_config:
     name: Additional Alloy configuration
     description: >-

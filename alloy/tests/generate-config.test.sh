@@ -175,6 +175,32 @@ check_absent   "$LOKI_BLOCK"  'FLEET_PASSWORD'
 check_absent   "$PROM_BLOCK"  'FLEET_PASSWORD'
 validate_alloy "$OUT" "all-three"
 
+echo "== metric sources are individually selectable =="
+OUT="$(gen PROMETHEUS_URL=https://prom.example.net/api/prom/push HOST_METRICS=false)"
+check_absent   "$OUT" 'prometheus.exporter.unix'
+check_contains "$OUT" 'prometheus.remote_write "metrics"'
+validate_alloy "$OUT" "no-host-metrics"
+
+OUT="$(gen PROMETHEUS_URL=https://prom.example.net/api/prom/push HOMEASSISTANT_METRICS=true)"
+check_contains "$OUT" 'prometheus.scrape "homeassistant"'
+check_contains "$OUT" '"__address__" = "supervisor:80"'
+check_contains "$OUT" 'metrics_path    = "/core/api/prometheus"'
+# The Supervisor token is read from the environment, never written into the file.
+check_contains "$OUT" 'bearer_token    = sys.env("SUPERVISOR_TOKEN")'
+check_contains "$OUT" 'prometheus.exporter.unix'
+validate_alloy "$OUT" "host-and-hass-metrics"
+
+# Home Assistant metrics alone, with the host exporter switched off.
+OUT="$(gen PROMETHEUS_URL=https://prom.example.net/api/prom/push HOMEASSISTANT_METRICS=true HOST_METRICS=false)"
+check_contains "$OUT" 'prometheus.scrape "homeassistant"'
+check_absent   "$OUT" 'prometheus.exporter.unix'
+validate_alloy "$OUT" "hass-metrics-only"
+
+# Nothing Home Assistant-shaped should appear unless it was asked for.
+OUT="$(gen PROMETHEUS_URL=https://prom.example.net/api/prom/push)"
+check_absent   "$OUT" 'core/api/prometheus'
+check_absent   "$OUT" 'SUPERVISOR_TOKEN'
+
 echo "== passwords never reach the generated config =="
 # Passwords are in the generator's environment (as they are at runtime); the config
 # must reference them by env-var name only, never interpolate the value.

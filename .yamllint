@@ -1,0 +1,20 @@
+---
+# Matches the lint the Home Assistant Community Add-ons repository runs, relaxed
+# where this repo's YAML legitimately differs: add-on descriptions and
+# translation strings are prose and wrap past 80 columns, and GitHub workflows
+# need `on:` (which yamllint's truthy rule flags).
+extends: default
+
+rules:
+  line-length:
+    max: 120
+    allow-non-breakable-words: true
+  truthy:
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
+  # Some files carry a `---` marker and some do not; both are fine here.
+  document-start: disable
+
+ignore: |
+  .git/

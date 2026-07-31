@@ -48,13 +48,18 @@ auth (`*_username` + `*_password`, both or neither). See [the full
 documentation](alloy/DOCS.md) for every option, the host-filesystem caveat, and how the `level`
 label is derived.
 
-## Host metrics
+## Metrics
 
-When `prometheus_url` is set, the add-on collects host CPU, memory, disk I/O, load average, and
-network metrics via Alloy's `unix` exporter, under the job name `integrations/node_exporter`.
-HAOS add-ons cannot mount the host root filesystem, so filesystem usage is reported for the
-mapped HA volumes (`share`/`media`/`backup`, which sit on the data partition) rather than every
-host mount.
+When `prometheus_url` is set, two independent sources are available:
+
+- **`host_metrics`** (default on) — CPU, memory, disk I/O, load average and network for the
+  machine itself, via Alloy's `unix` exporter, under the job name `integrations/node_exporter`.
+  HAOS add-ons cannot mount the host root filesystem, so filesystem usage is reported for the
+  mapped HA volumes (`share`/`media`/`backup`, which sit on the data partition) rather than every
+  host mount.
+- **`homeassistant_metrics`** (default off) — Home Assistant Core's own Prometheus endpoint,
+  scraped through the Supervisor proxy. Needs the `prometheus` integration enabled in Home
+  Assistant.
 
 ## Fleet Management
 
@@ -78,6 +83,13 @@ Labels applied: `job`, `unit`, `hostname`, `syslog_identifier`, `transport`, `co
 ## Debug UI
 
 Access the Alloy pipeline inspector at `http://<haos-ip>:12345`.
+
+## Going beyond the options
+
+`alloy_stability_level`, `alloy_disable_telemetry` and `alloy_additional_args` control how Alloy
+itself is launched. Dropping a file at `/config/config.alloy` replaces the generated
+configuration entirely while keeping the passwords available as `sys.env()`. See
+[the documentation](alloy/DOCS.md) for both.
 
 ## Development
 

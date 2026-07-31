@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.7.0 - 2026-07-31
+
+### Added
+- **Home Assistant Core metrics.** New `homeassistant_metrics` option, off by default, scrapes
+  Core's own Prometheus endpoint through the Supervisor proxy for entity states and Core
+  internals. Requires the `prometheus` integration enabled in Home Assistant. The Supervisor
+  token is read with `sys.env()` and never written into the generated config
+- **`host_metrics`**, on by default, so the host exporter can be turned off for a
+  Home Assistant-only or logs-only setup. Enabling either source without `prometheus_url` is now
+  refused at start-up instead of silently collecting nothing
+- **A full configuration override.** A file at `/config/config.alloy` replaces the generated
+  configuration entirely, for anything the options cannot express. Options that shape the config
+  are then ignored - announced in the log on every start - while the startup flags still apply
+  and the passwords stay available as `sys.env()`
+- **Alloy startup flags as options.** `alloy_stability_level` for loading public-preview or
+  experimental components, `alloy_disable_telemetry` (on by default, passing
+  `--disable-reporting`), and `alloy_additional_args` for anything else
+- `.github/CODEOWNERS`, and yamllint in CI alongside the add-on linter
+
+### Changed
+- Alloy updated to **1.18.0** (from 1.17.0). The breaking changes in that release are all in
+  `otelcol.*` components, none of which this add-on uses
+- The add-on's own configuration folder is mapped read-write again, to hold the override file
+
+### Removed
+- `codeowners` from `config.yaml` stays removed: it is not a Home Assistant add-on option and
+  Supervisor strips unknown keys, so it never did anything. Ownership now lives in
+  `.github/CODEOWNERS`, where the Community Add-ons repository keeps it too
+
 ## 1.6.0 - 2026-07-31
 
 ### Fixed

@@ -9,9 +9,24 @@ set -e
 CONFIG_DIR="${CONFIG_DIR:-/etc/alloy}"
 DATA_DIR="${DATA_DIR:-/data/alloy}"
 GENERATOR="${GENERATOR:-/usr/share/alloy/generate-config.sh}"
+# The add-on config folder, where a user can place a full config.alloy override.
+ADDON_CONFIG_DIR="${ADDON_CONFIG_DIR:-/config}"
 CONFIG_FILE="${CONFIG_DIR}/config.alloy"
+OVERRIDE_FILE="${ADDON_CONFIG_DIR}/config.alloy"
 
 mkdir -p "${CONFIG_DIR}" "${DATA_DIR}"
+
+# A user-supplied config replaces the generated one wholesale. Handle it before
+# reading any options: with an override there is nothing to validate, since the
+# add-on options no longer describe what Alloy will do.
+if [ -f "${OVERRIDE_FILE}" ]; then
+    bashio::log.warning "Using ${OVERRIDE_FILE} instead of the generated configuration."
+    bashio::log.warning "Add-on options are ignored, apart from the Alloy startup flags"
+    bashio::log.warning "and the three passwords, which stay available as sys.env()."
+    cp "${OVERRIDE_FILE}" "${CONFIG_FILE}"
+    bashio::log.info "Alloy config copied to ${CONFIG_FILE}"
+    exit 0
+fi
 
 # Read an option, falling back to $2 when it is unset, null or empty.
 # bashio::config.has_value is what distinguishes those three from a real value -
@@ -33,6 +48,8 @@ PROMETHEUS_URL=$(config_or prometheus_url)
 PROMETHEUS_USERNAME=$(config_or prometheus_username)
 INSTANCE_NAME=$(config_or instance_name homeassistant)
 METRICS_SCRAPE_INTERVAL=$(config_or metrics_scrape_interval 60s)
+HOST_METRICS=$(config_or host_metrics true)
+HOMEASSISTANT_METRICS=$(config_or homeassistant_metrics false)
 LOG_LEVEL=$(config_or log_level info)
 ADDITIONAL_CONFIG=$(config_or additional_config)
 FLEET_URL=$(config_or fleet_url)
@@ -42,6 +59,7 @@ FLEET_ATTRIBUTES=$(config_or fleet_attributes)
 FLEET_POLL_FREQUENCY=$(config_or fleet_poll_frequency 5m)
 export LOKI_URL LOKI_USERNAME PROMETHEUS_URL PROMETHEUS_USERNAME
 export INSTANCE_NAME METRICS_SCRAPE_INTERVAL LOG_LEVEL ADDITIONAL_CONFIG
+export HOST_METRICS HOMEASSISTANT_METRICS
 export FLEET_URL FLEET_USERNAME FLEET_COLLECTOR_NAME FLEET_ATTRIBUTES FLEET_POLL_FREQUENCY
 
 # Require at least one destination. Fleet Management alone is enough: the remote
@@ -71,6 +89,20 @@ check_auth_pair() {
 check_auth_pair loki
 check_auth_pair prometheus
 check_auth_pair fleet
+
+# Both metric sources forward to the Prometheus remote_write receiver, which
+# only exists when prometheus_url is set. Enabling one without it would silently
+# collect nothing.
+if [ -z "${PROMETHEUS_URL}" ]; then
+    if bashio::config.true 'homeassistant_metrics'; then
+        bashio::log.fatal "homeassistant_metrics is enabled but prometheus_url is empty."
+        bashio::log.fatal "Set prometheus_url, or turn homeassistant_metrics off."
+        bashio::exit.nok
+    fi
+elif [ "${HOST_METRICS}" != "true" ] && [ "${HOMEASSISTANT_METRICS}" != "true" ]; then
+    bashio::log.warning "prometheus_url is set but both host_metrics and"
+    bashio::log.warning "homeassistant_metrics are off, so no metrics will be sent."
+fi
 
 # Attributes are emitted verbatim into the Alloy config. The schema already
 # rejects a malformed pair in the UI; this repeats the check because a quote or
@@ -120,6 +152,8 @@ bashio::log.info "Grafana Alloy for Home Assistant"
     bashio::log.info "Logs    -> Loki:       ${LOKI_URL} $(auth_note "${LOKI_USERNAME}")"
 [ -n "${PROMETHEUS_URL}" ] && \
     bashio::log.info "Metrics -> Prometheus: ${PROMETHEUS_URL} (every ${METRICS_SCRAPE_INTERVAL}) $(auth_note "${PROMETHEUS_USERNAME}")"
+[ -n "${PROMETHEUS_URL}" ] && \
+    bashio::log.info "Metric sources: host=${HOST_METRICS} homeassistant=${HOMEASSISTANT_METRICS}"
 [ -n "${FLEET_URL}" ] && \
     bashio::log.info "Fleet   -> Fleet Mgmt: ${FLEET_URL} (every ${FLEET_POLL_FREQUENCY}) $(auth_note "${FLEET_USERNAME}")"
 [ -n "${FLEET_ATTRIBUTES}" ] && bashio::log.info "Fleet attributes: ${FLEET_ATTRIBUTES}"

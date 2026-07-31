@@ -4,9 +4,10 @@
 # already has the container env and exports the options as env vars. with-contenv
 # would reset the environment and wipe those exported values.
 # Inputs (env): LOG_LEVEL, JOURNAL_PATH, LOKI_URL, LOKI_USERNAME, PROMETHEUS_URL,
-#   PROMETHEUS_USERNAME, INSTANCE_NAME, METRICS_SCRAPE_INTERVAL, FLEET_URL,
-#   FLEET_USERNAME, FLEET_COLLECTOR_NAME, FLEET_ATTRIBUTES, FLEET_POLL_FREQUENCY,
-#   ADDITIONAL_CONFIG.
+#   PROMETHEUS_USERNAME, INSTANCE_NAME, METRICS_SCRAPE_INTERVAL, HOST_METRICS,
+#   HOMEASSISTANT_METRICS, FLEET_URL, FLEET_USERNAME, FLEET_COLLECTOR_NAME,
+#   FLEET_ATTRIBUTES, FLEET_POLL_FREQUENCY, ADDITIONAL_CONFIG.
+# HOST_METRICS and HOMEASSISTANT_METRICS are "true"/"false" strings.
 # Passwords are NOT interpolated here; the config references sys.env("LOKI_PASSWORD"),
 # sys.env("PROMETHEUS_PASSWORD") and sys.env("FLEET_PASSWORD") so the secrets never land
 # on disk.
@@ -20,6 +21,8 @@ PROMETHEUS_URL="${PROMETHEUS_URL:-}"
 PROMETHEUS_USERNAME="${PROMETHEUS_USERNAME:-}"
 INSTANCE_NAME="${INSTANCE_NAME:-homeassistant}"
 METRICS_SCRAPE_INTERVAL="${METRICS_SCRAPE_INTERVAL:-60s}"
+HOST_METRICS="${HOST_METRICS:-true}"
+HOMEASSISTANT_METRICS="${HOMEASSISTANT_METRICS:-false}"
 FLEET_URL="${FLEET_URL:-}"
 FLEET_USERNAME="${FLEET_USERNAME:-}"
 FLEET_COLLECTOR_NAME="${FLEET_COLLECTOR_NAME:-}"
@@ -163,7 +166,7 @@ cat <<ALLOYCONFIG
 ALLOYCONFIG
 fi
 
-if [ -n "${PROMETHEUS_URL}" ]; then
+if [ -n "${PROMETHEUS_URL}" ] && [ "${HOST_METRICS}" = "true" ]; then
 cat <<ALLOYCONFIG
 
 // --- Host metrics (node_exporter equivalent) ---
@@ -202,7 +205,38 @@ prometheus.scrape "host" {
   scrape_interval = "${METRICS_SCRAPE_INTERVAL}"
   job_name        = "integrations/node_exporter"
 }
+ALLOYCONFIG
+fi
 
+if [ -n "${PROMETHEUS_URL}" ] && [ "${HOMEASSISTANT_METRICS}" = "true" ]; then
+cat <<ALLOYCONFIG
+
+// --- Home Assistant Core metrics ---
+// Core's own Prometheus endpoint, reached through the Supervisor proxy. The
+// token comes from SUPERVISOR_TOKEN, which the Supervisor injects because
+// homeassistant_api is set in config.yaml, so it never appears in this file.
+// Requires the \`prometheus\` integration to be enabled in Home Assistant.
+prometheus.scrape "homeassistant" {
+  targets = [
+    {
+      "__address__" = "supervisor:80",
+      "instance"    = "${INSTANCE_NAME}",
+    },
+  ]
+  forward_to      = [prometheus.remote_write.metrics.receiver]
+  scrape_interval = "${METRICS_SCRAPE_INTERVAL}"
+  metrics_path    = "/core/api/prometheus"
+  bearer_token    = sys.env("SUPERVISOR_TOKEN")
+  scheme          = "http"
+  job_name        = "homeassistant"
+}
+ALLOYCONFIG
+fi
+
+if [ -n "${PROMETHEUS_URL}" ]; then
+cat <<ALLOYCONFIG
+
+// --- Write to Prometheus ---
 prometheus.remote_write "metrics" {
   endpoint {
     url = "${PROMETHEUS_URL}"

@@ -10,7 +10,7 @@ ARG BUILD_ARCH
 # this file so the validation container always matches the shipped binary.
 RUN set -eux; \
     # renovate: datasource=github-releases depName=grafana/alloy
-    ALLOY_VERSION="1.17.0"; \
+    ALLOY_VERSION="1.18.0"; \
     case "${BUILD_ARCH}" in \
         amd64)  ARCH="linux-amd64" ;; \
         aarch64) ARCH="linux-arm64" ;; \

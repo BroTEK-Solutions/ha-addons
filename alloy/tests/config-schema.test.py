@@ -44,7 +44,7 @@ CONFIG = Path(__file__).resolve().parents[1] / "config.yaml"
 TRANSLATIONS = Path(__file__).resolve().parents[1] / "translations" / "en.yaml"
 
 # Representative user input: (option, value, should_be_accepted).
-CASES: list[tuple[str, str, bool]] = [
+CASES: list[tuple[str, object, bool]] = [
     # Clearing a destination in the UI must disable it, not fail validation.
     ("loki_url", "", True),
     ("prometheus_url", "", True),
@@ -72,6 +72,15 @@ CASES: list[tuple[str, str, bool]] = [
     ("log_level", "info", True),
     ("log_level", "debug", True),
     ("log_level", "trace", False),
+    ("host_metrics", True, True),
+    ("host_metrics", False, True),
+    ("homeassistant_metrics", True, True),
+    ("alloy_stability_level", "generally-available", True),
+    ("alloy_stability_level", "experimental", True),
+    ("alloy_stability_level", "stable", False),
+    ("alloy_disable_telemetry", True, True),
+    ("alloy_additional_args", "", True),
+    ("alloy_additional_args", "--server.http.enable-pprof=false", True),
     ("loki_password", "", True),
     ("additional_config", "logging {}", True),
 ]
