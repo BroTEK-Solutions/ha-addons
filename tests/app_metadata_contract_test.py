@@ -72,6 +72,14 @@ def main() -> None:
     )
     if workflow_text.count(publish_guard) < 2:
         fail("only a push to main may publish images and manifests")
+    for output in ("image", "version", "name", "description", "url"):
+        json_variable = f"{output.upper()}_JSON"
+        if f'{output}=$(jq -r . <<< "${json_variable}")' not in workflow_text:
+            fail(f"{output} must decode the helper's JSON scalar before reuse")
+    for output in ("version", "name", "description", "url"):
+        expected = f"{output}: ${{{{ steps.normalize.outputs.{output} }}}}"
+        if expected not in workflow_text:
+            fail(f"prepare output {output} must use normalized metadata")
     for action_reference in re.findall(r"^\s*uses:\s+([^\s#]+)", workflow_text, re.MULTILINE):
         if not re.search(r"@[0-9a-f]{40}$", action_reference):
             fail(f"GitHub Action must use an immutable commit SHA: {action_reference}")
