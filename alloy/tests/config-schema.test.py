@@ -57,6 +57,7 @@ CASES: list[tuple[str, object, bool]] = [
     ("loki_url", "http://[fe80::1%25eth0]:3100/loki/api/v1/push", True),
     ("loki_url", "http://[::ffff:192.0.2.1]:3100/loki/api/v1/push", True),
     ("loki_url", "http://[2001:db8::192.0.2.1]:3100/loki/api/v1/push", True),
+    ("loki_url", "http://[fe80::192.0.2.1%25eth0]:3100/loki/api/v1/push", True),
     ("prometheus_url", "https://prometheus-prod-01.grafana.net/api/prom/push", True),
     ("fleet_url", "https://fleet-management-prod-001.grafana.net", True),
     ("loki_url", "not-a-url", False),

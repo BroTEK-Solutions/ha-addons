@@ -187,6 +187,9 @@ expect_ok "scoped IPv6 endpoint" \
 expect_ok "IPv4-embedded IPv6 endpoint" \
   '{"prometheus_url":"http://[::ffff:192.0.2.1]:9090/api/v1/write"}' \
   'url = "http://[::ffff:192.0.2.1]:9090/api/v1/write"'
+expect_ok "scoped IPv4-embedded IPv6 endpoint" \
+  '{"prometheus_url":"http://[fe80::192.0.2.1%25eth0]:9090/api/v1/write"}' \
+  'url = "http://[fe80::192.0.2.1%25eth0]:9090/api/v1/write"'
 expect_fatal "unencoded IPv6 scope identifier" \
   '{"loki_url":"http://[fe80::1%eth0]/loki/api/v1/push"}' \
   "loki_url is not a valid HTTP(S) URL"
