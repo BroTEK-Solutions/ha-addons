@@ -7,7 +7,7 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Track the Grafana Alloy release pinned in the add-on Dockerfile. This is the single source of truth for the version - alloy/tests/generate-config.test.sh parses it out of the same line.",
+      "description": "Track the Grafana Alloy release pinned in the App Dockerfile. This is the single source of truth for the version - alloy/tests/generate-config.test.sh parses it out of the same line.",
       "managerFilePatterns": ["/^alloy/Dockerfile$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+ALLOY_VERSION=\"(?<currentValue>[^\"]+)\""
@@ -25,6 +25,15 @@
         "home-assistant/builder/actions/publish-multi-arch-manifest"
       ],
       "groupName": "Home Assistant builder App actions"
+    },
+    {
+      "description": "Keep Home Assistant metadata and App discovery helpers on one actions revision.",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": [
+        "home-assistant/actions/helpers/find-addons",
+        "home-assistant/actions/helpers/info"
+      ],
+      "groupName": "Home Assistant App helper actions"
     }
   ]
 }

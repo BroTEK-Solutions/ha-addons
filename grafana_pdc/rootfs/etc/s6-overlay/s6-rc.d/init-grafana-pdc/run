@@ -1,0 +1,11 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# Persistent PDC SSH material must never be group/world-readable.
+set -euo pipefail
+
+data_dir="${DATA_DIR:-/data}"
+ssh_dir="${data_dir}/ssh"
+
+mkdir -p "${ssh_dir}"
+chown 30000:30000 "${ssh_dir}"
+chmod 0700 "${ssh_dir}"

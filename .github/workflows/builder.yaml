@@ -1,0 +1,175 @@
+# yamllint disable rule:line-length
+name: Build Apps
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  MONITORED_FILES: "config.json config.yaml config.yml Dockerfile rootfs apparmor.txt"
+
+concurrency:
+  group: build-apps-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Lint and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Install test dependencies
+        run: python3 -m pip install --quiet pyyaml voluptuous yamllint
+
+      - name: YAMLLint
+        run: yamllint --strict .
+
+      - name: Lint Alloy App metadata
+        uses: frenck/action-addon-linter@f995494fd84fae6310d23617e66d0e37de4f14eb # v2.21.0
+        with:
+          path: "./alloy"
+
+      - name: Lint Grafana PDC App metadata
+        uses: frenck/action-addon-linter@f995494fd84fae6310d23617e66d0e37de4f14eb # v2.21.0
+        with:
+          path: "./grafana_pdc"
+
+      - name: ShellCheck
+        run: |
+          shellcheck \
+            alloy/rootfs/usr/share/alloy/generate-config.sh \
+            alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run \
+            alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run \
+            alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish \
+            alloy/tests/generate-config.test.sh \
+            alloy/tests/init-alloy.test.sh \
+            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run \
+            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run \
+            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish \
+            grafana_pdc/tests/service.test.sh \
+            grafana_pdc/tests/image-smoke.test.sh \
+            grafana_pdc/tests/fixtures/bashio \
+            grafana_pdc/tests/fixtures/fake-pdc
+
+      - name: Repository contract tests
+        run: |
+          python3 tests/app_metadata_contract_test.py
+          python3 tests/repository_workflow_contract_test.py
+          python3 grafana_pdc/tests/config-schema.test.py
+          python3 grafana_pdc/tests/image-contract.test.py
+
+      - name: PDC service tests in the Home Assistant base
+        run: |
+          docker run --rm -e BASHIO_BIN=/usr/bin/bashio -v "${PWD}:/w" -w /w \
+            ghcr.io/home-assistant/base:3.23@sha256:445077433f08d1e352285ff22ee2594f6b93ac3260dcf84433c79cd849a946a0 \
+            bash grafana_pdc/tests/service.test.sh
+
+      - name: PDC complete-image smoke test
+        run: |
+          docker build --tag local/ha-grafana-pdc:smoke grafana_pdc
+          bash grafana_pdc/tests/image-smoke.test.sh local/ha-grafana-pdc:smoke
+
+      - name: Alloy schema tests
+        run: python3 alloy/tests/config-schema.test.py
+
+      - name: Alloy generator tests
+        run: bash alloy/tests/generate-config.test.sh
+
+      - name: Alloy initialization tests
+        run: |
+          docker run --rm -v "${PWD}:/w" -w /w \
+            ghcr.io/home-assistant/base-debian:bookworm@sha256:8c7a9e207425e79b6b2ed1628a2b6727fa6e518d9fdddcbe3b1ac20440e70492 \
+            bash alloy/tests/init-alloy.test.sh
+
+  init:
+    name: Find changed Apps
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # Required by changed-files for pull request diffs.
+    outputs:
+      changed: ${{ steps.filter.outputs.changed }}
+      changed_apps: ${{ steps.filter.outputs.changed_apps }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read changed files
+        id: changed_files
+        uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62 # v47
+
+      - name: Find App directories
+        id: apps
+        uses: home-assistant/actions/helpers/find-addons@ab22029681aa532bfe7de5774a9972d67bfbd2c0 # master
+
+      - name: Select changed Apps
+        id: filter
+        shell: bash
+        env:
+          APPS: ${{ steps.apps.outputs.addons }}
+          CHANGED_FILES: ${{ steps.changed_files.outputs.all_changed_files }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          # shellcheck disable=SC2206
+          apps=(${APPS})
+          changed_apps=()
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]] || \
+            [[ "$CHANGED_FILES" =~ \.github/workflows/(builder|build-app)\.yaml ]]; then
+            changed_apps=("${apps[@]}")
+          else
+            for app in "${apps[@]}"; do
+              # shellcheck disable=SC2206
+              monitored=(${MONITORED_FILES})
+              for file in "${monitored[@]}"; do
+                if [[ "$CHANGED_FILES" =~ ${app}/${file} ]]; then
+                  changed_apps+=("$app")
+                  break
+                fi
+              done
+            done
+          fi
+
+          if [[ ${#changed_apps[@]} -gt 0 ]]; then
+            {
+              echo "changed=true"
+              echo "changed_apps=$(jq -nc '$ARGS.positional' --args "${changed_apps[@]}")"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-app:
+    name: Build ${{ matrix.app }}
+    needs: [init, test]
+    if: needs.init.outputs.changed == 'true'
+    permissions:
+      contents: read
+      id-token: write # Passed to the reusable workflow for Cosign.
+      packages: write # Passed to the reusable workflow for GHCR publication.
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.init.outputs.changed_apps) }}
+    uses: ./.github/workflows/build-app.yaml
+    with:
+      app: ${{ matrix.app }}
+      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}

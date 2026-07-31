@@ -1,0 +1,177 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# Validate Supervisor options locally, then start the PDC agent as its upstream
+# non-root account. Keep the signing token in its supported environment variable
+# so it is never exposed in pdc's command line.
+set -euo pipefail
+
+PDC_BIN="${PDC_BIN:-/usr/bin/pdc}"
+S6_SETUIDGID="${S6_SETUIDGID:-/command/s6-setuidgid}"
+GETENT_BIN="${GETENT_BIN:-/usr/bin/getent}"
+
+fatal() {
+    bashio::log.fatal "$1"
+    exit 1
+}
+
+config_or() {
+    if bashio::config.has_value "$1"; then
+        bashio::config "$1"
+    else
+        printf '%s' "$2"
+    fi
+}
+
+valid_dns_name() {
+    local value="$1"
+    [[ ${#value} -le 253 ]] &&
+    [[ "$value" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$ ]]
+}
+
+valid_dns_label() {
+    local value="$1"
+    [[ ${#value} -le 63 ]] &&
+        [[ "$value" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]
+}
+
+valid_duration() {
+    local value="$1"
+    [[ "$value" == 0 ]] ||
+        [[ "$value" =~ ^(([0-9]+(\.[0-9]+)?|[0-9]*\.[0-9]+)(ns|us|µs|ms|s|m|h))+$ ]]
+}
+
+valid_positive_duration() {
+    valid_duration "$1" && [[ "$1" =~ [1-9] ]]
+}
+
+valid_integer_range() {
+    local value="$1" minimum="$2" maximum="$3"
+    [[ "$value" =~ ^[0-9]+$ ]] &&
+        ((10#${value} >= minimum && 10#${value} <= maximum))
+}
+
+valid_endpoint() {
+    local endpoint="$1" host port label
+
+    # PermitRemoteOpen's two sentinels are OpenSSH syntax, not host:port.
+    [[ "$endpoint" == any || "$endpoint" == none ]] && return 0
+    [[ "$endpoint" == */* ]] && return 1
+
+    if [[ "$endpoint" =~ ^\[([0-9A-Fa-f:.]+)\]:(\*|[0-9]+)$ ]]; then
+        host="${BASH_REMATCH[1]}"
+        port="${BASH_REMATCH[2]}"
+        [[ "$host" == *:* ]] || return 1
+        "$GETENT_BIN" ahosts "$host" >/dev/null 2>&1 || return 1
+    elif [[ "$endpoint" == *:* ]]; then
+        host="${endpoint%:*}"
+        port="${endpoint##*:}"
+        [[ "$host" != *:* && -n "$host" && "$port" =~ ^(\*|[0-9]+)$ ]] || return 1
+        [[ "$host" != .* && "$host" != *. && "$host" != *..* ]] || return 1
+        while IFS= read -r label; do
+            [[ "$label" == '*' || "$label" =~ ^[[:alnum:]]([[:alnum:]-]*[[:alnum:]])?$ ]] || return 1
+        done < <(tr '.' '\n' <<<"$host")
+    else
+        return 1
+    fi
+
+    [[ "$port" == '*' ]] || valid_integer_range "$port" 1 65535
+}
+
+SIGNING_TOKEN="$(config_or signing_token '')"
+HOSTED_GRAFANA_ID="$(config_or hosted_grafana_id '')"
+CLUSTER="$(config_or cluster '')"
+LOG_LEVEL="$(config_or log_level info)"
+CONNECTIONS="$(config_or connections 1)"
+REGION_FORMAT="$(config_or region_format false)"
+DOMAIN="$(config_or domain grafana.net)"
+API_FQDN="$(config_or api_fqdn '')"
+GATEWAY_FQDN="$(config_or gateway_fqdn '')"
+CERT_EXPIRY_WINDOW="$(config_or cert_expiry_window 5m)"
+CERT_CHECK_EXPIRY_PERIOD="$(config_or cert_check_expiry_period 1m)"
+RETRY_MAX="$(config_or retry_max 4)"
+PARSE_METRICS="$(config_or parse_metrics true)"
+USE_GOSSH="$(config_or use_gossh false)"
+CONNECT_TIMEOUT_SECONDS="$(config_or connect_timeout_seconds 1)"
+OPTIONS_JSON="$(bashio::addon.config)"
+ALLOWED_ENDPOINTS_JSON="$(jq -c '.allowed_endpoints // []' <<<"$OPTIONS_JSON")"
+
+[[ -n "$SIGNING_TOKEN" ]] || fatal "signing_token is required."
+[[ "$HOSTED_GRAFANA_ID" =~ ^[1-9][0-9]*$ ]] || fatal "hosted_grafana_id must be positive digits."
+valid_dns_label "$CLUSTER" || fatal "cluster must be a DNS-safe label."
+[[ "$LOG_LEVEL" =~ ^(debug|info|warn|error)$ ]] || fatal "log_level must be debug, info, warn or error."
+[[ "$REGION_FORMAT" == true || "$REGION_FORMAT" == false ]] || fatal "region_format must be true or false."
+[[ "$PARSE_METRICS" == true || "$PARSE_METRICS" == false ]] || fatal "parse_metrics must be true or false."
+[[ "$USE_GOSSH" == true || "$USE_GOSSH" == false ]] || fatal "use_gossh must be true or false."
+valid_dns_name "$DOMAIN" || fatal "domain must be a hostname or domain."
+[[ -z "$API_FQDN" ]] || valid_dns_name "$API_FQDN" || fatal "api_fqdn must be a hostname or FQDN."
+[[ -z "$GATEWAY_FQDN" ]] || valid_dns_name "$GATEWAY_FQDN" || fatal "gateway_fqdn must be a hostname or FQDN."
+valid_positive_duration "$CERT_EXPIRY_WINDOW" || fatal "cert_expiry_window must be a positive Go duration."
+valid_duration "$CERT_CHECK_EXPIRY_PERIOD" || fatal "cert_check_expiry_period must be a Go duration."
+valid_integer_range "$CONNECTIONS" 1 50 || fatal "connections must be an integer from 1 to 50."
+valid_integer_range "$RETRY_MAX" 0 20 || fatal "retry_max must be an integer from 0 to 20."
+valid_integer_range "$CONNECT_TIMEOUT_SECONDS" 1 600 || fatal "connect_timeout_seconds must be an integer from 1 to 600."
+
+if ! jq -e 'type == "array" and all(.[]; type == "string")' <<<"$ALLOWED_ENDPOINTS_JSON" >/dev/null; then
+    fatal "allowed_endpoints must be a list of endpoint strings."
+fi
+declare -a ALLOWED_ENDPOINTS=()
+while IFS= read -r endpoint; do
+    ALLOWED_ENDPOINTS+=("$endpoint")
+done < <(jq -r '.[]' <<<"$ALLOWED_ENDPOINTS_JSON")
+
+sentinel=""
+if ((${#ALLOWED_ENDPOINTS[@]})); then
+    for endpoint in "${ALLOWED_ENDPOINTS[@]}"; do
+        valid_endpoint "$endpoint" || fatal "allowed_endpoints entry is not a valid host:port."
+        if [[ "$endpoint" == any || "$endpoint" == none ]]; then
+            if [[ -n "$sentinel" || ${#ALLOWED_ENDPOINTS[@]} -ne 1 ]]; then
+                fatal "allowed_endpoints sentinel $endpoint cannot be combined with other endpoints."
+            fi
+            sentinel="$endpoint"
+        fi
+        if [[ "$USE_GOSSH" == true && "$endpoint" == *\** ]]; then
+            fatal "Go SSH allowed_endpoints cannot use wildcards."
+        fi
+    done
+fi
+
+if [[ "$USE_GOSSH" == true ]]; then
+    [[ "$CONNECTIONS" == 1 ]] || fatal "connections must be 1 when use_gossh is true."
+    [[ -z "$sentinel" ]] || fatal "Go SSH allowed_endpoints cannot use any or none."
+fi
+
+# These are the three upstream-supported environment inputs. Do not replace the
+# signing token with -token: process argv is observable by other local users.
+export GCLOUD_PDC_SIGNING_TOKEN="$SIGNING_TOKEN"
+export GCLOUD_HOSTED_GRAFANA_ID="$HOSTED_GRAFANA_ID"
+export GCLOUD_PDC_CLUSTER="$CLUSTER"
+export HOME=/data
+
+declare -a args=(
+    "-log.level=${LOG_LEVEL}"
+    "-connections=${CONNECTIONS}"
+    "-ssh-key-file=/data/ssh/grafana_pdc"
+    "-cert-expiry-window=${CERT_EXPIRY_WINDOW}"
+    "-cert-check-expiry-period=${CERT_CHECK_EXPIRY_PERIOD}"
+    "-retrymax=${RETRY_MAX}"
+    "-parse-metrics=${PARSE_METRICS}"
+    "-domain=${DOMAIN}"
+)
+
+[[ "$REGION_FORMAT" == true ]] && args+=(-region-format)
+[[ -n "$API_FQDN" ]] && args+=("-api-fqdn=${API_FQDN}")
+[[ -n "$GATEWAY_FQDN" ]] && args+=("-gateway-fqdn=${GATEWAY_FQDN}")
+
+if [[ "$USE_GOSSH" == true ]]; then
+    args+=(-use-gossh "-connect-timeout=${CONNECT_TIMEOUT_SECONDS}s")
+    for endpoint in "${ALLOWED_ENDPOINTS[@]}"; do
+        args+=("-permit-domains=${endpoint}")
+    done
+else
+    if ((${#ALLOWED_ENDPOINTS[@]})); then
+        args+=("-ssh-flag=-o PermitRemoteOpen=${ALLOWED_ENDPOINTS[*]}")
+    fi
+    args+=("-ssh-flag=-o ConnectTimeout=${CONNECT_TIMEOUT_SECONDS}")
+fi
+
+exec "$S6_SETUIDGID" 30000:30000 "$PDC_BIN" "${args[@]}"

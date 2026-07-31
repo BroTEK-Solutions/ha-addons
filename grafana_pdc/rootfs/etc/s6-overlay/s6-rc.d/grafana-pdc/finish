@@ -1,0 +1,16 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# s6 supplies the service exit status as $1. A signal stop is 256; both it and
+# zero are normal, while any other status should stop the app rather than loop.
+exit_code="${1:-1}"
+results_dir="${S6_RESULTS_DIR:-/run/s6-linux-init-container-results}"
+halt_command="${S6_HALT:-/run/s6/basedir/bin/halt}"
+
+if [[ "$exit_code" -eq 0 || "$exit_code" -eq 256 ]]; then
+    bashio::log.info "Grafana PDC stopped."
+    exit 0
+fi
+
+bashio::log.fatal "Grafana PDC exited unexpectedly with code ${exit_code}; stopping the app."
+printf '%s' "$exit_code" >"${results_dir}/exitcode"
+exec "$halt_command"

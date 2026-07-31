@@ -66,12 +66,10 @@ def main() -> None:
         fail("App build workflow must label images as io.hass.type=app")
     if workflow_text.count('cosign: "true"') < 2:
         fail("App build workflow must explicitly enable Cosign for images and manifests")
-    publish_guard = (
-        "github.event_name == 'push' && "
-        "github.ref == 'refs/heads/main'"
-    )
-    if workflow_text.count(publish_guard) < 2:
-        fail("only a push to main may publish images and manifests")
+    if "push: ${{ inputs.publish }}" not in workflow_text:
+        fail("the reusable workflow must use the caller's publication decision")
+    if "if: inputs.publish" not in workflow_text:
+        fail("manifest publication must use the caller's publication decision")
     for output in ("image", "version", "name", "description", "url"):
         json_variable = f"{output.upper()}_JSON"
         if f'{output}=$(jq -r . <<< "${json_variable}")' not in workflow_text:

@@ -1,0 +1,3 @@
+# Keep the YAML ignore list path-scoped; the legacy line-based format cannot
+# distinguish one Dockerfile from another.
+ignorefile: .trivyignore.yaml

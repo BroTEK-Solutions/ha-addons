@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Minimal Bashio-compatible runner for service tests. The real base image's
+# Bashio is used in container verification; this just removes Supervisor from
+# the unit-test path.
+set -euo pipefail
+
+config_file="${CACHE_DIR:?CACHE_DIR is required}/addons.self.options.config.cache"
+
+bashio::config.has_value() {
+    jq -e --arg key "$1" '.[$key] != null and .[$key] != ""' "${config_file}" >/dev/null
+}
+
+bashio::config() {
+    jq -r --arg key "$1" '
+        if has($key) and .[$key] != null then
+            if (.[$key] | type) == "array" then .[$key][] else .[$key] end
+        else
+            empty
+        end
+    ' "${config_file}"
+}
+
+bashio::addon.config() { cat "${config_file}"; }
+
+bashio::config.true() {
+    [[ "$(bashio::config "$1")" == "true" ]]
+}
+
+bashio::log.info() { printf '%s\n' "$*" >&2; }
+bashio::log.warning() { printf '%s\n' "$*" >&2; }
+bashio::log.error() { printf '%s\n' "$*" >&2; }
+bashio::log.fatal() { printf '%s\n' "$*" >&2; }
+bashio::exit.nok() { exit 1; }
+
+script="$1"
+shift
+# shellcheck disable=SC1090 # The test runner deliberately supplies the service path.
+source "$script" "$@"

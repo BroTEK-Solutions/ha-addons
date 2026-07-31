@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+set -eu
+
+printf '%s\n' "$@" >/data/ssh/smoke-argv
+printf '%s\n' "${GCLOUD_HOSTED_GRAFANA_ID:-}" >/data/ssh/smoke-hosted-id
+printf '%s\n' "${GCLOUD_PDC_CLUSTER:-}" >/data/ssh/smoke-cluster
+if [ -n "${GCLOUD_PDC_SIGNING_TOKEN:-}" ]; then
+    printf 'present\n' >/data/ssh/smoke-token-state
+fi
+
+while true; do
+    printf 'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 17\r\nConnection: close\r\n\r\npdc_agent_info 1\n' |
+        nc -l -p 8090
+done
