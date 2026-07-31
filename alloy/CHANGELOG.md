@@ -23,8 +23,8 @@
 - Alloy updated to **1.18.0** (from 1.17.0). The breaking changes in that release are all in
   `otelcol.*` components, none of which this add-on uses
 - The endpoint options now reject missing authorities, non-numeric or out-of-range ports,
-  invalid percent escapes, whitespace, double quotes and backslashes. The same checks run at
-  start-up because `options.json` can be edited outside the UI
+  invalid percent escapes, malformed bracketed IPv6 literals, whitespace, double quotes and
+  backslashes. The same checks run at start-up because `options.json` can be edited outside the UI
 - `metrics_scrape_interval` and `fleet_poll_frequency` accept positive Go duration forms such as
   `+1m30s`, `.5s`, `1.s`, `100us`, `100µs` and `100μs`. Zero and negative intervals are rejected.
   The 1.6.0 pattern allowed only one unsigned decimal and one unit, which would have rejected

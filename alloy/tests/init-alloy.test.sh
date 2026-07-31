@@ -167,6 +167,9 @@ expect_fatal "out-of-range endpoint port" \
 expect_fatal "invalid endpoint escape" \
   '{"loki_url":"http://loki:3100/%zz"}' \
   "loki_url is not a valid HTTP(S) URL"
+expect_fatal "malformed bracketed IPv6 endpoint" \
+  '{"loki_url":"http://[2001:db8:::1]/loki/api/v1/push"}' \
+  "loki_url is not a valid HTTP(S) URL"
 expect_ok "a clean endpoint still starts" "{${LOKI}}" "loki.write"
 expect_ok "encoded path and query endpoint" \
   '{"loki_url":"http://loki:3100/a%20path?query=a=b"}' \
@@ -174,6 +177,9 @@ expect_ok "encoded path and query endpoint" \
 expect_ok "bracketed IPv6 endpoint" \
   '{"prometheus_url":"http://[2001:db8::1]:9090/api/v1/write"}' \
   'url = "http://[2001:db8::1]:9090/api/v1/write"'
+expect_ok "IPv6 loopback endpoint" \
+  '{"prometheus_url":"http://[::1]:9090/api/v1/write"}' \
+  'url = "http://[::1]:9090/api/v1/write"'
 
 echo
 echo "== the full Go duration grammar reaches Alloy unchanged =="
