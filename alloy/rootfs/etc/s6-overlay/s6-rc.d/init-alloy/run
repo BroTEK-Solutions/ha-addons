@@ -166,13 +166,15 @@ if [ "${OPERATION_MODE_EXPLICIT}" = true ] && [ "${OPERATION_MODE}" = fleet ]; t
         bashio::exit.nok
     fi
 fi
-if [ -n "${FLEET_USERNAME}" ] && [ -z "${fleet_secret}" ]; then
-    bashio::log.fatal "fleet_username is set but gcloud_rw_api_key is empty."
-    bashio::exit.nok
-fi
-if [ -z "${FLEET_USERNAME}" ] && [ -n "${fleet_secret}" ]; then
-    bashio::log.fatal "gcloud_rw_api_key is set but fleet_username is empty."
-    bashio::exit.nok
+if [ "${OPERATION_MODE}" != local ]; then
+    if [ -n "${FLEET_USERNAME}" ] && [ -z "${fleet_secret}" ]; then
+        bashio::log.fatal "fleet_username is set but gcloud_rw_api_key is empty."
+        bashio::exit.nok
+    fi
+    if [ -z "${FLEET_USERNAME}" ] && [ -n "${fleet_secret}" ]; then
+        bashio::log.fatal "gcloud_rw_api_key is set but fleet_username is empty."
+        bashio::exit.nok
+    fi
 fi
 
 # Endpoints are interpolated into quoted River strings. Repeat the schema's URL

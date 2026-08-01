@@ -178,6 +178,9 @@ expect_fatal "Fleet mode requires its instance username" \
 expect_fatal "Fleet mode requires its shared write key" \
   "{${FLEET},\"operation_mode\":\"fleet\",\"fleet_username\":\"123\"}" \
   "Fleet mode requires gcloud_rw_api_key"
+expect_ok "Local mode ignores a retained Fleet key" \
+  "{${LOKI},\"operation_mode\":\"local\",\"gcloud_rw_api_key\":\"secret\"}" \
+  "loki.write"
 expect_fatal "Local mode requires a local destination" \
   "{${FLEET},\"operation_mode\":\"local\"}" \
   "Local mode requires at least one local destination"
