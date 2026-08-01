@@ -67,6 +67,7 @@ func TestConfigAPIProjectsAndSavesWithoutReturningStoredSecrets(t *testing.T) {
 	supervisor := &fakeSupervisor{options: map[string]any{
 		"operation_mode": "local",
 		"loki_url":       "https://logs.example",
+		"loki_username":  "123",
 		"loki_password":  "stored-secret",
 	}}
 	alloy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -84,7 +85,7 @@ func TestConfigAPIProjectsAndSavesWithoutReturningStoredSecrets(t *testing.T) {
 		t.Fatalf("GET /api/config = %d %s", get.Code, get.Body.String())
 	}
 
-	requestBody := `{"options":{"operation_mode":"local","loki_url":"https://new.example"},"secrets":{}}`
+	requestBody := `{"options":{"operation_mode":"local","loki_url":"https://new.example","loki_username":"123"},"secrets":{}}`
 	post := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewBufferString(requestBody))
 	request.Header.Set("Content-Type", "application/json")

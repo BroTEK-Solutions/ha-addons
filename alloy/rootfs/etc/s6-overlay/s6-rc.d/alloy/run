@@ -20,7 +20,8 @@ GCLOUD_RW_API_KEY=$(secret gcloud_rw_api_key)
 [ -n "${GCLOUD_RW_API_KEY}" ] || GCLOUD_RW_API_KEY="${FLEET_PASSWORD}"
 TEMPO_PASSWORD=$(secret tempo_password)
 PYROSCOPE_PASSWORD=$(secret pyroscope_password)
-export LOKI_PASSWORD PROMETHEUS_PASSWORD GCLOUD_RW_API_KEY TEMPO_PASSWORD PYROSCOPE_PASSWORD
+export LOKI_PASSWORD PROMETHEUS_PASSWORD FLEET_PASSWORD GCLOUD_RW_API_KEY
+export TEMPO_PASSWORD PYROSCOPE_PASSWORD
 
 # Startup flags. The first four are fixed: ingress proxies the prefixed UI,
 # health and self-monitoring use the same listener, and the storage path is the

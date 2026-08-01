@@ -11,6 +11,26 @@ cleanup() {
 }
 trap cleanup EXIT
 
+mkdir -p "${tmp}/legacy-cache"
+chmod 0700 "${tmp}/legacy-cache"
+printf '%s' '{"fleet_password":"legacy-secret"}' \
+    >"${tmp}/legacy-cache/addons.self.options.config.cache"
+# The generated helper expands these variables inside the container.
+# shellcheck disable=SC2016
+printf '%s\n' \
+    '#!/bin/sh' \
+    '[ "${FLEET_PASSWORD:-}" = legacy-secret ] || exit 41' \
+    '[ "${GCLOUD_RW_API_KEY:-}" = legacy-secret ] || exit 42' \
+    >"${tmp}/fake-alloy"
+chmod +x "${tmp}/fake-alloy"
+docker run --rm \
+    --entrypoint /usr/lib/bashio/bashio \
+    -e CACHE_DIR=/tmp/legacy-cache \
+    -v "${tmp}/legacy-cache:/tmp/legacy-cache:ro" \
+    -v "${tmp}/fake-alloy:/usr/bin/alloy:ro" \
+    "${IMAGE}" \
+    /etc/s6-overlay/s6-rc.d/alloy/run
+
 printf '%s\n' 'logging {}' >"${tmp}/config.alloy"
 docker run -d --name "${CONTAINER}" \
     --entrypoint bash \
