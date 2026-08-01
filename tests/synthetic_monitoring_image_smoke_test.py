@@ -45,7 +45,13 @@ def smoke_launcher(image: str, variant: str) -> None:
     api_server = HoldOpenTCPServer(("0.0.0.0", 0), HoldOpenHandler)
     server_thread = threading.Thread(target=api_server.serve_forever, daemon=True)
     server_thread.start()
-    api_address = f"host.docker.internal:{api_server.server_address[1]}"
+    if sys.platform == "linux":
+        api_host = "127.0.0.1"
+        network_args = ["--network", "host"]
+    else:
+        api_host = "host.docker.internal"
+        network_args = ["--add-host", "host.docker.internal:host-gateway"]
+    api_address = f"{api_host}:{api_server.server_address[1]}"
     with tempfile.TemporaryDirectory(prefix="ha-sm-options-") as directory:
         options_path = Path(directory) / "options.json"
         options_path.write_text(
@@ -66,8 +72,7 @@ def smoke_launcher(image: str, variant: str) -> None:
                 "--detach",
                 "--name",
                 container,
-                "--add-host",
-                "host.docker.internal:host-gateway",
+                *network_args,
                 "--volume",
                 f"{directory}:/data:ro",
                 image,
