@@ -53,6 +53,7 @@ def smoke_launcher(image: str, variant: str) -> None:
         network_args = ["--add-host", "host.docker.internal:host-gateway"]
     api_address = f"{api_host}:{api_server.server_address[1]}"
     with tempfile.TemporaryDirectory(prefix="ha-sm-options-") as directory:
+        os.chmod(directory, 0o755)
         options_path = Path(directory) / "options.json"
         options_path.write_text(
             json.dumps(
@@ -90,7 +91,19 @@ def smoke_launcher(image: str, variant: str) -> None:
                     break
                 time.sleep(0.25)
             else:
-                fail(f"{variant} launcher did not expose its liveness endpoint")
+                state = docker(
+                    "inspect",
+                    "--format",
+                    "{{json .State}}",
+                    container,
+                    check=False,
+                )
+                logs = docker("logs", container, check=False)
+                fail(
+                    f"{variant} launcher did not expose its liveness endpoint; "
+                    f"state={state.stdout.strip()!r}; "
+                    f"logs={(logs.stdout + logs.stderr).strip()!r}"
+                )
 
             process_list = docker("top", container).stdout
             logs = docker("logs", container).stdout
