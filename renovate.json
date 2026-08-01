@@ -38,16 +38,10 @@
       "groupName": "Home Assistant App helper actions"
     },
     {
-      "description": "Keep shared security workflows on their reviewed floating ref",
-      "matchDepNames": ["rknightion/.github"],
-      "pinDigests": false,
-      "enabled": false
-    },
-    {
       "description": "Automerge GitHub Actions after CI",
       "matchManagers": ["github-actions"],
       "automerge": true,
-      "labels": ["dep:gha"]
+      "addLabels": ["dep:gha"]
     },
     {
       "description": "Automerge non-major App dependencies after CI",
@@ -59,13 +53,13 @@
       ],
       "matchUpdateTypes": ["digest", "pin", "patch", "minor"],
       "automerge": true,
-      "labels": ["dep:low-risk"]
+      "addLabels": ["dep:low-risk"]
     },
     {
       "description": "Review CI runtime updates manually",
       "matchPackageNames": ["python", "ubuntu"],
       "automerge": false,
-      "labels": ["dep:toolchain"]
+      "addLabels": ["dep:toolchain"]
     }
   ]
 }

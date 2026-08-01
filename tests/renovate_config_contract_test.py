@@ -53,19 +53,18 @@ def main() -> None:
     if helpers.get("matchPackageNames") != ["home-assistant/actions"]:
         fail("Home Assistant helper sub-actions must match Renovate's normalized package name")
 
-    shared_workflows = matching_rule(
-        rules, "Keep shared security workflows on their reviewed floating ref"
-    )
-    if (
-        shared_workflows.get("matchDepNames") != ["rknightion/.github"]
-        or shared_workflows.get("pinDigests") is not False
-        or shared_workflows.get("enabled") is not False
+    if any(
+        "rknightion/.github" in rule.get("matchDepNames", [])
+        and rule.get("enabled") is False
+        for rule in rules
     ):
-        fail("shared security workflows must remain disabled for Renovate and float on @main")
+        fail("release-pinned shared security workflows must remain updateable")
 
     actions = matching_rule(rules, "Automerge GitHub Actions after CI")
     if actions.get("matchManagers") != ["github-actions"] or actions.get("automerge") is not True:
         fail("GitHub Action updates must automerge after CI")
+    if actions.get("addLabels") != ["dep:gha"] or "labels" in actions:
+        fail("GitHub Action classification must preserve the standard labels")
 
     app_dependencies = matching_rule(rules, "Automerge non-major App dependencies after CI")
     expected_packages = {
@@ -80,12 +79,16 @@ def main() -> None:
         fail("only non-major App dependency updates may automerge")
     if app_dependencies.get("automerge") is not True:
         fail("allowlisted non-major App dependencies must automerge after CI")
+    if app_dependencies.get("addLabels") != ["dep:low-risk"] or "labels" in app_dependencies:
+        fail("App dependency classification must preserve the standard labels")
 
     runtimes = matching_rule(rules, "Review CI runtime updates manually")
     if set(runtimes.get("matchPackageNames", [])) != {"python", "ubuntu"}:
         fail("Python and runner-image updates must remain manual")
     if runtimes.get("automerge") is not False:
         fail("CI runtime updates must not automerge")
+    if runtimes.get("addLabels") != ["dep:toolchain"] or "labels" in runtimes:
+        fail("CI runtime classification must preserve the standard labels")
 
 
 if __name__ == "__main__":
