@@ -78,6 +78,7 @@ globalThis.fetch = async (url, options = {}) => {
         secrets: { loki_password: false },
         mode: "local",
         legacy_hybrid: false,
+        restart_required: false,
       };
     },
   };

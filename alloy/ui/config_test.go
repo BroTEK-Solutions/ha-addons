@@ -41,6 +41,16 @@ func TestProjectConfigInfersModesWithoutExposingSecrets(t *testing.T) {
 	}
 }
 
+func TestProjectConfigExposesRestartRequirementOutsideOptions(t *testing.T) {
+	got := projectConfig(map[string]any{"operation_mode": "fleet", "restart_required": true})
+	if !got.RestartRequired {
+		t.Fatal("restart requirement was not projected")
+	}
+	if _, exposed := got.Options["restart_required"]; exposed {
+		t.Fatal("internal restart marker reached editable options")
+	}
+}
+
 func TestMergeOptionsPreservesOmittedSecretsAndAppliesExplicitUpdates(t *testing.T) {
 	current := map[string]any{
 		"operation_mode":      "local",

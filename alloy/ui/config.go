@@ -12,16 +12,20 @@ var secretOptionNames = []string{
 }
 
 type browserConfig struct {
-	Options      map[string]any  `json:"options"`
-	Secrets      map[string]bool `json:"secrets"`
-	Mode         string          `json:"mode"`
-	LegacyHybrid bool            `json:"legacy_hybrid"`
+	Options         map[string]any  `json:"options"`
+	Secrets         map[string]bool `json:"secrets"`
+	Mode            string          `json:"mode"`
+	LegacyHybrid    bool            `json:"legacy_hybrid"`
+	RestartRequired bool            `json:"restart_required"`
 }
 
 func projectConfig(options map[string]any) browserConfig {
 	projected := make(map[string]any, len(options))
 	configured := make(map[string]bool, len(secretOptionNames))
 	for key, value := range options {
+		if key == "restart_required" {
+			continue
+		}
 		if isSecretOption(key) {
 			if text, ok := value.(string); ok && text != "" {
 				configured[key] = true
@@ -39,10 +43,11 @@ func projectConfig(options map[string]any) browserConfig {
 		mode = inferMode(options)
 	}
 	return browserConfig{
-		Options:      projected,
-		Secrets:      configured,
-		Mode:         mode,
-		LegacyHybrid: mode == "legacy-hybrid",
+		Options:         projected,
+		Secrets:         configured,
+		Mode:            mode,
+		LegacyHybrid:    mode == "legacy-hybrid",
+		RestartRequired: optionEnabled(options, "restart_required"),
 	}
 }
 

@@ -103,7 +103,7 @@ func TestConfigAPIProjectsAndSavesWithoutReturningStoredSecrets(t *testing.T) {
 	if post.Code != http.StatusOK {
 		t.Fatalf("POST /api/config = %d %s", post.Code, post.Body.String())
 	}
-	if store.saved["loki_password"] != "stored-secret" || store.saved["loki_url"] != "https://new.example" {
+	if store.saved["loki_password"] != "stored-secret" || store.saved["loki_url"] != "https://new.example" || store.saved["restart_required"] != true {
 		t.Fatalf("saved options = %#v", store.saved)
 	}
 }
@@ -273,6 +273,25 @@ func TestFleetReferenceAPIIssuesABriefPublicDownloadWithoutExposingControlPlane(
 	publicHandler.ServeHTTP(controlResponse, controlRequest)
 	if controlResponse.Code != http.StatusForbidden {
 		t.Fatalf("public control-plane request = %d, want 403", controlResponse.Code)
+	}
+}
+
+func TestFleetReferenceAPIRequiresAppliedSettings(t *testing.T) {
+	broker := newFleetReferenceBroker(
+		staticFleetRenderer{contents: []byte("kind: Pipeline\n")},
+		strings.NewReader("01234567890123456789012345678901"),
+		time.Now,
+		10*time.Minute,
+	)
+	store := &fakeStore{settings: map[string]any{"operation_mode": "fleet", "restart_required": true}}
+	handler, err := newAppHandlerWithReferences(store, fakeValidator{}, &fakeSupervisor{}, broker, "http://127.0.0.1:12345")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/fleet-reference", nil))
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "restart") {
+		t.Fatalf("POST /api/fleet-reference = %d %s", response.Code, response.Body.String())
 	}
 }
 

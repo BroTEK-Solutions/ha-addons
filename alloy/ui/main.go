@@ -111,6 +111,7 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 				return
 			}
 			candidate := mergeOptions(current, input.Options, input.Secrets)
+			candidate["restart_required"] = true
 			if err := validateModeRequirements(candidate); err != nil {
 				writeError(w, http.StatusBadRequest, err)
 				return
@@ -154,6 +155,10 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 		settings, err := store.Load()
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err)
+			return
+		}
+		if optionEnabled(settings, "restart_required") {
+			writeError(w, http.StatusConflict, errors.New("restart Alloy to apply saved settings before generating a Fleet starter pipeline"))
 			return
 		}
 		issued, err := references.Issue(r.Context(), settings)

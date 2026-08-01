@@ -10,7 +10,7 @@ const fleetReferenceCommand = document.querySelector("#fleet-reference-command")
 const fleetReferenceExpiry = document.querySelector("#fleet-reference-expiry");
 const fleetReferenceDownload = document.querySelector("#fleet-reference-download");
 let configDirty = false;
-let configApplied = true;
+let configApplied = false;
 const defaults = {
   instance_name: "homeassistant", metrics_scrape_interval: "60s", fleet_poll_frequency: "1m",
   logs_exclude_addons: "alloy", logs_max_age: "24h", log_level: "info",
@@ -82,6 +82,7 @@ async function loadConfig() {
   });
   setMode(modeSelect.value);
   setManualOverride(manualToggle.checked);
+  configApplied = !data.restart_required;
   configDirty = false;
   setNotice("");
 }

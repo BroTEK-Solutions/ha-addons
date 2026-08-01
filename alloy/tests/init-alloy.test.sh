@@ -30,7 +30,7 @@ pass() { echo "  ✓ $1"; }
 indent() { echo "      ${1//$'\n'/$'\n'      }"; }
 
 # Run init-alloy/run against a given settings.json.
-# $1 = settings JSON. Sets RUN_RC, RUN_OUT and RUN_CONFIG.
+# $1 = settings JSON. Sets RUN_RC, RUN_OUT, RUN_CONFIG and RUN_SETTINGS.
 run_init() {
   local tmp
   tmp="$(mktemp -d)"
@@ -53,6 +53,7 @@ run_init() {
   RUN_RC=$?
   RUN_CONFIG=""
   [ -f "${tmp}/etc/config.alloy" ] && RUN_CONFIG="$(cat "${tmp}/etc/config.alloy")"
+  RUN_SETTINGS="$(cat "${tmp}/data/settings.json")"
   rm -rf "${tmp}"
 }
 
@@ -117,6 +118,13 @@ expect_ok "metrics only" "{${PROM},\"instance_name\":\"hass\"}" \
 # The regression that started all this: a Fleet-only install must be possible.
 expect_ok "fleet only" "{${FLEET},\"instance_name\":\"hass\"}" \
   "remotecfg" 'url            = "https://fleet.example.net"'
+TESTS=$((TESTS + 1))
+run_init "{${FLEET},\"instance_name\":\"hass\",\"restart_required\":true}"
+if [ "${RUN_RC}" -ne 0 ] || ! jq -e '.restart_required == false' <<<"${RUN_SETTINGS}" >/dev/null; then
+  fail "successful initialization marks saved settings as applied"
+else
+  pass "successful initialization marks saved settings as applied"
+fi
 
 echo
 echo "== defaults are applied when an option is absent =="

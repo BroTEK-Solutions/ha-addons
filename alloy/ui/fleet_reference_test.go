@@ -26,7 +26,7 @@ func (rejectAdditionalConfigValidator) Validate(_ context.Context, settings map[
 	if optionHasValue(settings, "additional_config") {
 		return errors.New("additional_config reached Fleet reference validation")
 	}
-	return nil
+	return validateModeRequirements(settings)
 }
 
 func TestFleetManifestTargetsOnlyTheSelectedCollectorWithoutEmbeddingSecrets(t *testing.T) {
@@ -126,6 +126,7 @@ printf '%s\n' 'loki.write "loki" {' '  endpoint {' '    password = sys.env("GCLO
 		"loki_username":         "123",
 		"logs_homeassistant":    true,
 		"additional_config":     `prometheus.remote_write "retained" {}`,
+		"prometheus_password":   "retained-local-password",
 		"manual_config_enabled": false,
 	}
 

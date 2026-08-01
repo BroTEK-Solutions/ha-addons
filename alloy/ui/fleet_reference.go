@@ -62,7 +62,8 @@ func (r *commandFleetReferenceRenderer) Render(ctx context.Context, settings map
 	delete(candidate, "additional_config")
 	sharedKey, _ := settings["gcloud_rw_api_key"].(string)
 	for _, prefix := range []string{"loki", "prometheus", "tempo", "pyroscope"} {
-		if optionHasValue(candidate, prefix+"_username") && !optionHasValue(candidate, prefix+"_password") {
+		delete(candidate, prefix+"_password")
+		if optionHasValue(candidate, prefix+"_username") {
 			candidate[prefix+"_password"] = sharedKey
 		}
 	}

@@ -40,6 +40,15 @@ settings_get() {
         "${SETTINGS_FILE}"
 }
 
+mark_settings_applied() {
+    jq -e '.restart_required == true' "${SETTINGS_FILE}" >/dev/null || return 0
+    local temporary
+    temporary=$(mktemp "${SETTINGS_FILE}.tmp.XXXXXX")
+    jq '.restart_required = false' "${SETTINGS_FILE}" >"${temporary}"
+    chmod 0600 "${temporary}"
+    mv -f "${temporary}" "${SETTINGS_FILE}"
+}
+
 # Safe mode is deliberately the only native option that changes Alloy's
 # operational configuration. It bypasses persisted state so a user can always
 # recover through ingress.
@@ -61,6 +70,7 @@ MANUAL_CONFIG_ENABLED=$(settings_get manual_config_enabled)
 if [ "${MANUAL_CONFIG_ENABLED}" = true ] && [ -n "${MANUAL_CONFIG}" ]; then
     bashio::log.warning "Using the ingress-managed manual Alloy configuration override."
     printf '%s\n' "${MANUAL_CONFIG}" >"${CONFIG_FILE}"
+    mark_settings_applied
     bashio::log.info "Alloy config copied to ${CONFIG_FILE}"
     exit 0
 fi
@@ -438,5 +448,6 @@ bashio::log.info "Log level: ${LOG_LEVEL}"
 # Invoke via `bash` (not the shebang) so the exported options above are inherited;
 # the generator must NOT run under with-contenv, which would reset the environment.
 bash "${GENERATOR}" > "${CONFIG_FILE}"
+mark_settings_applied
 
 bashio::log.info "Alloy config generated at ${CONFIG_FILE}"
