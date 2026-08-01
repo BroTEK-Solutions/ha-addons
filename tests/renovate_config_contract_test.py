@@ -85,6 +85,7 @@ def main() -> None:
     expected_packages = {
         "grafana/alloy",
         "grafana/pdc-agent",
+        "grafana/synthetic-monitoring-agent",
         "ghcr.io/home-assistant/base",
         "ghcr.io/home-assistant/base-debian",
     }
@@ -109,7 +110,6 @@ def main() -> None:
 
     if any(rule.get("automerge") is False for rule in rules):
         fail("package rules must not bypass green-CI automerge")
-
 
 if __name__ == "__main__":
     main()

@@ -13,6 +13,8 @@ Home Assistant App repository from BroTEK Solutions.
 | --- | --- | --- |
 | [Grafana Alloy](alloy/) | `amd64`, `aarch64` | Ships Home Assistant OS logs to Loki and host metrics to Prometheus; can also be managed with Grafana Fleet Management. |
 | [Grafana Private Data Source Connect](grafana_pdc/) | `amd64`, `aarch64` | Creates an outbound Grafana Cloud Private Data Source Connect tunnel to data sources reachable from Home Assistant. |
+| [Grafana Synthetic Monitoring Probe](grafana_sm/) | `amd64`, `aarch64` | Runs a private Grafana Cloud probe without the Chromium browser runtime. |
+| [Grafana Synthetic Monitoring Probe with Browser Checks](grafana_sm_browser/) | `amd64`, `aarch64` | Runs the browser-capable private probe image for every Synthetic Monitoring check type. |
 
 Each App has its own configuration and operational documentation in its directory.
 
@@ -25,6 +27,15 @@ tags and GitHub Releases:
 
 - Alloy: `alloy-vX.Y.Z`
 - Grafana PDC: `grafana-pdc-vX.Y.Z`
+- Grafana Synthetic Monitoring: `grafana-sm-vX.Y.Z`
+- Grafana Synthetic Monitoring with browser checks: `grafana-sm-browser-vX.Y.Z`
+
+The two Synthetic Monitoring Apps are generated from `synthetic_monitoring_shared/`. Run
+`python3 scripts/sync_synthetic_monitoring_variants.py` after changing their shared launcher,
+configuration, user documentation, translations or branding. CI runs the same command in check
+mode and rejects drift. Dockerfiles remain variant-owned so Renovate can update Grafana's standard
+and `-browser` images independently; a contract test requires every other Dockerfile line to stay
+equivalent. Changelogs are also variant-owned because Release Please updates each package directly.
 
 Use Conventional Commits for App changes. `feat` selects a minor release, fixes and other
 non-breaking changes select a patch release, and a `!` or `BREAKING CHANGE` footer selects a major

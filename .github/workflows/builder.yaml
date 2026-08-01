@@ -10,7 +10,7 @@ on:
 permissions: {}
 
 env:
-  MONITORED_FILES: "config.json config.yaml config.yml Dockerfile rootfs apparmor.txt"
+  MONITORED_FILES: "config.json config.yaml config.yml Dockerfile launcher rootfs apparmor.txt"
 
 concurrency:
   group: build-apps-${{ github.workflow }}-${{ github.ref }}
@@ -50,6 +50,16 @@ jobs:
         with:
           path: "./grafana_pdc"
 
+      - name: Lint Grafana Synthetic Monitoring App metadata
+        uses: frenck/action-addon-linter@f995494fd84fae6310d23617e66d0e37de4f14eb # v2.21.0
+        with:
+          path: "./grafana_sm"
+
+      - name: Lint Grafana Synthetic Monitoring browser App metadata
+        uses: frenck/action-addon-linter@f995494fd84fae6310d23617e66d0e37de4f14eb # v2.21.0
+        with:
+          path: "./grafana_sm_browser"
+
       - name: ShellCheck
         run: |
           shellcheck \
@@ -73,6 +83,7 @@ jobs:
           python3 tests/app_version_changed_test.py
           python3 tests/renovate_config_contract_test.py
           python3 tests/repository_workflow_contract_test.py
+          python3 tests/synthetic_monitoring_variants_test.py
 
   pdc-test:
     name: Grafana PDC tests
@@ -178,6 +189,35 @@ jobs:
             "$alloy_base" \
             bash alloy/tests/init-alloy.test.sh
 
+  synthetic-monitoring-test:
+    name: Synthetic Monitoring tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go for the shared launcher
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: synthetic_monitoring_shared/launcher/go.mod
+          cache: false
+
+      - name: Test the shared launcher
+        working-directory: synthetic_monitoring_shared/launcher
+        run: go test ./...
+
+      - name: Build and smoke-test both complete images
+        run: |
+          docker build --tag local/ha-grafana-sm:smoke grafana_sm
+          docker build --tag local/ha-grafana-sm-browser:smoke grafana_sm_browser
+          python3 tests/synthetic_monitoring_image_smoke_test.py local/ha-grafana-sm:smoke standard
+          python3 tests/synthetic_monitoring_image_smoke_test.py local/ha-grafana-sm-browser:smoke browser
+
   init:
     name: Find changed Apps
     runs-on: ubuntu-latest
@@ -255,7 +295,7 @@ jobs:
 
   build-app:
     name: Build ${{ matrix.app.app }}
-    needs: [init, quality, pdc-test, alloy-generator-test, alloy-init-test]
+    needs: [init, quality, pdc-test, alloy-generator-test, alloy-init-test, synthetic-monitoring-test]
     if: needs.init.outputs.changed == 'true'
     permissions:
       contents: read
@@ -289,6 +329,7 @@ jobs:
       - pdc-test
       - alloy-generator-test
       - alloy-init-test
+      - synthetic-monitoring-test
       - build-app
       - security
     if: always()
@@ -316,6 +357,7 @@ jobs:
       - pdc-test
       - alloy-generator-test
       - alloy-init-test
+      - synthetic-monitoring-test
       - build-app
       - security
     if: >-
@@ -328,6 +370,7 @@ jobs:
         needs.pdc-test.result == 'success' &&
         needs.alloy-generator-test.result == 'success' &&
         needs.alloy-init-test.result == 'success' &&
+        needs.synthetic-monitoring-test.result == 'success' &&
         needs.security.result == 'success' &&
         (needs.build-app.result == 'success' || needs.build-app.result == 'skipped')
       }}

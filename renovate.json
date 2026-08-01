@@ -54,6 +54,7 @@
       "matchPackageNames": [
         "grafana/alloy",
         "grafana/pdc-agent",
+        "grafana/synthetic-monitoring-agent",
         "ghcr.io/home-assistant/base",
         "ghcr.io/home-assistant/base-debian"
       ],
