@@ -11,7 +11,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 FROM grafana/synthetic-monitoring-agent:v0.62.1-browser@sha256:6ebab67eab36e4a86d847929c7c7bc9712856cdda77a0721de7357c5634169ea
 
 USER root
-COPY --from=launcher-builder --chown=12345:12345 --chmod=0500 \
+COPY --from=launcher-builder --chown=0:0 --chmod=0500 \
     /out/ha-sm-launcher /usr/local/bin/ha-sm-launcher
 
 # This checks the local HTTP server, not /ready. Grafana Cloud connectivity is
@@ -19,8 +19,10 @@ COPY --from=launcher-builder --chown=12345:12345 --chmod=0500 \
 HEALTHCHECK --start-period=30s --interval=30s --timeout=5s --retries=3 \
     CMD ["/usr/local/bin/ha-sm-launcher", "healthcheck"]
 
-USER sm
-ENTRYPOINT ["tini", "--", "/usr/local/bin/ha-sm-launcher"]
+# Read Supervisor-owned options, then permanently drop to upstream UID/GID 12345.
+# hadolint ignore=DL3002
+USER root
+ENTRYPOINT ["/usr/local/bin/ha-sm-launcher", "--with-tini"]
 
 LABEL \
     org.opencontainers.image.title="Home Assistant App: Grafana Synthetic Monitoring Probe with Browser Checks" \

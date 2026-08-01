@@ -11,7 +11,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 FROM grafana/synthetic-monitoring-agent:v0.62.1@sha256:d38b4940d747ec380d8e8ef512a1fe694412a763b1ca906a94ff76f4d4a3e560
 
 USER root
-COPY --from=launcher-builder --chown=12345:12345 --chmod=0500 \
+COPY --from=launcher-builder --chown=0:0 --chmod=0500 \
     /out/ha-sm-launcher /usr/local/bin/ha-sm-launcher
 
 # This checks the local HTTP server, not /ready. Grafana Cloud connectivity is
@@ -19,7 +19,9 @@ COPY --from=launcher-builder --chown=12345:12345 --chmod=0500 \
 HEALTHCHECK --start-period=30s --interval=30s --timeout=5s --retries=3 \
     CMD ["/usr/local/bin/ha-sm-launcher", "healthcheck"]
 
-USER sm
+# Read Supervisor-owned options, then permanently drop to upstream UID/GID 12345.
+# hadolint ignore=DL3002
+USER root
 ENTRYPOINT ["/usr/local/bin/ha-sm-launcher"]
 
 LABEL \

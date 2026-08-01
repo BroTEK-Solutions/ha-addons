@@ -58,7 +58,9 @@ Monitoring gRPC API, the Grafana Cloud Prometheus and Loki endpoints, and (when 
 regional secrets proxy. Checks also need outbound access to their targets. Script imports can need
 access to hosts such as `jslib.k6.io`.
 
-The App runs as Grafana's non-root `sm` user. It requests `NET_RAW` for ICMP and traceroute, but not
+The launcher starts as root only long enough to read Supervisor-owned App options, then permanently
+drops to Grafana's non-root `sm` user before starting the agent (and `tini` in the browser variant).
+The App requests `NET_RAW` for ICMP and traceroute, but not
 host networking, host IPC, privileged-container access, or `SYS_ADMIN`. It retains Supervisor's
 default AppArmor confinement. Chromium runs with the upstream no-sandbox flags inside the container;
 do not compensate by granting it host IPC or broader Linux capabilities.

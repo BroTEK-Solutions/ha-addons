@@ -3,8 +3,11 @@ misconfigurations:
     paths:
       - alloy/Dockerfile
       - grafana_pdc/Dockerfile
+      - grafana_sm/Dockerfile
+      - grafana_sm_browser/Dockerfile
     expired_at: 2026-10-31
     statement: >-
-      Home Assistant Apps start as root for s6-overlay bootstrap and filesystem
-      preparation. Grafana PDC drops to UID/GID 30000 before exec; Alloy still
-      needs its existing host journal access. Reassess both before expiry.
+      Home Assistant Apps start as root for bootstrap or to read Supervisor-owned
+      options. Grafana PDC drops to UID/GID 30000 before exec; both Synthetic
+      Monitoring launchers drop to UID/GID 12345 before exec; Alloy still needs
+      its existing host journal access. Reassess all four before expiry.
