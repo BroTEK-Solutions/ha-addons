@@ -261,14 +261,19 @@ def main() -> None:
     if trivy_config != {"ignorefile": ".trivyignore.yaml"}:
         fail("Trivy must load only the repository's scoped YAML ignore file")
     trivy_ignores = yaml.safe_load((ROOT / ".trivyignore.yaml").read_text())
-    expected_root_paths = {"alloy/Dockerfile", "grafana_pdc/Dockerfile"}
+    expected_root_paths = {
+        "alloy/Dockerfile",
+        "grafana_pdc/Dockerfile",
+        "grafana_sm/Dockerfile",
+        "grafana_sm_browser/Dockerfile",
+    }
     if set(trivy_ignores) != {"misconfigurations"}:
         fail("Trivy ignores must not suppress vulnerabilities or secrets")
     root_ignores = trivy_ignores["misconfigurations"]
     if len(root_ignores) != 1 or root_ignores[0].get("id") != "AVD-DS-0002":
         fail("Trivy may ignore only the intentional S6 root-bootstrap finding")
     if set(root_ignores[0].get("paths", [])) != expected_root_paths:
-        fail("the S6 root exception must be scoped to the two current App Dockerfiles")
+        fail("the root-startup exception must be scoped to the four current App Dockerfiles")
     if root_ignores[0].get("expired_at") != date(2026, 10, 31):
         fail("the S6 root exception must expire for review on 2026-10-31")
     if not root_ignores[0].get("statement"):

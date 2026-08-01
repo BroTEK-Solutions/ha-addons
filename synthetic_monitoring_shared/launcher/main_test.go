@@ -71,6 +71,30 @@ func TestBuildAgentProcessUsesWarnDefaults(t *testing.T) {
 	}
 }
 
+func TestWrapWithTiniKeepsAgentBehindInit(t *testing.T) {
+	process := agentProcess{
+		Args: []string{agentPath, "--listen-address=127.0.0.1:4050"},
+		Env:  []string{"PATH=/usr/bin"},
+	}
+
+	got := wrapWithTini(process, "/sbin/tini")
+	wantArgs := []string{
+		"/sbin/tini",
+		"--",
+		agentPath,
+		"--listen-address=127.0.0.1:4050",
+	}
+	if got.Path != "/sbin/tini" {
+		t.Fatalf("Path = %q, want /sbin/tini", got.Path)
+	}
+	if !reflect.DeepEqual(got.Args, wantArgs) {
+		t.Fatalf("Args = %#v, want %#v", got.Args, wantArgs)
+	}
+	if !reflect.DeepEqual(got.Env, process.Env) {
+		t.Fatalf("Env = %#v, want %#v", got.Env, process.Env)
+	}
+}
+
 func TestBuildAgentProcessRejectsUnsafeConnectionSettings(t *testing.T) {
 	tests := []struct {
 		name    string

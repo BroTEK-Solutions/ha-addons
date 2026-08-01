@@ -4,15 +4,12 @@
 from __future__ import annotations
 
 import json
-import os
 import socketserver
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import uuid
-from pathlib import Path
 
 
 def fail(message: str) -> None:
@@ -42,6 +39,7 @@ class HoldOpenHandler(socketserver.BaseRequestHandler):
 def smoke_launcher(image: str, variant: str) -> None:
     token = "smoke-test-token"
     container = f"ha-sm-{variant}-{uuid.uuid4().hex[:12]}"
+    data_volume = f"ha-sm-data-{variant}-{uuid.uuid4().hex[:12]}"
     api_server = HoldOpenTCPServer(("0.0.0.0", 0), HoldOpenHandler)
     server_thread = threading.Thread(target=api_server.serve_forever, daemon=True)
     server_thread.start()
@@ -52,21 +50,32 @@ def smoke_launcher(image: str, variant: str) -> None:
         api_host = "host.docker.internal"
         network_args = ["--add-host", "host.docker.internal:host-gateway"]
     api_address = f"{api_host}:{api_server.server_address[1]}"
-    with tempfile.TemporaryDirectory(prefix="ha-sm-options-") as directory:
-        os.chmod(directory, 0o755)
-        options_path = Path(directory) / "options.json"
-        options_path.write_text(
-            json.dumps(
-                {
-                    "api_token": token,
-                    "api_server_address": api_address,
-                    "log_level": "warn",
-                    "allow_private_networks": False,
-                    "disable_usage_reports": True,
-                }
-            )
+    options_json = json.dumps(
+        {
+            "api_token": token,
+            "api_server_address": api_address,
+            "log_level": "warn",
+            "allow_private_networks": False,
+            "disable_usage_reports": True,
+        }
+    )
+    try:
+        docker("volume", "create", data_volume)
+        docker(
+            "run",
+            "--rm",
+            "--user",
+            "root",
+            "--env",
+            f"OPTIONS_JSON={options_json}",
+            "--volume",
+            f"{data_volume}:/data",
+            "--entrypoint",
+            "/bin/sh",
+            image,
+            "-c",
+            'chmod 0700 /data && printf "%s" "$OPTIONS_JSON" > /data/options.json && chmod 0600 /data/options.json',
         )
-        os.chmod(options_path, 0o644)
         try:
             docker(
                 "run",
@@ -75,7 +84,7 @@ def smoke_launcher(image: str, variant: str) -> None:
                 container,
                 *network_args,
                 "--volume",
-                f"{directory}:/data:ro",
+                f"{data_volume}:/data:ro",
                 image,
             )
             deadline = time.monotonic() + 10
@@ -111,10 +120,16 @@ def smoke_launcher(image: str, variant: str) -> None:
                 fail(f"{variant} launcher exposed its API token")
             if f"--api-server-address={api_address}" not in process_list:
                 fail(f"{variant} launcher did not pass the configured API address")
+            for process in process_list.splitlines()[1:]:
+                uid = process.split(maxsplit=1)[0]
+                if uid in {"0", "root"}:
+                    fail(f"{variant} left a runtime process as root: {process!r}")
         finally:
             docker("rm", "--force", container, check=False)
-            api_server.shutdown()
-            api_server.server_close()
+    finally:
+        docker("volume", "rm", "--force", data_volume, check=False)
+        api_server.shutdown()
+        api_server.server_close()
 
 
 def main() -> None:
@@ -123,12 +138,12 @@ def main() -> None:
     image, variant = sys.argv[1:]
     inspect = json.loads(docker("image", "inspect", image).stdout)[0]["Config"]
 
-    if inspect["User"] != "sm":
-        fail(f"image user is {inspect['User']!r}, expected non-root sm")
+    if inspect["User"] not in {"", "root"}:
+        fail(f"image must start its configuration launcher as root, got {inspect['User']!r}")
     expected_entrypoint = (
         ["/usr/local/bin/ha-sm-launcher"]
         if variant == "standard"
-        else ["tini", "--", "/usr/local/bin/ha-sm-launcher"]
+        else ["/usr/local/bin/ha-sm-launcher", "--with-tini"]
     )
     if inspect["Entrypoint"] != expected_entrypoint:
         fail(f"entrypoint is {inspect['Entrypoint']!r}, expected {expected_entrypoint!r}")

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"syscall"
@@ -16,6 +17,8 @@ import (
 
 const (
 	agentPath   = "/usr/local/bin/synthetic-monitoring-agent"
+	agentUID    = 12345
+	agentGID    = 12345
 	optionsPath = "/data/options.json"
 	healthURL   = "http://127.0.0.1:4050/"
 )
@@ -29,6 +32,7 @@ type options struct {
 }
 
 type agentProcess struct {
+	Path string
 	Args []string
 	Env  []string
 }
@@ -86,9 +90,32 @@ func buildAgentProcess(opts options, environment []string) (agentProcess, error)
 		args = append(args, "--disable-usage-reports=true")
 	}
 	return agentProcess{
+		Path: agentPath,
 		Args: args,
 		Env:  setEnvironment(environment, "SM_AGENT_API_TOKEN", opts.APIToken),
 	}, nil
+}
+
+func wrapWithTini(process agentProcess, tiniPath string) agentProcess {
+	args := make([]string, 0, len(process.Args)+2)
+	args = append(args, tiniPath, "--")
+	args = append(args, process.Args...)
+	process.Path = tiniPath
+	process.Args = args
+	return process
+}
+
+func dropPrivileges() error {
+	if err := syscall.Setgroups([]int{}); err != nil {
+		return fmt.Errorf("clear supplementary groups: %w", err)
+	}
+	if err := syscall.Setgid(agentGID); err != nil {
+		return fmt.Errorf("set agent group: %w", err)
+	}
+	if err := syscall.Setuid(agentUID); err != nil {
+		return fmt.Errorf("set agent user: %w", err)
+	}
+	return nil
 }
 
 func setEnvironment(environment []string, key, value string) []string {
@@ -129,21 +156,44 @@ func run() error {
 	if len(os.Args) == 2 && os.Args[1] == "healthcheck" {
 		return checkHealth(&http.Client{Timeout: 5 * time.Second}, healthURL)
 	}
+	withTini := false
+	switch {
+	case len(os.Args) == 1:
+	case len(os.Args) == 2 && os.Args[1] == "--with-tini":
+		withTini = true
+	default:
+		return errors.New("launcher accepts only --with-tini or healthcheck")
+	}
+	if os.Geteuid() != 0 {
+		return errors.New("configuration launcher must start as root")
+	}
 	file, err := os.Open(optionsPath)
 	if err != nil {
 		return fmt.Errorf("open App options: %w", err)
 	}
-	defer file.Close()
-
 	opts, err := loadOptions(file)
+	closeErr := file.Close()
 	if err != nil {
 		return err
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close App options: %w", closeErr)
 	}
 	process, err := buildAgentProcess(opts, os.Environ())
 	if err != nil {
 		return err
 	}
-	if err := syscall.Exec(agentPath, process.Args, process.Env); err != nil {
+	if withTini {
+		tiniPath, err := exec.LookPath("tini")
+		if err != nil {
+			return fmt.Errorf("find tini: %w", err)
+		}
+		process = wrapWithTini(process, tiniPath)
+	}
+	if err := dropPrivileges(); err != nil {
+		return fmt.Errorf("drop launcher privileges: %w", err)
+	}
+	if err := syscall.Exec(process.Path, process.Args, process.Env); err != nil {
 		return fmt.Errorf("start Synthetic Monitoring Agent: %w", err)
 	}
 	return nil

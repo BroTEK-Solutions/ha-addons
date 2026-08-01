@@ -83,8 +83,8 @@ def main() -> None:
         if upstream is None:
             fail(f"{slug} must pin a versioned upstream image by digest")
         upstream_versions[slug] = upstream.group(1)
-        if "USER sm" not in dockerfile:
-            fail(f"{slug} must run as the upstream non-root user")
+        if "USER root" not in dockerfile:
+            fail(f"{slug} launcher must start as root to read Supervisor-owned options")
         if "SM_AGENT_API_TOKEN" in dockerfile:
             fail(f"{slug} Dockerfile must not contain probe credentials")
 
@@ -128,7 +128,7 @@ def main() -> None:
         entrypoint = (
             '["/usr/local/bin/ha-sm-launcher"]'
             if slug == "grafana_sm"
-            else '["tini", "--", "/usr/local/bin/ha-sm-launcher"]'
+            else '["/usr/local/bin/ha-sm-launcher", "--with-tini"]'
         )
         replacements[entrypoint] = "{{ENTRYPOINT}}"
         for old, new in replacements.items():
