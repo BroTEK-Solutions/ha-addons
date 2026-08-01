@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -26,10 +27,23 @@ type fleetReferenceManager interface {
 type commandFleetReferenceRenderer struct {
 	generatorPath string
 	validator     candidateValidator
+	journalPath   string
 }
 
 func newCommandFleetReferenceRenderer(generatorPath string, validator candidateValidator) *commandFleetReferenceRenderer {
-	return &commandFleetReferenceRenderer{generatorPath: generatorPath, validator: validator}
+	return &commandFleetReferenceRenderer{
+		generatorPath: generatorPath,
+		validator:     validator,
+		journalPath:   detectJournalPath(),
+	}
+}
+
+func detectJournalPath() string {
+	entries, err := os.ReadDir("/var/log/journal")
+	if err == nil && len(entries) > 0 {
+		return "/var/log/journal"
+	}
+	return "/run/log/journal"
 }
 
 func (r *commandFleetReferenceRenderer) Render(ctx context.Context, settings map[string]any) ([]byte, error) {
@@ -57,7 +71,10 @@ func (r *commandFleetReferenceRenderer) Render(ctx context.Context, settings map
 	}
 
 	command := exec.CommandContext(ctx, "bash", r.generatorPath)
-	command.Env = append(candidateEnvironment(settings), "FLEET_REFERENCE_PIPELINE=true")
+	command.Env = append(candidateEnvironment(settings),
+		"FLEET_REFERENCE_PIPELINE=true",
+		"JOURNAL_PATH="+r.journalPath,
+	)
 	var stderr strings.Builder
 	command.Stderr = &stderr
 	contents, err := command.Output()

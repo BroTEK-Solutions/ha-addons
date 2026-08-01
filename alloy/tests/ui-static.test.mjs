@@ -8,6 +8,7 @@ const secretField = {
   disabled: false,
 };
 const clearSecret = { checked: true };
+const formListeners = {};
 const modeSelect = { value: "local", required: true, disabled: false, addEventListener() {} };
 const manualToggle = { name: "manual_config_enabled", type: "checkbox", checked: false, dataset: {}, addEventListener() {} };
 const manualField = { name: "manual_config", disabled: true, required: false, value: "", dataset: {} };
@@ -21,7 +22,7 @@ const form = {
     return selector === '[data-clear-secret="loki_password"]' ? clearSecret : null;
   },
   querySelectorAll() { return []; },
-  addEventListener() {},
+  addEventListener(event, listener) { formListeners[event] = listener; },
   reportValidity() { return true; },
 };
 const notice = { textContent: "", className: "" };
@@ -33,6 +34,7 @@ const fleetReferenceExpiry = { textContent: "" };
 const fleetReferenceDownload = { href: "" };
 let generateFleetReference;
 const fleetReferenceButton = { addEventListener(_event, listener) { generateFleetReference = listener; } };
+const requests = [];
 
 globalThis.document = {
   querySelector(selector) {
@@ -57,26 +59,29 @@ globalThis.document = {
   },
 };
 globalThis.location = { hostname: "homeassistant.local", reload() {} };
-globalThis.fetch = async (url, options = {}) => ({
-  ok: true,
-  async json() {
-    if (url === "api/status") {
-      return { alloy_ready: false, safe_mode: true, manual_override: true };
-    }
-    if (url === "api/fleet-reference" && options.method === "POST") {
-      return { path: "/fleet-pipeline/reference-token", expires_at: "2026-08-01T18:10:00Z" };
-    }
-    if (url === "api/config" && options.method === "POST") {
-      return { ok: true, message: "saved" };
-    }
-    return {
-      options: { operation_mode: "local", manual_config_enabled: true, manual_config: "logging {}" },
-      secrets: { loki_password: false },
-      mode: "local",
-      legacy_hybrid: false,
-    };
-  },
-});
+globalThis.fetch = async (url, options = {}) => {
+  requests.push({ url, method: options.method || "GET" });
+  return {
+    ok: true,
+    async json() {
+      if (url === "api/status") {
+        return { alloy_ready: false, safe_mode: true, manual_override: true };
+      }
+      if (url === "api/fleet-reference" && options.method === "POST") {
+        return { path: "/fleet-pipeline/reference-token", expires_at: "2026-08-01T18:10:00Z" };
+      }
+      if (url === "api/config" && options.method === "POST") {
+        return { ok: true, message: "saved" };
+      }
+      return {
+        options: { operation_mode: "local", manual_config_enabled: true, manual_config: "logging {}" },
+        secrets: { loki_password: false },
+        mode: "local",
+        legacy_hybrid: false,
+      };
+    },
+  };
+};
 
 await import("../ui/static/app.js");
 await new Promise((resolve) => setTimeout(resolve, 0));
@@ -116,4 +121,12 @@ assert.equal(
   "curl -fsSL http://[2001:db8::1]:8099/fleet-pipeline/reference-token | gcx fleet pipelines create -f -",
   "an already bracketed IPv6 hostname must not be bracketed again",
 );
+
+const referencePosts = () => requests.filter(({ url, method }) => url === "api/fleet-reference" && method === "POST").length;
+const issuedBeforeEdit = referencePosts();
+formListeners.input();
+generateFleetReference();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(referencePosts(), issuedBeforeEdit, "edited settings must not issue a manifest before restart");
+assert.match(notice.textContent, /Save & restart/, "the UI must explain how to apply edited settings");
 console.log("PASS: configuration reload resets secret controls");

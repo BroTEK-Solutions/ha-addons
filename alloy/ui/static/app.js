@@ -9,6 +9,8 @@ const fleetReference = document.querySelector("#fleet-reference");
 const fleetReferenceCommand = document.querySelector("#fleet-reference-command");
 const fleetReferenceExpiry = document.querySelector("#fleet-reference-expiry");
 const fleetReferenceDownload = document.querySelector("#fleet-reference-download");
+let configDirty = false;
+let configApplied = true;
 const defaults = {
   instance_name: "homeassistant", metrics_scrape_interval: "60s", fleet_poll_frequency: "1m",
   logs_exclude_addons: "alloy", logs_max_age: "24h", log_level: "info",
@@ -80,6 +82,7 @@ async function loadConfig() {
   });
   setMode(modeSelect.value);
   setManualOverride(manualToggle.checked);
+  configDirty = false;
   setNotice("");
 }
 
@@ -115,6 +118,7 @@ async function save(restart) {
       if (!restartResponse.ok) throw new Error("Configuration was saved, but restart could not be requested");
       setTimeout(() => location.reload(), 8000);
     } else {
+      configApplied = false;
       setNotice(data.message, "success");
       await loadConfig();
     }
@@ -128,7 +132,10 @@ async function save(restart) {
 }
 
 async function generateFleetReference() {
-  if (!await save(false)) return;
+  if (configDirty || !configApplied) {
+    setNotice("Save & restart to apply these settings before generating the Fleet starter pipeline.", "error");
+    return;
+  }
   setNotice("Generating Fleet starter pipeline…");
   try {
     const response = await fetch("api/fleet-reference", { method: "POST", headers: { Accept: "application/json" } });
@@ -149,6 +156,8 @@ async function generateFleetReference() {
 
 modeSelect.addEventListener("change", () => { legacyWarning.hidden = true; setMode(modeSelect.value); });
 manualToggle.addEventListener("change", () => setManualOverride(manualToggle.checked));
+form.addEventListener("input", () => { configDirty = true; fleetReference.hidden = true; });
+form.addEventListener("change", () => { configDirty = true; fleetReference.hidden = true; });
 form.addEventListener("submit", (event) => { event.preventDefault(); void save(false); });
 document.querySelector("#save-restart").addEventListener("click", () => { void save(true); });
 document.querySelector("#generate-fleet-reference").addEventListener("click", () => { void generateFleetReference(); });

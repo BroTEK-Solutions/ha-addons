@@ -108,12 +108,14 @@ func TestCommandFleetRendererBuildsAValidatedManifestFromFleetSelections(t *test
 set -eu
 [ "$OPERATION_MODE" = fleet ]
 [ "$FLEET_REFERENCE_PIPELINE" = true ]
+[ "$JOURNAL_PATH" = /run/log/journal ]
 printf '%s\n' 'loki.write "loki" {' '  endpoint {' '    password = sys.env("GCLOUD_RW_API_KEY")' '  }' '}'
 `
 	if err := os.WriteFile(generator, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	renderer := newCommandFleetReferenceRenderer(generator, rejectAdditionalConfigValidator{})
+	renderer.journalPath = "/run/log/journal"
 	settings := map[string]any{
 		"operation_mode":        "fleet",
 		"instance_name":         "homeassistant",
