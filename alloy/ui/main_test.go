@@ -295,6 +295,26 @@ func TestFleetReferenceAPIRequiresAppliedSettings(t *testing.T) {
 	}
 }
 
+func TestFleetReferenceAPIRejectsSafeMode(t *testing.T) {
+	t.Setenv("SAFE_MODE", "true")
+	broker := newFleetReferenceBroker(
+		staticFleetRenderer{contents: []byte("kind: Pipeline\n")},
+		strings.NewReader("01234567890123456789012345678901"),
+		time.Now,
+		10*time.Minute,
+	)
+	store := &fakeStore{settings: map[string]any{"operation_mode": "fleet"}}
+	handler, err := newAppHandlerWithReferences(store, fakeValidator{}, &fakeSupervisor{}, broker, "http://127.0.0.1:12345")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/fleet-reference", nil))
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "Safe mode") {
+		t.Fatalf("POST /api/fleet-reference = %d %s", response.Code, response.Body.String())
+	}
+}
+
 func TestStaticUIContainsConditionalAccessibleConfiguration(t *testing.T) {
 	handler, err := newAppHandler(&fakeStore{settings: map[string]any{}}, fakeValidator{}, &fakeSupervisor{}, "http://127.0.0.1:12345")
 	if err != nil {

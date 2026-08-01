@@ -152,6 +152,10 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 			writeError(w, http.StatusServiceUnavailable, errors.New("Fleet starter pipeline generation is unavailable"))
 			return
 		}
+		if envBool("SAFE_MODE") {
+			writeError(w, http.StatusConflict, errors.New("disable Safe mode and restart Alloy before generating a Fleet starter pipeline"))
+			return
+		}
 		settings, err := store.Load()
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err)
