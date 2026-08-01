@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.0.4...grafana-pdc-v1.1.0) (2026-08-01)
+
+
+### Features
+
+* improve Alloy and PDC configuration UX ([c210c9c](https://github.com/BroTEK-Solutions/ha-addons/commit/c210c9c25de7551d02e55a38685f1b9bfc932eea))
+* improve Alloy and PDC configuration UX ([2890008](https://github.com/BroTEK-Solutions/ha-addons/commit/289000840ad756e7a1e60f0bc5a89873bef3fc4f))
+
 ## [1.0.4](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.0.3...grafana-pdc-v1.0.4) (2026-08-01)
 
 

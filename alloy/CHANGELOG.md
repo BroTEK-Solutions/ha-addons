@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.8.0](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v1.7.0...alloy-v1.8.0) (2026-08-01)
+
+
+### Features
+
+* improve Alloy and PDC configuration UX ([c210c9c](https://github.com/BroTEK-Solutions/ha-addons/commit/c210c9c25de7551d02e55a38685f1b9bfc932eea))
+* improve Alloy and PDC configuration UX ([2890008](https://github.com/BroTEK-Solutions/ha-addons/commit/289000840ad756e7a1e60f0bc5a89873bef3fc4f))
+
+
+### Bug Fixes
+
+* ignore inactive Fleet credentials in local mode ([26e20ad](https://github.com/BroTEK-Solutions/ha-addons/commit/26e20ade97d72f3a5789e15cf6d7bb91c5f8479a))
+* keep Alloy ingress available before setup ([3a8b79f](https://github.com/BroTEK-Solutions/ha-addons/commit/3a8b79f01a331193135cae0fce41e131f4d60986))
+* preserve Alloy settings across mode changes ([1af5d33](https://github.com/BroTEK-Solutions/ha-addons/commit/1af5d33c5750a26987f5c9a3f3b32af61ea4b1c6))
+* rely on default ingress port ([cf77935](https://github.com/BroTEK-Solutions/ha-addons/commit/cf77935c2b874dc93f4becf4255ad1c8f01ba81b))
+* validate Alloy options before restart ([4d281e3](https://github.com/BroTEK-Solutions/ha-addons/commit/4d281e388cfb5fc987a8532c84e587841c077239))
+
 ## 1.7.0 - 2026-07-31
 
 ### Fixed
