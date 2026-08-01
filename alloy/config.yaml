@@ -20,7 +20,6 @@ host_network: true
 homeassistant_api: true
 # The ingress UI configures this App and proxies Alloy's component graph.
 ingress: true
-ingress_port: 8099
 ingress_stream: true
 hassio_api: true
 map:

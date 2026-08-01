@@ -193,7 +193,10 @@ def main() -> int:
 
     print("== ingress and telemetry receiver metadata are private by default ==")
     check("ingress is enabled", config.get("ingress") is True)
-    check("ingress uses internal port 8099", config.get("ingress_port") == 8099)
+    check(
+        "ingress relies on Home Assistant's default internal port 8099",
+        "ingress_port" not in config,
+    )
     check("ingress streams proxied responses", config.get("ingress_stream") is True)
     check("Supervisor API access is enabled", config.get("hassio_api") is True)
     check("host-network services do not advertise ineffective port mappings", "ports" not in config)
