@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "include-component-in-tag": true,
+  "include-v-in-tag": true,
+  "separate-pull-requests": false,
+  "group-pull-request-title-pattern": "chore: release Apps",
+  "packages": {
+    "alloy": {
+      "component": "alloy",
+      "package-name": "alloy",
+      "release-type": "simple",
+      "extra-files": [
+        {
+          "type": "yaml",
+          "path": "config.yaml",
+          "jsonpath": "$.version"
+        }
+      ]
+    },
+    "grafana_pdc": {
+      "component": "grafana-pdc",
+      "package-name": "grafana-pdc",
+      "release-type": "simple",
+      "extra-files": [
+        {
+          "type": "yaml",
+          "path": "config.yaml",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
+  }
+}

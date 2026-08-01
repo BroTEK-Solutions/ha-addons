@@ -16,6 +16,27 @@ Home Assistant App repository from BroTEK Solutions.
 
 Each App has its own configuration and operational documentation in its directory.
 
+## Releases
+
+Apps are versioned independently through Release Please. A successful merge to `main` updates one
+generated release PR with the versions and changelogs for only the Apps that changed. Merging that
+release PR publishes the new signed multi-architecture images before creating the corresponding Git
+tags and GitHub Releases:
+
+- Alloy: `alloy-vX.Y.Z`
+- Grafana PDC: `grafana-pdc-vX.Y.Z`
+
+Use Conventional Commits for App changes. `feat` selects a minor release, fixes and other
+non-breaking changes select a patch release, and a `!` or `BREAKING CHANGE` footer selects a major
+release. When a pull request will be squash-merged, its title must carry the Conventional Commit
+prefix because it becomes the commit subject on `main`.
+
+Do not edit an App version manually. The generated release PR updates both `config.yaml` and
+`.release-please-manifest.json`; bypassing it can publish an image without matching release state.
+Merging ordinary App code builds and tests the image but does not replace an existing stable tag.
+Manual runs of the Builder workflow also build without publishing. To force an exact version, use a
+`Release-As: X.Y.Z` footer on the relevant App commit and merge the resulting release PR normally.
+
 ## License
 
 MIT
