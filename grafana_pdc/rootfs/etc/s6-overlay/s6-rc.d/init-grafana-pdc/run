@@ -8,4 +8,5 @@ ssh_dir="${data_dir}/ssh"
 
 mkdir -p "${ssh_dir}"
 chown 30000:30000 "${ssh_dir}"
-chmod 0700 "${ssh_dir}"
+# AppArmor intentionally omits fowner, so apply the mode as the directory owner.
+/command/s6-setuidgid 30000:30000 chmod 0700 "${ssh_dir}"

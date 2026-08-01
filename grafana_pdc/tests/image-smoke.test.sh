@@ -12,7 +12,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Match the Home Assistant AppArmor profile's least-privilege capability set.
 docker run -d --name "$CONTAINER" \
+    --cap-drop FOWNER \
     --health-start-period 1s --health-interval 1s --health-timeout 2s --health-retries 5 \
     --mount "type=bind,source=${APP_ROOT}/tests/fixtures/fake-pdc,target=/usr/bin/pdc,readonly" \
     --mount "type=bind,source=${APP_ROOT}/tests/fixtures/options.valid.json,target=/tmp/.bashio/addons.self.options.config.cache,readonly" \

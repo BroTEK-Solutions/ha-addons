@@ -59,6 +59,7 @@ trap cleanup EXIT
 setup_case() {
     tmp="$(mktemp -d)"
     mkdir -p "${tmp}/cache" "${tmp}/bin" "${tmp}/data"
+    chmod 0755 "${tmp}" "${tmp}/data"
     chmod 0700 "${tmp}/cache"
     cat >"${tmp}/bin/pdc" <<'EOF'
 #!/usr/bin/env bash
