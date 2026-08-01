@@ -199,11 +199,11 @@ func fleetNameSlug(value string) string {
 		}
 	}
 	base := strings.Trim(slug.String(), "-")
-	if base == "" {
-		return ""
-	}
 	digest := sha256.Sum256([]byte(value))
 	suffix := fmt.Sprintf("%x", digest[:5])
+	if base == "" {
+		return suffix
+	}
 	const pipelinePrefix = "home-assistant-"
 	maxBaseLength := 63 - len(pipelinePrefix) - 1 - len(suffix)
 	if len(base) > maxBaseLength {

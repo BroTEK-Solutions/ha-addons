@@ -59,6 +59,11 @@
           <h2>Fleet starter pipeline</h2>
           <p>Select the metrics, logs, traces and profiles below, then use <strong>Save &amp; restart</strong> before generating a short-lived download command. The manifest contains endpoints and tenant IDs, but references the stored shared key through <code>GCLOUD_RW_API_KEY</code>; the key itself is never served.</p>
           <p><code>gcx</code> creates this pipeline once. The App does not reconcile later changes, disable it, or remove it on uninstall. Continue managing it in Fleet Management after creation.</p>
+          <div class="field">
+            <label for="fleet-reference-direct-host">Home Assistant host for the terminal command</label>
+            <p class="help">A hostname or IP address reachable from the machine running <code>gcx</code>, without a scheme or port. This affects only the displayed command and is not saved.</p>
+            <input id="fleet-reference-direct-host" value="homeassistant.local" autocomplete="off" data-transient>
+          </div>
           <button type="button" id="generate-fleet-reference">Generate 10-minute gcx command</button>
           <div id="fleet-reference" hidden>
             <p class="help">Run this from a machine that can reach the Home Assistant host and whose <code>gcx</code> context targets the intended Grafana Cloud stack.</p>

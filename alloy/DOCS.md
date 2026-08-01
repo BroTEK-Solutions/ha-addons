@@ -45,8 +45,12 @@ help with initial setup, the Web UI exposes the same metrics, logs, traces and
 profiles controls as Local mode and can render those selections as one Fleet
 `Pipeline` manifest.
 
-Save the Fleet settings and selected telemetry, then choose **Generate 10-minute
-gcx command**. The command has this form:
+Save and restart with the Fleet settings and selected telemetry. Enter a Home
+Assistant hostname or IP address that is reachable from the terminal where
+`gcx` will run, then choose **Generate 10-minute gcx command**. This explicit
+direct host is needed when the Web UI was opened through Home Assistant Cloud
+or another reverse proxy; it affects only the displayed command and is not
+saved. The command has this form:
 
 ```sh
 curl -fsSL http://homeassistant.local:8099/fleet-pipeline/SHORT_LIVED_TOKEN \

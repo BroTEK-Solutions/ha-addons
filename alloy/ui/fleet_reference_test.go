@@ -68,6 +68,9 @@ func TestFleetNameSlugUsesManifestSafeASCII(t *testing.T) {
 	if got, want := fleetNameSlug("Küche / Upstairs"), "k-che-upstairs-0b1d11e2ef"; got != want {
 		t.Fatalf("fleetNameSlug() = %q, want %q", got, want)
 	}
+	if got, want := fleetNameSlug("家庭"), "a70a77c75b"; got != want {
+		t.Fatalf("fleetNameSlug() for non-ASCII name = %q, want %q", got, want)
+	}
 	if fleetNameSlug("ha.one") == fleetNameSlug("ha-one") {
 		t.Fatal("distinct instance names produced the same Fleet pipeline slug")
 	}

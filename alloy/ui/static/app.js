@@ -9,6 +9,7 @@ const fleetReference = document.querySelector("#fleet-reference");
 const fleetReferenceCommand = document.querySelector("#fleet-reference-command");
 const fleetReferenceExpiry = document.querySelector("#fleet-reference-expiry");
 const fleetReferenceDownload = document.querySelector("#fleet-reference-download");
+const fleetReferenceDirectHost = document.querySelector("#fleet-reference-direct-host");
 let configDirty = false;
 let configApplied = false;
 const defaults = {
@@ -137,14 +138,18 @@ async function generateFleetReference() {
     setNotice("Save & restart to apply these settings before generating the Fleet starter pipeline.", "error");
     return;
   }
+  let hostname;
+  try {
+    hostname = formatDirectHost(fleetReferenceDirectHost.value);
+  } catch (error) {
+    setNotice(error.message, "error");
+    return;
+  }
   setNotice("Generating Fleet starter pipeline…");
   try {
     const response = await fetch("api/fleet-reference", { method: "POST", headers: { Accept: "application/json" } });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || "Could not generate Fleet starter pipeline");
-    const hostname = location.hostname.startsWith("[")
-      ? location.hostname
-      : location.hostname.includes(":") ? `[${location.hostname}]` : location.hostname;
     fleetReferenceCommand.textContent = `curl -fsSL http://${hostname}:8099${data.path} | gcx fleet pipelines create -f -`;
     fleetReferenceExpiry.textContent = `This download expires at ${new Date(data.expires_at).toLocaleTimeString()}.`;
     fleetReferenceDownload.href = data.path.replace(/^\/+/, "");
@@ -155,10 +160,29 @@ async function generateFleetReference() {
   }
 }
 
+function formatDirectHost(value) {
+  const entered = value.trim();
+  if (!entered) throw new Error("Enter the Home Assistant hostname or IP address reachable from your terminal.");
+  const bracketed = entered.startsWith("[") && entered.endsWith("]");
+  const host = bracketed ? entered.slice(1, -1) : entered;
+  if (!host || !/^[a-zA-Z0-9._:%-]+$/.test(host) || entered.includes("/") || entered.includes("@")) {
+    throw new Error("Enter a hostname or IP address without a scheme, port, or path.");
+  }
+  const colonCount = (host.match(/:/g) || []).length;
+  if (colonCount === 1) throw new Error("Enter a hostname or IP address without a scheme, port, or path.");
+  if (bracketed && colonCount < 2) throw new Error("Square brackets are only needed for an IPv6 address.");
+  return colonCount >= 2 ? `[${host}]` : host;
+}
+
 modeSelect.addEventListener("change", () => { legacyWarning.hidden = true; setMode(modeSelect.value); });
 manualToggle.addEventListener("change", () => setManualOverride(manualToggle.checked));
-form.addEventListener("input", () => { configDirty = true; fleetReference.hidden = true; });
-form.addEventListener("change", () => { configDirty = true; fleetReference.hidden = true; });
+function noteFormEdit(event) {
+  fleetReference.hidden = true;
+  if (event?.target?.dataset?.transient !== undefined) return;
+  configDirty = true;
+}
+form.addEventListener("input", noteFormEdit);
+form.addEventListener("change", noteFormEdit);
 form.addEventListener("submit", (event) => { event.preventDefault(); void save(false); });
 document.querySelector("#save-restart").addEventListener("click", () => { void save(true); });
 document.querySelector("#generate-fleet-reference").addEventListener("click", () => { void generateFleetReference(); });

@@ -32,6 +32,7 @@ const fleetReference = { hidden: true };
 const fleetReferenceCommand = { textContent: "" };
 const fleetReferenceExpiry = { textContent: "" };
 const fleetReferenceDownload = { href: "" };
+const directHost = { value: "homeassistant.local", dataset: { transient: "" } };
 let generateFleetReference;
 const fleetReferenceButton = { addEventListener(_event, listener) { generateFleetReference = listener; } };
 const requests = [];
@@ -49,6 +50,7 @@ globalThis.document = {
     if (selector === "#fleet-reference-command") return fleetReferenceCommand;
     if (selector === "#fleet-reference-expiry") return fleetReferenceExpiry;
     if (selector === "#fleet-reference-download") return fleetReferenceDownload;
+    if (selector === "#fleet-reference-direct-host") return directHost;
     if (selector === "#generate-fleet-reference") return fleetReferenceButton;
     if (selector === "#save-restart") return { addEventListener() {} };
     return null;
@@ -58,7 +60,7 @@ globalThis.document = {
     return [];
   },
 };
-globalThis.location = { hostname: "homeassistant.local", reload() {} };
+globalThis.location = { hostname: "example.ui.nabu.casa", reload() {} };
 globalThis.fetch = async (url, options = {}) => {
   requests.push({ url, method: options.method || "GET" });
   return {
@@ -113,15 +115,39 @@ assert.equal(
 );
 assert.equal(fleetReference.hidden, false);
 
-location.hostname = "[2001:db8::1]";
+directHost.value = "2001:db8::1";
+formListeners.input({ target: directHost });
 generateFleetReference();
 await new Promise((resolve) => setTimeout(resolve, 0));
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(
   fleetReferenceCommand.textContent,
   "curl -fsSL http://[2001:db8::1]:8099/fleet-pipeline/reference-token | gcx fleet pipelines create -f -",
-  "an already bracketed IPv6 hostname must not be bracketed again",
+  "the explicit direct host must support an unbracketed IPv6 address without requiring a restart",
 );
+
+directHost.value = "[2001:db8::1]";
+formListeners.input({ target: directHost });
+generateFleetReference();
+await new Promise((resolve) => setTimeout(resolve, 0));
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+  fleetReferenceCommand.textContent,
+  "curl -fsSL http://[2001:db8::1]:8099/fleet-pipeline/reference-token | gcx fleet pipelines create -f -",
+  "an already bracketed IPv6 direct host must not be bracketed again",
+);
+
+const issuedBeforeInvalidHost = requests.filter(({ url, method }) => url === "api/fleet-reference" && method === "POST").length;
+directHost.value = "https://homeassistant.local";
+formListeners.input({ target: directHost });
+generateFleetReference();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+  requests.filter(({ url, method }) => url === "api/fleet-reference" && method === "POST").length,
+  issuedBeforeInvalidHost,
+  "a scheme must be rejected before issuing a short-lived manifest",
+);
+assert.match(notice.textContent, /without a scheme/, "the direct-host error must explain the accepted form");
 
 const referencePosts = () => requests.filter(({ url, method }) => url === "api/fleet-reference" && method === "POST").length;
 const issuedBeforeEdit = referencePosts();

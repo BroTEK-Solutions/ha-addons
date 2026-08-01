@@ -308,6 +308,7 @@ func TestStaticUIContainsConditionalAccessibleConfiguration(t *testing.T) {
 		"Fleet Management",
 		"Fleet starter pipeline",
 		"Generate 10-minute gcx command",
+		"Home Assistant host for the terminal command",
 		"creates this pipeline once",
 		"Local configuration",
 		"Grafana Cloud read/write API key",
