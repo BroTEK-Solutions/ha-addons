@@ -8,7 +8,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 )
 
 type fakeSupervisor struct {
@@ -223,6 +225,57 @@ func TestRestartAPIRequestsSelfRestart(t *testing.T) {
 	}
 }
 
+func TestFleetReferenceAPIIssuesABriefPublicDownloadWithoutExposingControlPlane(t *testing.T) {
+	now := time.Date(2026, 8, 1, 18, 0, 0, 0, time.UTC)
+	broker := newFleetReferenceBroker(
+		staticFleetRenderer{contents: []byte("kind: Pipeline\n")},
+		strings.NewReader("01234567890123456789012345678901"),
+		func() time.Time { return now },
+		10*time.Minute,
+	)
+	store := &fakeStore{settings: map[string]any{"operation_mode": "fleet"}}
+	handler, err := newAppHandlerWithReferences(store, fakeValidator{}, &fakeSupervisor{}, broker, "http://127.0.0.1:12345")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	issueResponse := httptest.NewRecorder()
+	handler.ServeHTTP(issueResponse, httptest.NewRequest(http.MethodPost, "/api/fleet-reference", nil))
+	if issueResponse.Code != http.StatusCreated {
+		t.Fatalf("POST /api/fleet-reference = %d %s", issueResponse.Code, issueResponse.Body.String())
+	}
+	var issued struct {
+		Path      string    `json:"path"`
+		ExpiresAt time.Time `json:"expires_at"`
+	}
+	if err := json.Unmarshal(issueResponse.Body.Bytes(), &issued); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(issued.Path, "/fleet-pipeline/") || !issued.ExpiresAt.Equal(now.Add(10*time.Minute)) {
+		t.Fatalf("issued = %#v", issued)
+	}
+
+	publicHandler := ingressOnly("172.30.32.2", handler)
+	download := httptest.NewRequest(http.MethodGet, issued.Path, nil)
+	download.RemoteAddr = "192.168.1.20:43210"
+	downloadResponse := httptest.NewRecorder()
+	publicHandler.ServeHTTP(downloadResponse, download)
+	if downloadResponse.Code != http.StatusOK || downloadResponse.Body.String() != "kind: Pipeline\n" {
+		t.Fatalf("public download = %d %q", downloadResponse.Code, downloadResponse.Body.String())
+	}
+	if downloadResponse.Header().Get("Content-Type") != "application/yaml" {
+		t.Fatalf("download Content-Type = %q", downloadResponse.Header().Get("Content-Type"))
+	}
+
+	controlRequest := httptest.NewRequest(http.MethodGet, "/api/config", nil)
+	controlRequest.RemoteAddr = "192.168.1.20:43210"
+	controlResponse := httptest.NewRecorder()
+	publicHandler.ServeHTTP(controlResponse, controlRequest)
+	if controlResponse.Code != http.StatusForbidden {
+		t.Fatalf("public control-plane request = %d, want 403", controlResponse.Code)
+	}
+}
+
 func TestStaticUIContainsConditionalAccessibleConfiguration(t *testing.T) {
 	handler, err := newAppHandler(&fakeStore{settings: map[string]any{}}, fakeValidator{}, &fakeSupervisor{}, "http://127.0.0.1:12345")
 	if err != nil {
@@ -234,6 +287,9 @@ func TestStaticUIContainsConditionalAccessibleConfiguration(t *testing.T) {
 	for _, required := range []string{
 		"Operation mode",
 		"Fleet Management",
+		"Fleet starter pipeline",
+		"Generate 10-minute gcx command",
+		"creates this pipeline once",
 		"Local configuration",
 		"Grafana Cloud read/write API key",
 		"HAOS system logs",

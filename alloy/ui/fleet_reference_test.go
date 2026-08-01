@@ -1,0 +1,143 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+type staticFleetRenderer struct {
+	contents []byte
+	err      error
+}
+
+func (r staticFleetRenderer) Render(context.Context, map[string]any) ([]byte, error) {
+	return r.contents, r.err
+}
+
+func TestFleetManifestTargetsOnlyTheSelectedCollectorWithoutEmbeddingSecrets(t *testing.T) {
+	settings := map[string]any{
+		"instance_name":     "Kitchen HA",
+		"gcloud_rw_api_key": "SENTINEL-SECRET",
+	}
+	contents := []byte("prometheus.remote_write \"metrics\" {\n  endpoint {\n    password = sys.env(\"GCLOUD_RW_API_KEY\")\n  }\n}\n")
+
+	manifest, err := buildFleetManifest(settings, contents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `apiVersion: fleet.ext.grafana.app/v1alpha1
+kind: Pipeline
+metadata:
+  name: home-assistant-kitchen-ha
+spec:
+  name: home-assistant-kitchen-ha
+  enabled: true
+  contents: |-
+    prometheus.remote_write "metrics" {
+      endpoint {
+        password = sys.env("GCLOUD_RW_API_KEY")
+      }
+    }
+  matchers:
+    - "ha_addon_instance=Kitchen HA"
+`
+	if string(manifest) != want {
+		t.Fatalf("manifest =\n%s\nwant:\n%s", manifest, want)
+	}
+	if bytes.Contains(manifest, []byte("SENTINEL-SECRET")) {
+		t.Fatal("stored secret reached Fleet manifest")
+	}
+}
+
+func TestFleetNameSlugUsesManifestSafeASCII(t *testing.T) {
+	if got, want := fleetNameSlug("Küche / Upstairs"), "k-che-upstairs"; got != want {
+		t.Fatalf("fleetNameSlug() = %q, want %q", got, want)
+	}
+}
+
+func TestFleetReferenceBrokerExpiresIssuedManifests(t *testing.T) {
+	now := time.Date(2026, 8, 1, 18, 0, 0, 0, time.UTC)
+	broker := newFleetReferenceBroker(
+		staticFleetRenderer{contents: []byte("manifest")},
+		strings.NewReader("01234567890123456789012345678901"),
+		func() time.Time { return now },
+		10*time.Minute,
+	)
+
+	issued, err := broker.Issue(context.Background(), map[string]any{"operation_mode": "fleet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if issued.Token == "" || !issued.ExpiresAt.Equal(now.Add(10*time.Minute)) {
+		t.Fatalf("issued = %#v", issued)
+	}
+	if manifest, ok := broker.Get(issued.Token); !ok || string(manifest) != "manifest" {
+		t.Fatalf("Get before expiry = %q, %v", manifest, ok)
+	}
+
+	now = now.Add(10*time.Minute + time.Second)
+	if manifest, ok := broker.Get(issued.Token); ok || manifest != nil {
+		t.Fatalf("Get after expiry = %q, %v", manifest, ok)
+	}
+}
+
+func TestCommandFleetRendererBuildsAValidatedManifestFromFleetSelections(t *testing.T) {
+	generator := filepath.Join(t.TempDir(), "generate.sh")
+	script := `#!/bin/sh
+set -eu
+[ "$OPERATION_MODE" = fleet ]
+[ "$FLEET_REFERENCE_PIPELINE" = true ]
+printf '%s\n' 'loki.write "loki" {' '  endpoint {' '    password = sys.env("GCLOUD_RW_API_KEY")' '  }' '}'
+`
+	if err := os.WriteFile(generator, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	renderer := newCommandFleetReferenceRenderer(generator, fakeValidator{})
+	settings := map[string]any{
+		"operation_mode":        "fleet",
+		"instance_name":         "homeassistant",
+		"fleet_url":             "https://fleet.example",
+		"fleet_username":        "123",
+		"gcloud_rw_api_key":     "SENTINEL-SECRET",
+		"loki_url":              "https://logs.example/loki/api/v1/push",
+		"loki_username":         "123",
+		"logs_homeassistant":    true,
+		"manual_config_enabled": false,
+	}
+
+	manifest, err := renderer.Render(context.Background(), settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		"kind: Pipeline",
+		"name: home-assistant-homeassistant",
+		`password = sys.env("GCLOUD_RW_API_KEY")`,
+		`- "ha_addon_instance=homeassistant"`,
+	} {
+		if !bytes.Contains(manifest, []byte(expected)) {
+			t.Errorf("manifest missing %q:\n%s", expected, manifest)
+		}
+	}
+	if bytes.Contains(manifest, []byte("SENTINEL-SECRET")) {
+		t.Fatal("stored secret reached rendered manifest")
+	}
+}
+
+func TestCommandFleetRendererRejectsAnEmptyStarterPipeline(t *testing.T) {
+	renderer := newCommandFleetReferenceRenderer("unused", fakeValidator{})
+	_, err := renderer.Render(context.Background(), map[string]any{
+		"operation_mode":    "fleet",
+		"fleet_url":         "https://fleet.example",
+		"fleet_username":    "123",
+		"gcloud_rw_api_key": "secret",
+	})
+	if err == nil || !strings.Contains(err.Error(), "destination") {
+		t.Fatalf("Render() error = %v, want missing destination", err)
+	}
+}

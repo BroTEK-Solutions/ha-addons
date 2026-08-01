@@ -287,6 +287,9 @@ expect_fatal "not key=value" \
 expect_fatal "empty key" \
   "{${FLEET},\"fleet_attributes\":\"=home\"}" \
   "has an empty key"
+expect_fatal "reserved App targeting key" \
+  "{${FLEET},\"fleet_attributes\":\"ha_addon_instance=other\"}" \
+  "key 'ha_addon_instance' is reserved"
 expect_fatal "embedded quote breaks River syntax" \
   "{${FLEET},\"fleet_attributes\":\"env=ho\\\"me\"}" \
   "contains a quote or backslash"

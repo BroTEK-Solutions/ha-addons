@@ -19,4 +19,5 @@ aside,#notice:not(:empty) { padding:.8rem 1rem; border-radius:7px; margin:1rem 0
 .actions { position:sticky; bottom:0; display:flex; justify-content:flex-end; gap:.75rem; padding:1rem; background:color-mix(in srgb,var(--bg) 90%,transparent); backdrop-filter:blur(8px); }
 button { border:1px solid var(--accent); border-radius:7px; padding:.7rem 1rem; background:transparent; color:var(--accent); font:inherit; font-weight:700; cursor:pointer; } button.primary { color:white; background:var(--accent); } button:disabled { opacity:.55; cursor:wait; }
 code { overflow-wrap:anywhere; }
+pre { overflow:auto; padding:.8rem; border-radius:7px; background:var(--bg); border:1px solid var(--line); }
 @media (max-width:700px) { header { align-items:start; flex-direction:column; } .grid { grid-template-columns:1fr; } .field.wide { grid-column:auto; } .actions { justify-content:stretch; } .actions button { flex:1; } }

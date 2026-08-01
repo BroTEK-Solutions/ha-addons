@@ -395,6 +395,10 @@ validate_attributes() {
             bashio::log.fatal "fleet_attributes entry '${pair}' has an empty key."
             bashio::exit.nok
         fi
+        if [ "${pair%%=*}" = ha_addon_instance ]; then
+            bashio::log.fatal "fleet_attributes key 'ha_addon_instance' is reserved for App targeting."
+            bashio::exit.nok
+        fi
     done
 }
 

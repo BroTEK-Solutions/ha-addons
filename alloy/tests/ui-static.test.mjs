@@ -27,6 +27,12 @@ const form = {
 const notice = { textContent: "", className: "" };
 const runtimeStatus = { textContent: "", hidden: true };
 const legacyWarning = { hidden: false };
+const fleetReference = { hidden: true };
+const fleetReferenceCommand = { textContent: "" };
+const fleetReferenceExpiry = { textContent: "" };
+const fleetReferenceDownload = { href: "" };
+let generateFleetReference;
+const fleetReferenceButton = { addEventListener(_event, listener) { generateFleetReference = listener; } };
 
 globalThis.document = {
   querySelector(selector) {
@@ -37,6 +43,11 @@ globalThis.document = {
     if (selector === "#legacy-warning") return legacyWarning;
     if (selector === "#manual_config_enabled") return manualToggle;
     if (selector === "#manual-config-panel") return manualPanel;
+    if (selector === "#fleet-reference") return fleetReference;
+    if (selector === "#fleet-reference-command") return fleetReferenceCommand;
+    if (selector === "#fleet-reference-expiry") return fleetReferenceExpiry;
+    if (selector === "#fleet-reference-download") return fleetReferenceDownload;
+    if (selector === "#generate-fleet-reference") return fleetReferenceButton;
     if (selector === "#save-restart") return { addEventListener() {} };
     return null;
   },
@@ -45,11 +56,18 @@ globalThis.document = {
     return [];
   },
 };
-globalThis.fetch = async (url) => ({
+globalThis.location = { hostname: "homeassistant.local", reload() {} };
+globalThis.fetch = async (url, options = {}) => ({
   ok: true,
   async json() {
     if (url === "api/status") {
       return { alloy_ready: false, safe_mode: true, manual_override: true };
+    }
+    if (url === "api/fleet-reference" && options.method === "POST") {
+      return { path: "/fleet-pipeline/reference-token", expires_at: "2026-08-01T18:10:00Z" };
+    }
+    if (url === "api/config" && options.method === "POST") {
+      return { ok: true, message: "saved" };
     }
     return {
       options: { operation_mode: "local", manual_config_enabled: true, manual_config: "logging {}" },
@@ -73,4 +91,15 @@ assert.equal(modeSelect.disabled, true, "manual override must exclude generated 
 assert.equal(runtimeStatus.hidden, false, "recovery state must be visible");
 assert.match(runtimeStatus.textContent, /Safe mode is active/);
 assert.match(runtimeStatus.textContent, /Alloy is not ready/);
+
+generateFleetReference();
+await new Promise((resolve) => setTimeout(resolve, 0));
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+  fleetReferenceCommand.textContent,
+  "curl -fsSL http://homeassistant.local:8099/fleet-pipeline/reference-token | gcx fleet pipelines create -f -",
+  "the command must pipe the short-lived manifest to gcx",
+);
+assert.equal(fleetReferenceDownload.href, "/fleet-pipeline/reference-token");
+assert.equal(fleetReference.hidden, false);
 console.log("PASS: configuration reload resets secret controls");

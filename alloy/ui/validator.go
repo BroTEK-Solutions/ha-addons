@@ -171,6 +171,9 @@ func validateFleetAttributes(value string) error {
 		if len(parts) != 2 || parts[0] == "" {
 			return fmt.Errorf("fleet_attributes entries must use non-empty key=value pairs")
 		}
+		if parts[0] == "ha_addon_instance" {
+			return fmt.Errorf("fleet_attributes key ha_addon_instance is reserved for App targeting")
+		}
 		if strings.ContainsAny(pair, "\"\\") {
 			return fmt.Errorf("fleet_attributes entries cannot contain quotes or backslashes")
 		}
