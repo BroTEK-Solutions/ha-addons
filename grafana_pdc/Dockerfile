@@ -1,6 +1,6 @@
 FROM grafana/pdc-agent:0.0.63@sha256:3d8346ee5ec30aeaaae5f82db2a77f8347405fbfc4e4a3248ae26d65dd8bf031 AS pdc-source
 
-FROM ghcr.io/home-assistant/base:3.23@sha256:445077433f08d1e352285ff22ee2594f6b93ac3260dcf84433c79cd849a946a0
+FROM ghcr.io/home-assistant/base:3.24@sha256:94ff231402a5e7ad2a82e261ad5fa4ffae7d7bb095c3febb2edbdf309c9b6aca
 
 # The digest pins the HA base and Alpine release. Apply security updates from
 # that release on every rebuild, and keep OpenSSH as a virtual package so its
