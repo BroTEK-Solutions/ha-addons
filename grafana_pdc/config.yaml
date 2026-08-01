@@ -1,5 +1,5 @@
 name: Grafana Private Data Source Connect
-version: "1.0.0"
+version: 1.0.1
 slug: grafana_pdc
 description: >-
   Connect a private network data source to Grafana Cloud without exposing it to
@@ -18,8 +18,8 @@ options:
   connections: 1
   region_format: false
   domain: grafana.net
-  api_fqdn: ""
-  gateway_fqdn: ""
+  api_fqdn: ''
+  gateway_fqdn: ''
   cert_expiry_window: 5m
   cert_check_expiry_period: 1m
   retry_max: 4
@@ -27,20 +27,23 @@ options:
   use_gossh: false
   connect_timeout_seconds: 1
 schema:
-  signing_token: "password(1,)"
-  hosted_grafana_id: 'match(^[1-9][0-9]*$)'
-  cluster: 'match(^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$)'
+  signing_token: password(1,)
+  hosted_grafana_id: match(^[1-9][0-9]*$)
+  cluster: match(^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$)
   allowed_endpoints:
-    - "str(1,)"
-  log_level: "list(debug|info|warn|error)"
-  connections: "int(1,50)"
-  region_format: "bool"
-  domain: 'match(^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$)'
-  api_fqdn: 'match(^$|^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$)'
-  gateway_fqdn: 'match(^$|^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$)'
-  cert_expiry_window: 'match(^([1-9][0-9]*(\.[0-9]+)?(ms|s|m|h))+$)'
-  cert_check_expiry_period: 'match(^0$|^([1-9][0-9]*(\.[0-9]+)?(ms|s|m|h))+$)'
-  retry_max: "int(0,20)"
-  parse_metrics: "bool"
-  use_gossh: "bool"
-  connect_timeout_seconds: "int(1,600)"
+    - str(1,)
+  log_level: list(debug|info|warn|error)
+  connections: int(1,50)
+  region_format: bool
+  domain: >-
+    match(^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$)
+  api_fqdn: >-
+    match(^$|^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$)
+  gateway_fqdn: >-
+    match(^$|^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$)
+  cert_expiry_window: match(^([1-9][0-9]*(\.[0-9]+)?(ms|s|m|h))+$)
+  cert_check_expiry_period: match(^0$|^([1-9][0-9]*(\.[0-9]+)?(ms|s|m|h))+$)
+  retry_max: int(0,20)
+  parse_metrics: bool
+  use_gossh: bool
+  connect_timeout_seconds: int(1,600)
