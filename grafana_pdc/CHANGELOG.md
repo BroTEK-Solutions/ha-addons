@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.1.0...grafana-pdc-v1.1.1) (2026-08-01)
+
+
+### Bug Fixes
+
+* load PDC configuration translations ([f179a6c](https://github.com/BroTEK-Solutions/ha-addons/commit/f179a6c4e1328b353bd7e4f896b6d52ac32aa69b))
+* load PDC configuration translations ([f44b776](https://github.com/BroTEK-Solutions/ha-addons/commit/f44b776f9f69f3d2b9379a040ac274293282b36f))
+
 ## [1.1.0](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.0.4...grafana-pdc-v1.1.0) (2026-08-01)
 
 
