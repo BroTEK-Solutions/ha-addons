@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -179,5 +180,16 @@ func fleetNameSlug(value string) string {
 			separator = true
 		}
 	}
-	return strings.Trim(slug.String(), "-")
+	base := strings.Trim(slug.String(), "-")
+	if base == "" {
+		return ""
+	}
+	digest := sha256.Sum256([]byte(value))
+	suffix := fmt.Sprintf("%x", digest[:5])
+	const pipelinePrefix = "home-assistant-"
+	maxBaseLength := 63 - len(pipelinePrefix) - 1 - len(suffix)
+	if len(base) > maxBaseLength {
+		base = strings.TrimRight(base[:maxBaseLength], "-")
+	}
+	return base + "-" + suffix
 }

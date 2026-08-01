@@ -43,9 +43,9 @@ func TestFleetManifestTargetsOnlyTheSelectedCollectorWithoutEmbeddingSecrets(t *
 	want := `apiVersion: fleet.ext.grafana.app/v1alpha1
 kind: Pipeline
 metadata:
-  name: home-assistant-kitchen-ha
+  name: home-assistant-kitchen-ha-9381cbdd7b
 spec:
-  name: home-assistant-kitchen-ha
+  name: home-assistant-kitchen-ha-9381cbdd7b
   enabled: true
   contents: |-
     prometheus.remote_write "metrics" {
@@ -65,8 +65,14 @@ spec:
 }
 
 func TestFleetNameSlugUsesManifestSafeASCII(t *testing.T) {
-	if got, want := fleetNameSlug("Küche / Upstairs"), "k-che-upstairs"; got != want {
+	if got, want := fleetNameSlug("Küche / Upstairs"), "k-che-upstairs-0b1d11e2ef"; got != want {
 		t.Fatalf("fleetNameSlug() = %q, want %q", got, want)
+	}
+	if fleetNameSlug("ha.one") == fleetNameSlug("ha-one") {
+		t.Fatal("distinct instance names produced the same Fleet pipeline slug")
+	}
+	if got := "home-assistant-" + fleetNameSlug(strings.Repeat("long-name-", 20)); len(got) > 63 {
+		t.Fatalf("pipeline name is %d characters: %q", len(got), got)
 	}
 }
 
@@ -127,7 +133,7 @@ printf '%s\n' 'loki.write "loki" {' '  endpoint {' '    password = sys.env("GCLO
 	}
 	for _, expected := range []string{
 		"kind: Pipeline",
-		"name: home-assistant-homeassistant",
+		"name: home-assistant-homeassistant-fa232a3742",
 		`password = sys.env("GCLOUD_RW_API_KEY")`,
 		`- "ha_addon_instance=homeassistant"`,
 	} {

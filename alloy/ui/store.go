@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const settingsSchemaVersion = 2
@@ -31,6 +32,12 @@ func (s *fileStore) Load() (map[string]any, error) {
 		version, valid := settings["schema_version"].(float64)
 		if !valid || version != settingsSchemaVersion {
 			return nil, fmt.Errorf("read settings: unsupported schema_version %v", settings["schema_version"])
+		}
+		if migrateReservedFleetAttribute(settings) {
+			if err := s.Save(settings); err != nil {
+				return nil, fmt.Errorf("persist Fleet attribute migration: %w", err)
+			}
+			return readSettings(s.path)
 		}
 		return settings, nil
 	}
@@ -59,6 +66,33 @@ func (s *fileStore) Load() (map[string]any, error) {
 		return nil, fmt.Errorf("persist migrated settings: %w", err)
 	}
 	return readSettings(s.path)
+}
+
+func migrateReservedFleetAttribute(settings map[string]any) bool {
+	attributes, ok := settings["fleet_attributes"].(string)
+	if !ok || attributes == "" {
+		return false
+	}
+	parts := strings.Split(attributes, ",")
+	retained := make([]string, 0, len(parts))
+	changed := false
+	for _, part := range parts {
+		key, _, hasValue := strings.Cut(part, "=")
+		if hasValue && key == "ha_addon_instance" {
+			changed = true
+			continue
+		}
+		retained = append(retained, part)
+	}
+	if !changed {
+		return false
+	}
+	if len(retained) == 0 {
+		delete(settings, "fleet_attributes")
+	} else {
+		settings["fleet_attributes"] = strings.Join(retained, ",")
+	}
+	return true
 }
 
 func (s *fileStore) Save(settings map[string]any) error {

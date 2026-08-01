@@ -66,6 +66,31 @@ func TestFileStoreImportsLegacyOptionsOnlyOnce(t *testing.T) {
 	}
 }
 
+func TestFileStoreMigratesReservedFleetTargetingAttribute(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+	stored := `{"schema_version":2,"fleet_attributes":"env=home,ha_addon_instance=old-name,role=hass"}`
+	if err := os.WriteFile(settingsPath, []byte(stored), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := newFileStore(settingsPath, filepath.Join(dir, "options.json"))
+
+	got, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["fleet_attributes"] != "env=home,role=hass" {
+		t.Fatalf("fleet_attributes = %#v", got["fleet_attributes"])
+	}
+	persisted, err := readSettings(settingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted["fleet_attributes"] != "env=home,role=hass" {
+		t.Fatalf("persisted fleet_attributes = %#v", persisted["fleet_attributes"])
+	}
+}
+
 func TestFileStoreSavesAtomicallyWithOwnerOnlyPermissions(t *testing.T) {
 	dir := t.TempDir()
 	settingsPath := filepath.Join(dir, "settings.json")

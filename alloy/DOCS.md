@@ -65,10 +65,12 @@ IDs, but no credentials. Backend authentication remains a runtime
 10 minutes and is held only in memory. The configuration and restart APIs stay
 restricted to Home Assistant ingress.
 
-The generated pipeline is named `home-assistant-<instance-name>` and targets
-the collector attribute `ha_addon_instance=<instance-name>`, which the App adds
-automatically. Give each installation a distinct **Instance name** when more
-than one reports to the same Fleet stack.
+The generated pipeline name starts with `home-assistant-<instance-name>` and
+ends with a deterministic hash suffix so distinct installation names cannot
+collide after Fleet-safe normalization. It targets the collector attribute
+`ha_addon_instance=<instance-name>`, which the App adds automatically. Give
+each installation a distinct **Instance name** when more than one reports to
+the same Fleet stack.
 
 `gcx fleet pipelines create` is deliberately create-only. Once created, the
 pipeline belongs to the operator: edit, disable, update or remove it in Fleet
