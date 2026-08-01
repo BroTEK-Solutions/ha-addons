@@ -173,3 +173,23 @@ jobs:
     with:
       app: ${{ matrix.app }}
       publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+  # Single required status check (the branch ruleset requires only this), matching the
+  # rest of the fleet. `if: always()` plus an explicit failure check, because a skipped
+  # `if: success()` aggregator is read as passing by branch protection. `build-app` is
+  # legitimately skipped when no App directory changed, and a skipped leg is a pass.
+  # Renovate automerge waits for this to go green before merging.
+  ci-success:
+    name: ci-success
+    needs: [test, init, build-app]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any required job did not pass
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: |
+          echo "A required job failed or was cancelled: ${{ join(needs.*.result, ', ') }}"
+          exit 1
+
+      - name: All required jobs passed
+        run: echo "ci-success — ${{ join(needs.*.result, ', ') }}"
