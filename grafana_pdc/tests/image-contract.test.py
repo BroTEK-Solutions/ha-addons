@@ -118,6 +118,7 @@ def main() -> None:
         "/run/{s6,s6-rc*,service}/** ix,",
         "/usr/lib/bashio/** ix,",
         "/usr/bin/pdc cx -> pdc,",
+        "/usr/bin/pdc mr,",
         "/usr/bin/ssh ix,",
         "/etc/ssh/** r,",
         "/data/ssh/** rwk,",
