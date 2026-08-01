@@ -107,9 +107,13 @@ case "${OPERATION_MODE}" in
     local)
         if [ -z "${LOKI_URL}" ] && [ -z "${PROMETHEUS_URL}" ] \
             && [ -z "${TEMPO_URL}" ] && [ -z "${PYROSCOPE_URL}" ]; then
-            bashio::log.fatal "Local mode requires at least one local destination."
-            bashio::log.fatal "Set at least one of loki_url, prometheus_url, tempo_url or pyroscope_url."
-            bashio::exit.nok
+            if [ "${OPERATION_MODE_EXPLICIT}" = true ]; then
+                bashio::log.fatal "Local mode requires at least one local destination."
+                bashio::log.fatal "Set at least one of loki_url, prometheus_url, tempo_url or pyroscope_url."
+                bashio::exit.nok
+            fi
+            bashio::log.warning "No telemetry destination is configured yet."
+            bashio::log.warning "Open the ingress UI to choose Fleet or Local configuration."
         fi
         ;;
     legacy-hybrid)
@@ -279,6 +283,29 @@ fi
 if [ "${OPERATION_MODE}" != local ]; then
     validate_url fleet_url "${FLEET_URL}"
 fi
+
+# These values are emitted inside quoted River strings. Repeat the schema guard
+# here because options.json can also be edited outside the Supervisor UI.
+validate_river_string() {
+    local name="${1}" value="${2}"
+    [ -n "${value}" ] || return 0
+    if [[ "${value}" == *'"'* || "${value}" == *\\* || "${value}" =~ [[:cntrl:]] ]]; then
+        bashio::log.fatal "${name} contains a quote, backslash or control character."
+        bashio::exit.nok
+    fi
+}
+
+if [ "${OPERATION_MODE}" != fleet ]; then
+    validate_river_string loki_username "${LOKI_USERNAME}"
+    validate_river_string prometheus_username "${PROMETHEUS_USERNAME}"
+    validate_river_string tempo_username "${TEMPO_USERNAME}"
+    validate_river_string pyroscope_username "${PYROSCOPE_USERNAME}"
+fi
+if [ "${OPERATION_MODE}" != local ]; then
+    validate_river_string fleet_username "${FLEET_USERNAME}"
+    validate_river_string fleet_collector_name "${FLEET_COLLECTOR_NAME}"
+fi
+validate_river_string instance_name "${INSTANCE_NAME}"
 
 if [ "${OPERATION_MODE}" != fleet ] && [ "${TRACES_ENABLED}" = true ] && [ -z "${TEMPO_URL}" ]; then
     bashio::log.fatal "traces_enabled is on but tempo_url is empty."

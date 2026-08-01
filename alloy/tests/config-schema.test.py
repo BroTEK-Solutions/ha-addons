@@ -85,8 +85,14 @@ CASES: list[tuple[str, object, bool]] = [
     ("loki_url", "http://host/\\", False),
     ("prometheus_url", 'http://host/"', False),
     ("fleet_url", "https://fleet.example.net/a b", False),
+    ('loki_username', 'tenant"name', False),
+    ("prometheus_username", r"tenant\name", False),
+    ('tempo_username', 'tenant"name', False),
+    ("pyroscope_username", r"tenant\name", False),
+    ('fleet_username', 'tenant"name', False),
     # An empty instance name would produce a blank `instance` label everywhere.
     ("instance_name", "", False),
+    ('instance_name', 'home"assistant', False),
     ("instance_name", "home-assistant", True),
     # Durations must carry a unit or Alloy fails at startup instead, but the
     # whole Go duration grammar Alloy accepts has to stay valid.
@@ -116,6 +122,7 @@ CASES: list[tuple[str, object, bool]] = [
     ("fleet_attributes", "env=home,role=hass", True),
     ("fleet_attributes", "query=a=b", True),
     ("fleet_attributes", "token=YWJjZA==", True),
+    ("fleet_collector_name", r"Home\Assistant", False),
     ("fleet_attributes", "env=home,role", False),
     ("fleet_attributes", "=home", False),
     # init-alloy/run refuses to start on these, so the UI must not accept them.

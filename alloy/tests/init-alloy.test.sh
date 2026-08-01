@@ -102,13 +102,16 @@ LOKI='"loki_url":"http://loki:3100/loki/api/v1/push"'
 PROM='"prometheus_url":"http://prom:9090/api/v1/write"'
 FLEET='"fleet_url":"https://fleet.example.net"'
 
-echo "== at least one destination is required =="
-expect_fatal "no destinations at all" \
+echo "== unconfigured startup and destination selection =="
+expect_ok "fresh install starts for ingress configuration" \
   '{"instance_name":"hass","log_level":"info"}' \
-  "at least one of loki_url"
-expect_fatal "all destinations empty strings" \
+  "logging {"
+expect_ok "blank optional destinations still allow ingress configuration" \
   '{"loki_url":"","prometheus_url":"","fleet_url":"","instance_name":"hass"}' \
-  "at least one of loki_url"
+  "logging {"
+expect_fatal "explicit Local mode still requires a destination" \
+  '{"operation_mode":"local"}' \
+  "Local mode requires at least one local destination"
 
 echo
 echo "== each destination works on its own =="
@@ -146,6 +149,27 @@ expect_ok "Fleet shared write key" \
 expect_ok "both halves present" \
   "{${LOKI},\"loki_username\":\"123\",\"loki_password\":\"secret\"}" \
   'username = "123"'
+expect_fatal "quoted Loki username cannot break River syntax" \
+  '{"loki_url":"http://loki:3100/loki/api/v1/push","loki_username":"tenant\"name","loki_password":"secret","operation_mode":"local"}' \
+  "loki_username contains a quote, backslash or control character"
+expect_fatal "backslashed Prometheus username cannot break River syntax" \
+  '{"prometheus_url":"http://prometheus:9090/api/v1/write","prometheus_username":"tenant\\name","prometheus_password":"secret","operation_mode":"local"}' \
+  "prometheus_username contains a quote, backslash or control character"
+expect_fatal "quoted Tempo username cannot break River syntax" \
+  '{"tempo_url":"http://tempo:4318","tempo_username":"tenant\"name","tempo_password":"secret","operation_mode":"local"}' \
+  "tempo_username contains a quote, backslash or control character"
+expect_fatal "backslashed Pyroscope username cannot break River syntax" \
+  '{"pyroscope_url":"http://pyroscope:4040","pyroscope_username":"tenant\\name","pyroscope_password":"secret","operation_mode":"local"}' \
+  "pyroscope_username contains a quote, backslash or control character"
+expect_fatal "quoted Fleet username cannot break River syntax" \
+  '{"fleet_url":"https://fleet.example.net","fleet_username":"tenant\"name","gcloud_rw_api_key":"secret","operation_mode":"fleet"}' \
+  "fleet_username contains a quote, backslash or control character"
+expect_fatal "quoted instance name cannot break River syntax" \
+  '{"loki_url":"http://loki:3100/loki/api/v1/push","instance_name":"home\"assistant","operation_mode":"local"}' \
+  "instance_name contains a quote, backslash or control character"
+expect_fatal "backslashed Fleet collector name cannot break River syntax" \
+  '{"fleet_url":"https://fleet.example.net","fleet_username":"123","gcloud_rw_api_key":"secret","fleet_collector_name":"Home\\Assistant","operation_mode":"fleet"}' \
+  "fleet_collector_name contains a quote, backslash or control character"
 
 echo
 echo "== operation modes are exclusive and upgrades preserve legacy hybrid =="

@@ -96,7 +96,10 @@ schema:
     (?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?
     (?:[/?#](?:[^%\s"\\]|%[0-9A-Fa-f]{2})*)?$
     )?
-  loki_username: "str?"
+  # Basic-auth usernames are emitted inside quoted River strings. Empty is
+  # still valid (no auth), but quotes, backslashes and control characters are
+  # rejected before they can make the generated configuration unparseable.
+  loki_username: &river_optional_string 'match(^$|^[^"\\\x00-\x1F\x7F]+$)?'
   loki_password: "password?"
   logs_system: "bool"
   logs_homeassistant: "bool"
@@ -104,9 +107,9 @@ schema:
   logs_exclude_addons: 'match(^$|^[a-z0-9_-]+(,[a-z0-9_-]+)*$)?'
   logs_max_age: 'match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)?'
   prometheus_url: *endpoint_url
-  prometheus_username: "str?"
+  prometheus_username: *river_optional_string
   prometheus_password: "password?"
-  instance_name: "str(1,)?"
+  instance_name: 'match(^[^"\\\x00-\x1F\x7F]+$)?'
   # The positive Go duration grammar Alloy accepts, so `+1m30s`, `.5s`, `1.s`
   # and both microsecond symbols stay valid. Zero and negative intervals cannot
   # schedule useful work and are rejected before Alloy starts.
@@ -115,20 +118,20 @@ schema:
   homeassistant_metrics: "bool"
   alloy_metrics: "bool"
   tempo_url: *endpoint_url
-  tempo_username: "str?"
+  tempo_username: *river_optional_string
   tempo_password: "password?"
   traces_enabled: "bool"
   traces_network_access: "bool"
   pyroscope_url: *endpoint_url
-  pyroscope_username: "str?"
+  pyroscope_username: *river_optional_string
   pyroscope_password: "password?"
   alloy_profiling: "bool"
   fleet_url: *endpoint_url
-  fleet_username: "str?"
+  fleet_username: *river_optional_string
   gcloud_rw_api_key: "password?"
   # Retained for upgrades. The UI migrates this value to gcloud_rw_api_key.
   fleet_password: "password?"
-  fleet_collector_name: "str?"
+  fleet_collector_name: *river_optional_string
   # Quotes and backslashes are excluded here too, so the UI rejects what
   # init-alloy/run would otherwise refuse to start on.
   fleet_attributes: 'match(^$|^[^=,"\\]+=[^,"\\]*(,[^=,"\\]+=[^,"\\]*)*$)?'
