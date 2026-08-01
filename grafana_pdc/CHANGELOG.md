@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.4](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.0.3...grafana-pdc-v1.0.4) (2026-08-01)
+
+
+### Bug Fixes
+
+* **grafana_pdc:** allow clean process lifecycle ([c5081d8](https://github.com/BroTEK-Solutions/ha-addons/commit/c5081d8768fca70cc624c5931a5aa38625535ede))
+
 ## [1.0.3](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.0.2...grafana-pdc-v1.0.3) (2026-08-01)
 
 
