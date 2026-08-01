@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 )
 
 const settingsSchemaVersion = 2
@@ -31,6 +33,12 @@ func (s *fileStore) Load() (map[string]any, error) {
 		version, valid := settings["schema_version"].(float64)
 		if !valid || version != settingsSchemaVersion {
 			return nil, fmt.Errorf("read settings: unsupported schema_version %v", settings["schema_version"])
+		}
+		if migrateReservedFleetAttribute(settings) {
+			if err := s.Save(settings); err != nil {
+				return nil, fmt.Errorf("persist Fleet attribute migration: %w", err)
+			}
+			return readSettings(s.path)
 		}
 		return settings, nil
 	}
@@ -61,6 +69,33 @@ func (s *fileStore) Load() (map[string]any, error) {
 	return readSettings(s.path)
 }
 
+func migrateReservedFleetAttribute(settings map[string]any) bool {
+	attributes, ok := settings["fleet_attributes"].(string)
+	if !ok || attributes == "" {
+		return false
+	}
+	parts := strings.Split(attributes, ",")
+	retained := make([]string, 0, len(parts))
+	changed := false
+	for _, part := range parts {
+		key, _, hasValue := strings.Cut(part, "=")
+		if hasValue && key == "ha_addon_instance" {
+			changed = true
+			continue
+		}
+		retained = append(retained, part)
+	}
+	if !changed {
+		return false
+	}
+	if len(retained) == 0 {
+		delete(settings, "fleet_attributes")
+	} else {
+		settings["fleet_attributes"] = strings.Join(retained, ",")
+	}
+	return true
+}
+
 func (s *fileStore) Save(settings map[string]any) error {
 	stored := make(map[string]any, len(settings)+1)
 	for key, value := range settings {
@@ -72,6 +107,16 @@ func (s *fileStore) Save(settings map[string]any) error {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("create settings directory: %w", err)
 	}
+	lock, err := os.OpenFile(s.path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("open settings lock: %w", err)
+	}
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		return fmt.Errorf("lock settings: %w", err)
+	}
+	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) //nolint:errcheck -- closing the descriptor also releases the lock
+
 	temporary, err := os.CreateTemp(dir, "."+filepath.Base(s.path)+".tmp-*")
 	if err != nil {
 		return fmt.Errorf("create temporary settings: %w", err)

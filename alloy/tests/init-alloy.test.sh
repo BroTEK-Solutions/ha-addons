@@ -30,7 +30,7 @@ pass() { echo "  ✓ $1"; }
 indent() { echo "      ${1//$'\n'/$'\n'      }"; }
 
 # Run init-alloy/run against a given settings.json.
-# $1 = settings JSON. Sets RUN_RC, RUN_OUT and RUN_CONFIG.
+# $1 = settings JSON. Sets RUN_RC, RUN_OUT, RUN_CONFIG and RUN_SETTINGS.
 run_init() {
   local tmp
   tmp="$(mktemp -d)"
@@ -53,6 +53,7 @@ run_init() {
   RUN_RC=$?
   RUN_CONFIG=""
   [ -f "${tmp}/etc/config.alloy" ] && RUN_CONFIG="$(cat "${tmp}/etc/config.alloy")"
+  RUN_SETTINGS="$(cat "${tmp}/data/settings.json")"
   rm -rf "${tmp}"
 }
 
@@ -117,6 +118,13 @@ expect_ok "metrics only" "{${PROM},\"instance_name\":\"hass\"}" \
 # The regression that started all this: a Fleet-only install must be possible.
 expect_ok "fleet only" "{${FLEET},\"instance_name\":\"hass\"}" \
   "remotecfg" 'url            = "https://fleet.example.net"'
+TESTS=$((TESTS + 1))
+run_init "{${FLEET},\"instance_name\":\"hass\",\"restart_required\":true}"
+if [ "${RUN_RC}" -ne 0 ] || ! jq -e '.restart_required == false' <<<"${RUN_SETTINGS}" >/dev/null; then
+  fail "successful initialization marks saved settings as applied"
+else
+  pass "successful initialization marks saved settings as applied"
+fi
 
 echo
 echo "== defaults are applied when an option is absent =="
@@ -287,6 +295,20 @@ expect_fatal "not key=value" \
 expect_fatal "empty key" \
   "{${FLEET},\"fleet_attributes\":\"=home\"}" \
   "has an empty key"
+TESTS=$((TESTS + 1))
+run_init "{${FLEET},\"fleet_attributes\":\"env=home,ha_addon_instance=other,role=hass\"}"
+if [ "${RUN_RC}" -ne 0 ]; then
+  fail "reserved App targeting key is migrated: exited ${RUN_RC}"
+  indent "${RUN_OUT}"
+elif grep -qF '"ha_addon_instance" = "other"' <<<"${RUN_CONFIG}"; then
+  fail "reserved App targeting key is migrated: retained the old value"
+elif ! grep -qF '"ha_addon_instance" = "homeassistant"' <<<"${RUN_CONFIG}" \
+  || ! grep -qF '"env" = "home"' <<<"${RUN_CONFIG}" \
+  || ! grep -qF '"role" = "hass"' <<<"${RUN_CONFIG}"; then
+  fail "reserved App targeting key is migrated: lost the App value or adjacent attributes"
+else
+  pass "reserved App targeting key is migrated"
+fi
 expect_fatal "embedded quote breaks River syntax" \
   "{${FLEET},\"fleet_attributes\":\"env=ho\\\"me\"}" \
   "contains a quote or backslash"

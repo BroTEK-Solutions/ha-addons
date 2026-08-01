@@ -28,6 +28,13 @@ if [ ! -f "${SETTINGS_FILE}" ]; then
     fi
 fi
 
+# Serialize the settings snapshot, config generation, and applied marker with
+# ingress saves. A save that arrives during initialization waits, then retains
+# restart_required=true for the next restart instead of being marked applied.
+exec {SETTINGS_LOCK_FD}>"${SETTINGS_FILE}.lock"
+chmod 0600 "${SETTINGS_FILE}.lock"
+flock -x "${SETTINGS_LOCK_FD}"
+
 settings_has_value() {
     jq -e --arg key "${1}" \
         '.[$key] != null and ((.[$key] | tostring) | length) > 0' \
@@ -38,6 +45,15 @@ settings_get() {
     jq -r --arg key "${1}" \
         'if has($key) and .[$key] != null then .[$key] else empty end' \
         "${SETTINGS_FILE}"
+}
+
+mark_settings_applied() {
+    jq -e '.restart_required == true' "${SETTINGS_FILE}" >/dev/null || return 0
+    local temporary
+    temporary=$(mktemp "${SETTINGS_FILE}.tmp.XXXXXX")
+    jq '.restart_required = false' "${SETTINGS_FILE}" >"${temporary}"
+    chmod 0600 "${temporary}"
+    mv -f "${temporary}" "${SETTINGS_FILE}"
 }
 
 # Safe mode is deliberately the only native option that changes Alloy's
@@ -61,6 +77,7 @@ MANUAL_CONFIG_ENABLED=$(settings_get manual_config_enabled)
 if [ "${MANUAL_CONFIG_ENABLED}" = true ] && [ -n "${MANUAL_CONFIG}" ]; then
     bashio::log.warning "Using the ingress-managed manual Alloy configuration override."
     printf '%s\n' "${MANUAL_CONFIG}" >"${CONFIG_FILE}"
+    mark_settings_applied
     bashio::log.info "Alloy config copied to ${CONFIG_FILE}"
     exit 0
 fi
@@ -376,6 +393,7 @@ validate_attributes() {
     [ -n "${FLEET_ATTRIBUTES}" ] || return 0
     local -a pairs
     IFS=',' read -r -a pairs <<<"${FLEET_ATTRIBUTES}"
+    local -a retained_pairs=()
     local pair
     for pair in "${pairs[@]}"; do
         case "${pair}" in
@@ -395,7 +413,15 @@ validate_attributes() {
             bashio::log.fatal "fleet_attributes entry '${pair}' has an empty key."
             bashio::exit.nok
         fi
+        if [ "${pair%%=*}" = ha_addon_instance ]; then
+            bashio::log.warning "Ignoring legacy fleet_attributes key 'ha_addon_instance';"
+            bashio::log.warning "the App now manages this targeting attribute from instance_name."
+            continue
+        fi
+        retained_pairs+=("${pair}")
     done
+    local IFS=','
+    FLEET_ATTRIBUTES="${retained_pairs[*]}"
 }
 
 validate_attributes
@@ -429,5 +455,6 @@ bashio::log.info "Log level: ${LOG_LEVEL}"
 # Invoke via `bash` (not the shebang) so the exported options above are inherited;
 # the generator must NOT run under with-contenv, which would reset the environment.
 bash "${GENERATOR}" > "${CONFIG_FILE}"
+mark_settings_applied
 
 bashio::log.info "Alloy config generated at ${CONFIG_FILE}"

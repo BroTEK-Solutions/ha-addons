@@ -7,7 +7,9 @@ Run Grafana Alloy on Home Assistant OS with a conditional ingress configuration
 page and the proxied Alloy component graph.
 
 - **Fleet Management mode** runs pipelines supplied by Grafana Cloud and makes
-  the shared read/write key available to them as `GCLOUD_RW_API_KEY`.
+  the shared read/write key available to them as `GCLOUD_RW_API_KEY`. Its guided
+  setup can generate a secret-free starter manifest and a short-lived command
+  that pipes it to `gcx`; the App itself never writes or reconciles Fleet.
 - **Local mode** builds selectable HAOS/Core/App log pipelines, host/Home
   Assistant/Alloy metric pipelines, OTLP trace forwarding and Alloy
   self-profiling.

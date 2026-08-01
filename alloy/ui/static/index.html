@@ -39,7 +39,7 @@
       <div data-mode="fleet" hidden>
         <section class="card">
           <h2>Fleet Management</h2>
-          <p>Copy the URL and numeric username from the Fleet Management API page. The shared key is also available to remotely supplied pipelines as <code>GCLOUD_RW_API_KEY</code>.</p>
+          <p>Copy the URL and numeric username from the Fleet Management API page. The shared key is also available to remotely supplied pipelines as <code>GCLOUD_RW_API_KEY</code>. This App remains a Fleet consumer and never writes, reconciles or removes Fleet resources itself.</p>
           <div class="grid">
             <div class="field"><label for="fleet_url">Fleet Management URL</label><p class="help">The complete regional service URL, including <code>https://</code>.</p><input id="fleet_url" name="fleet_url" type="url" required></div>
             <div class="field"><label for="fleet_username">Fleet Management username</label><p class="help">The numeric Fleet instance ID, not an email address.</p><input id="fleet_username" name="fleet_username" autocomplete="username" required></div>
@@ -54,16 +54,37 @@
             </div>
           </details>
         </section>
+
+        <section class="card">
+          <h2>Fleet starter pipeline</h2>
+          <p>Select the metrics, logs, traces and profiles below, then use <strong>Save &amp; restart</strong> before generating a short-lived download command. The manifest contains endpoints and tenant IDs, but references the stored shared key through <code>GCLOUD_RW_API_KEY</code>; the key itself is never served.</p>
+          <p><code>gcx</code> creates this pipeline once. The App does not reconcile later changes, disable it, or remove it on uninstall. Continue managing it in Fleet Management after creation.</p>
+          <div class="field">
+            <label for="fleet-reference-direct-host">Home Assistant host for the terminal command</label>
+            <p class="help">A hostname or IP address reachable from the machine running <code>gcx</code>, without a scheme or port. This affects only the displayed command and is not saved.</p>
+            <input id="fleet-reference-direct-host" value="homeassistant.local" autocomplete="off" data-transient>
+          </div>
+          <button type="button" id="generate-fleet-reference">Generate 10-minute gcx command</button>
+          <div id="fleet-reference" hidden>
+            <p class="help">Run this from a machine that can reach the Home Assistant host and whose <code>gcx</code> context targets the intended Grafana Cloud stack.</p>
+            <pre><code id="fleet-reference-command"></code></pre>
+            <p id="fleet-reference-expiry" class="help"></p>
+            <a id="fleet-reference-download" href="#" download="home-assistant-fleet-pipeline.yaml">Download the manifest instead</a>
+          </div>
+        </section>
       </div>
 
-      <div data-mode="local" hidden>
+      <div data-mode="local fleet" hidden>
+        <aside data-mode="fleet" hidden>
+          These controls build the one-time Fleet starter manifest; they do not create local pipelines while Fleet mode is selected. Destination passwords use the shared Grafana Cloud key above.
+        </aside>
         <section class="card">
           <h2>Metrics</h2>
           <p>Collect host, Home Assistant, and Alloy metrics and send them to a Prometheus or Mimir remote-write endpoint.</p>
           <div class="grid">
             <div class="field wide"><label for="prometheus_url">Prometheus remote-write endpoint</label><p class="help">For Grafana Cloud this normally ends in <code>/api/prom/push</code>.</p><input id="prometheus_url" name="prometheus_url" type="url"></div>
             <div class="field"><label for="prometheus_username">Metrics tenant or username</label><p class="help">Grafana Cloud metrics instance ID or basic-auth username.</p><input id="prometheus_username" name="prometheus_username"></div>
-            <div class="field"><label for="prometheus_password">Metrics token</label><p class="help">Access-policy token or basic-auth password.</p><input id="prometheus_password" name="prometheus_password" type="password" data-secret><label class="clear"><input type="checkbox" data-clear-secret="prometheus_password"> Clear stored token</label></div>
+            <div class="field" data-mode="local"><label for="prometheus_password">Metrics token</label><p class="help">Access-policy token or basic-auth password.</p><input id="prometheus_password" name="prometheus_password" type="password" data-secret><label class="clear"><input type="checkbox" data-clear-secret="prometheus_password"> Clear stored token</label></div>
           </div>
           <div class="toggles">
             <div><label class="switch"><input name="host_metrics" type="checkbox" checked> Host metrics</label><p class="help">Collect CPU, memory, disk, load and network metrics from the HAOS host.</p></div>
@@ -79,7 +100,7 @@
           <div class="grid">
             <div class="field wide"><label for="loki_url">Loki push endpoint</label><p class="help">The complete Loki HTTP push URL.</p><input id="loki_url" name="loki_url" type="url"></div>
             <div class="field"><label for="loki_username">Logs tenant or username</label><p class="help">Grafana Cloud logs instance ID or basic-auth username.</p><input id="loki_username" name="loki_username"></div>
-            <div class="field"><label for="loki_password">Logs token</label><p class="help">Access-policy token or basic-auth password.</p><input id="loki_password" name="loki_password" type="password" data-secret><label class="clear"><input type="checkbox" data-clear-secret="loki_password"> Clear stored token</label></div>
+            <div class="field" data-mode="local"><label for="loki_password">Logs token</label><p class="help">Access-policy token or basic-auth password.</p><input id="loki_password" name="loki_password" type="password" data-secret><label class="clear"><input type="checkbox" data-clear-secret="loki_password"> Clear stored token</label></div>
           </div>
           <div class="toggles">
             <div><label class="switch"><input name="logs_system" type="checkbox" checked> HAOS system logs</label><p class="help">Collect operating-system services such as Supervisor, NetworkManager and the kernel.</p></div>
@@ -101,7 +122,7 @@
           <div class="grid">
             <div class="field wide"><label for="tempo_url">Tempo OTLP HTTP endpoint</label><p class="help">The OTLP HTTP base endpoint supplied by Tempo or Grafana Cloud.</p><input id="tempo_url" name="tempo_url" type="url"></div>
             <div class="field"><label for="tempo_username">Traces tenant or username</label><p class="help">Numeric Grafana Cloud traces tenant ID or a basic-auth username.</p><input id="tempo_username" name="tempo_username"></div>
-            <div class="field"><label for="tempo_password">Traces token</label><p class="help">Access-policy token or basic-auth password paired with the traces username.</p><input id="tempo_password" name="tempo_password" type="password" data-secret><label class="clear"><input type="checkbox" data-clear-secret="tempo_password"> Clear stored token</label></div>
+            <div class="field" data-mode="local"><label for="tempo_password">Traces token</label><p class="help">Access-policy token or basic-auth password paired with the traces username.</p><input id="tempo_password" name="tempo_password" type="password" data-secret><label class="clear"><input type="checkbox" data-clear-secret="tempo_password"> Clear stored token</label></div>
           </div>
         </section>
 
@@ -112,7 +133,7 @@
           <div class="grid">
             <div class="field wide"><label for="pyroscope_url">Pyroscope endpoint</label><p class="help">Complete profile write endpoint supplied by Pyroscope or Grafana Cloud.</p><input id="pyroscope_url" name="pyroscope_url" type="url"></div>
             <div class="field"><label for="pyroscope_username">Profiles tenant or username</label><p class="help">Numeric Grafana Cloud profiles tenant ID or a basic-auth username.</p><input id="pyroscope_username" name="pyroscope_username"></div>
-            <div class="field"><label for="pyroscope_password">Profiles token</label><p class="help">Access-policy token or basic-auth password paired with the profiles username.</p><input id="pyroscope_password" name="pyroscope_password" type="password" data-secret><label class="clear"><input type="checkbox" data-clear-secret="pyroscope_password"> Clear stored token</label></div>
+            <div class="field" data-mode="local"><label for="pyroscope_password">Profiles token</label><p class="help">Access-policy token or basic-auth password paired with the profiles username.</p><input id="pyroscope_password" name="pyroscope_password" type="password" data-secret><label class="clear"><input type="checkbox" data-clear-secret="pyroscope_password"> Clear stored token</label></div>
           </div>
         </section>
       </div>
@@ -126,7 +147,7 @@
             <div class="field"><label for="alloy_stability_level">Minimum component stability</label><p class="help">Keep generally available unless additional configuration needs a preview component.</p><select id="alloy_stability_level" name="alloy_stability_level"><option selected>generally-available</option><option>public-preview</option><option>experimental</option></select></div>
             <div><label class="switch"><input name="alloy_disable_telemetry" type="checkbox" checked> Disable anonymous Alloy usage reporting</label><p class="help">Pass <code>--disable-reporting</code> so Alloy sends no anonymous feature-usage report to Grafana.</p></div>
             <div class="field wide"><label for="alloy_additional_args">Additional Alloy startup flags</label><p class="help">Whitespace-separated <code>--flag</code> or <code>--flag=value</code> arguments. Invalid flags are rejected before saving.</p><textarea id="alloy_additional_args" name="alloy_additional_args" rows="3"></textarea></div>
-            <div class="field wide"><label for="additional_config">Additional Alloy configuration</label><p class="help">River blocks appended verbatim after the generated configuration.</p><textarea id="additional_config" name="additional_config" rows="8" spellcheck="false"></textarea></div>
+            <div class="field wide" data-mode="local"><label for="additional_config">Additional Alloy configuration</label><p class="help">River blocks appended verbatim after the generated configuration.</p><textarea id="additional_config" name="additional_config" rows="8" spellcheck="false"></textarea></div>
             <div class="field wide break-glass">
               <label class="switch"><input id="manual_config_enabled" name="manual_config_enabled" type="checkbox"> Full manual Alloy configuration override</label>
               <p class="help">Break-glass mode replaces every generated pipeline with the complete Alloy configuration below. The candidate must pass Alloy validation before it can be saved.</p>

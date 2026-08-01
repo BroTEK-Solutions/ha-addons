@@ -144,7 +144,8 @@ check_contains "$OUT" 'id             = "homeassistant"'
 check_contains "$OUT" 'poll_frequency = "1m"'
 check_absent   "$OUT" 'loki.source.journal'
 check_absent   "$OUT" 'prometheus.exporter.unix'
-check_absent   "$OUT" 'attributes     = {'
+check_contains "$OUT" 'attributes     = {'
+check_contains "$OUT" '"ha_addon_instance" = "homeassistant",'
 check_absent   "$OUT" 'name           ='
 check_absent   "$OUT" 'basic_auth {'
 validate_alloy "$OUT" "fleet-only"
@@ -156,6 +157,7 @@ OUT="$(gen LOG_LEVEL=info FLEET_URL=https://fleet-management-prod-001.example.in
 check_contains "$OUT" 'id             = "hass-test"'
 check_contains "$OUT" 'name           = "Home Assistant"'
 check_contains "$OUT" 'attributes     = {'
+check_contains "$OUT" '"ha_addon_instance" = "hass-test",'
 check_contains "$OUT" '"env" = "home",'
 check_contains "$OUT" '"role" = "hass",'
 check_contains "$OUT" 'poll_frequency = "30s"'
@@ -171,10 +173,30 @@ check_contains "$OUT" 'remotecfg {'
 check_absent   "$OUT" 'loki.write "loki"'
 check_absent   "$OUT" 'prometheus.remote_write "metrics"'
 
+OUT="$(gen OPERATION_MODE=fleet FLEET_URL=https://fleet-management-prod-001.example.invalid \
+  ADDITIONAL_CONFIG='prometheus.exporter.self "unexpected" {}')"
+check_absent   "$OUT" 'prometheus.exporter.self "unexpected" {}'
+
 OUT="$(gen OPERATION_MODE=local FLEET_URL=https://fleet-management-prod-001.example.invalid \
   LOKI_URL=https://logs.example.net/loki/api/v1/push)"
 check_contains "$OUT" 'loki.write "loki"'
 check_absent   "$OUT" 'remotecfg {'
+
+echo "== Fleet starter pipeline contains selected components without another controller =="
+OUT="$(gen OPERATION_MODE=fleet FLEET_REFERENCE_PIPELINE=true \
+  FLEET_URL=https://fleet-management-prod-001.example.invalid FLEET_USERNAME=987654 \
+  LOKI_URL=https://logs.example.net/loki/api/v1/push LOKI_USERNAME=111 \
+  PROMETHEUS_URL=https://prom.example.net/api/prom/push PROMETHEUS_USERNAME=222 \
+  ADDITIONAL_CONFIG='prometheus.exporter.self "retained-local-config" {}')"
+check_contains "$OUT" 'loki.source.journal "journal"'
+check_contains "$OUT" 'prometheus.exporter.unix "host"'
+check_contains "$OUT" 'password = sys.env("GCLOUD_RW_API_KEY")'
+check_absent   "$OUT" 'prometheus.exporter.self "retained-local-config" {}'
+check_absent   "$OUT" 'logging {'
+check_absent   "$OUT" 'remotecfg {'
+check_absent   "$OUT" 'sys.env("LOKI_PASSWORD")'
+check_absent   "$OUT" 'sys.env("PROMETHEUS_PASSWORD")'
+validate_alloy "$OUT" "fleet-starter-pipeline"
 
 echo "== local signal pipelines =="
 OUT="$(gen OPERATION_MODE=local PROMETHEUS_URL=https://prom.example.net/api/prom/push \

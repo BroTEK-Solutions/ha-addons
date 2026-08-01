@@ -5,6 +5,13 @@ const modeSelect = document.querySelector("#operation_mode");
 const legacyWarning = document.querySelector("#legacy-warning");
 const manualToggle = document.querySelector("#manual_config_enabled");
 const manualPanel = document.querySelector("#manual-config-panel");
+const fleetReference = document.querySelector("#fleet-reference");
+const fleetReferenceCommand = document.querySelector("#fleet-reference-command");
+const fleetReferenceExpiry = document.querySelector("#fleet-reference-expiry");
+const fleetReferenceDownload = document.querySelector("#fleet-reference-download");
+const fleetReferenceDirectHost = document.querySelector("#fleet-reference-direct-host");
+let configDirty = false;
+let configApplied = false;
 const defaults = {
   instance_name: "homeassistant", metrics_scrape_interval: "60s", fleet_poll_frequency: "1m",
   logs_exclude_addons: "alloy", logs_max_age: "24h", log_level: "info",
@@ -34,7 +41,7 @@ async function loadStatus() {
 
 function setMode(mode) {
   document.querySelectorAll("[data-mode]").forEach((section) => {
-    const active = section.dataset.mode === mode;
+    const active = section.dataset.mode.split(/\s+/).includes(mode);
     section.hidden = !active;
     section.querySelectorAll("input,select,textarea").forEach((field) => { field.disabled = !active; });
   });
@@ -76,6 +83,8 @@ async function loadConfig() {
   });
   setMode(modeSelect.value);
   setManualOverride(manualToggle.checked);
+  configApplied = !data.restart_required;
+  configDirty = false;
   setNotice("");
 }
 
@@ -95,7 +104,7 @@ function serialize() {
 }
 
 async function save(restart) {
-  if (!form.reportValidity()) return;
+  if (!form.reportValidity()) return false;
   setNotice("Validating and saving…");
   document.querySelectorAll("button").forEach((button) => { button.disabled = true; });
   try {
@@ -111,19 +120,71 @@ async function save(restart) {
       if (!restartResponse.ok) throw new Error("Configuration was saved, but restart could not be requested");
       setTimeout(() => location.reload(), 8000);
     } else {
+      configApplied = false;
       setNotice(data.message, "success");
       await loadConfig();
     }
+    return true;
   } catch (error) {
     setNotice(error.message, "error");
+    return false;
   } finally {
     document.querySelectorAll("button").forEach((button) => { button.disabled = false; });
   }
 }
 
+async function generateFleetReference() {
+  if (configDirty || !configApplied) {
+    setNotice("Save & restart to apply these settings before generating the Fleet starter pipeline.", "error");
+    return;
+  }
+  let hostname;
+  try {
+    hostname = formatDirectHost(fleetReferenceDirectHost.value);
+  } catch (error) {
+    setNotice(error.message, "error");
+    return;
+  }
+  setNotice("Generating Fleet starter pipeline…");
+  try {
+    const response = await fetch("api/fleet-reference", { method: "POST", headers: { Accept: "application/json" } });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Could not generate Fleet starter pipeline");
+    fleetReferenceCommand.textContent = `curl -fsSL http://${hostname}:8099${data.path} | gcx fleet pipelines create -f -`;
+    fleetReferenceExpiry.textContent = `This download expires at ${new Date(data.expires_at).toLocaleTimeString()}.`;
+    fleetReferenceDownload.href = data.path.replace(/^\/+/, "");
+    fleetReference.hidden = false;
+    setNotice("Fleet starter pipeline is ready. gcx will create it once; later changes belong in Fleet Management.", "success");
+  } catch (error) {
+    setNotice(error.message, "error");
+  }
+}
+
+function formatDirectHost(value) {
+  const entered = value.trim();
+  if (!entered) throw new Error("Enter the Home Assistant hostname or IP address reachable from your terminal.");
+  const bracketed = entered.startsWith("[") && entered.endsWith("]");
+  const host = bracketed ? entered.slice(1, -1) : entered;
+  if (!host || !/^[a-zA-Z0-9._:%-]+$/.test(host) || entered.includes("/") || entered.includes("@")) {
+    throw new Error("Enter a hostname or IP address without a scheme, port, or path.");
+  }
+  const colonCount = (host.match(/:/g) || []).length;
+  if (colonCount === 1) throw new Error("Enter a hostname or IP address without a scheme, port, or path.");
+  if (bracketed && colonCount < 2) throw new Error("Square brackets are only needed for an IPv6 address.");
+  return colonCount >= 2 ? `[${host}]` : host;
+}
+
 modeSelect.addEventListener("change", () => { legacyWarning.hidden = true; setMode(modeSelect.value); });
 manualToggle.addEventListener("change", () => setManualOverride(manualToggle.checked));
+function noteFormEdit(event) {
+  fleetReference.hidden = true;
+  if (event?.target?.dataset?.transient !== undefined) return;
+  configDirty = true;
+}
+form.addEventListener("input", noteFormEdit);
+form.addEventListener("change", noteFormEdit);
 form.addEventListener("submit", (event) => { event.preventDefault(); void save(false); });
 document.querySelector("#save-restart").addEventListener("click", () => { void save(true); });
+document.querySelector("#generate-fleet-reference").addEventListener("click", () => { void generateFleetReference(); });
 loadConfig().catch((error) => setNotice(error.message, "error"));
 loadStatus().catch(() => {});
