@@ -1,87 +1,107 @@
 ---
 configuration:
   signing_token:
-    name: Signing token
+    name: Grafana Cloud PDC signing token
     description: >-
-      The PDC signing token from your Grafana Cloud stack. Keep this secret;
-      it authorizes this connector to join your stack and needs the
-      pdc-signing:write scope.
+      Copy this secret from **Connections > Private data source connections >
+      Configuration details** in your Grafana Cloud stack. It authorizes this
+      connector to join the PDC network and must include the
+      `pdc-signing:write` scope.
   hosted_grafana_id:
     name: Hosted Grafana ID
     description: >-
-      The positive numeric instance ID for your Grafana Cloud stack. This is
-      not your Grafana username or email address.
+      Copy the positive numeric **Hosted Grafana ID** from the PDC
+      configuration details. This is not your Grafana username, stack URL or
+      email address.
   cluster:
     name: Cluster name
     description: >-
-      The PDC cluster value shown in Grafana Cloud Configuration Details,
-      using lowercase letters, numbers and hyphens.
+      Copy the **Cluster** value exactly from the PDC configuration details.
+      It uses lowercase letters, numbers and hyphens; do not infer it from the
+      region name.
   allowed_endpoints:
     name: Allowed endpoints
     description: >-
-      Hostname or IP and port entries that Grafana may reach through this
-      connector, such as homeassistant:8123. Leave empty to allow every
-      endpoint reachable from the App network.
+      Optional `host:port` allowlist for destinations Grafana may reach through
+      this connector, for example `homeassistant:8123`. **An empty list permits
+      every destination reachable from the App network.** Prefer a small,
+      explicit list for known data sources.
   log_level:
     name: Log level
     description: >-
-      Verbosity of Private Data Source Connect logs. Use debug only while
-      investigating a connection problem.
+      Controls messages written to the App log. Keep **info** for normal use;
+      choose **debug** temporarily when diagnosing registration, DNS or tunnel
+      problems.
   connections:
     name: Connections
     description: >-
-      Number of concurrent PDC connections to maintain, from 1 to 50. The
-      experimental GoSSH implementation requires exactly 1.
+      Number of parallel reverse SSH tunnels to maintain. Default: **1**.
+      More connections can improve availability, but the experimental Go SSH
+      implementation supports exactly one.
   region_format:
     name: Use region endpoint format
     description: >-
-      Enable the alternate regional endpoint naming format when your Grafana
-      Cloud stack requires it.
+      Changes how the agent derives API and gateway hostnames from the cluster
+      and domain. Default: **off**. Enable only when Grafana Cloud configuration
+      details or support explicitly requires the regional format.
   domain:
     name: Grafana domain
     description: >-
-      Grafana Cloud domain used to derive service endpoints. Leave this at
-      grafana.net unless your stack uses a different Grafana domain.
+      Base domain used to derive PDC API and gateway hostnames. Default:
+      **grafana.net**. This is redundant when explicit API and gateway FQDNs
+      are supplied; change it only for a custom Grafana deployment.
   api_fqdn:
     name: API FQDN override
     description: >-
-      Optional API hostname override. Leave empty to derive it from the Grafana
-      domain and use this only when directed by Grafana support.
+      Replaces the automatically derived certificate-signing API hostname.
+      Leave unset for Grafana Cloud; use a hostname only when Grafana support
+      or a private deployment provides one. Do not include `https://`.
   gateway_fqdn:
     name: Gateway FQDN override
     description: >-
-      Optional gateway hostname override. Leave empty to derive it from the
-      Grafana domain and use this only when directed by Grafana support.
+      Replaces the automatically derived reverse SSH gateway hostname. Leave
+      unset for Grafana Cloud; use a hostname only when Grafana support or a
+      private deployment provides one. Do not include a scheme or port.
   cert_expiry_window:
     name: Certificate expiry window
     description: >-
-      How long before a certificate expires PDC should renew it, as a duration
-      such as 5m or 1h.
+      How early the agent renews its short-lived certificate. Default: **5m**.
+      Enter a Go duration such as `5m` or `1h`; change this only for deliberate
+      certificate lifecycle tuning.
   cert_check_expiry_period:
     name: Certificate check interval
     description: >-
-      How often PDC checks certificate expiry, as a duration such as 1m or
-      30s. Set to 0 to check only during startup.
+      How often the agent checks whether its certificate needs renewal.
+      Default: **1m**. Enter a duration such as `30s`; use `0` to check only at
+      startup.
   retry_max:
     name: Maximum retries
     description: >-
-      Number of HTTP API retry attempts, from 0 to 20.
+      Maximum retries for failed certificate-signing API requests. Default:
+      **4**; accepted range: 0–20. The agent applies its own retry delay.
   parse_metrics:
-    name: Parse metrics
+    name: Parse OpenSSH connection metrics
     description: >-
-      Parse and expose PDC metrics on the local metrics endpoint for Home
-      Assistant health monitoring.
+      Default: **on**. Parses verbose OpenSSH output into PDC Prometheus metrics
+      such as connection and forwarding activity on port 8090. Turn this off
+      only if parsing causes trouble; it does not disable the metrics server or
+      change tunnel logging.
   use_gossh:
     name: Use GoSSH (experimental)
     description: >-
-      Use the experimental GoSSH connection implementation. Leave disabled
-      unless Grafana support asks you to enable this advanced option.
+      Replaces the normal OpenSSH subprocess with the agent's experimental Go
+      SSH implementation. Default: **off**. It supports one connection and a
+      narrower endpoint allowlist syntax; enable only for targeted testing or
+      when Grafana support asks.
   connect_timeout_seconds:
     name: Connection timeout
     description: >-
-      Number of seconds to wait for a connection attempt, from 1 to 600.
+      Maximum time allowed for one SSH connection attempt. Default: **1
+      second**; accepted range: 1–600. Increase only for a known slow or
+      high-latency network path.
 network:
   8090/tcp:
     description: >-
-      Private Data Source Connect metrics endpoint. No host port is assigned by
-      default; map one only when you need to inspect metrics externally.
+      Unauthenticated Prometheus metrics endpoint (`/metrics`). It is not
+      published to the Home Assistant host by default; map a host port only
+      when an external scraper needs access and restrict that access yourself.

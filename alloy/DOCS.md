@@ -1,363 +1,155 @@
 # Grafana Alloy for Home Assistant
 
-Ship Home Assistant OS logs to a remote [Loki](https://grafana.com/oss/loki/) instance and host system metrics to a remote Prometheus instance using [Grafana Alloy](https://grafana.com/docs/alloy/latest/).
+This App runs [Grafana Alloy](https://grafana.com/docs/alloy/latest/) on Home
+Assistant OS. It can either run pipelines supplied by Grafana Cloud Fleet
+Management or build local pipelines for logs, metrics, traces and profiles.
 
-This add-on replaces the deprecated Promtail add-on, which is incompatible with modern HAOS versions (11+) due to systemd 252+ compact journal format changes.
+Open **Web UI** to configure the App. The page shows only the controls relevant
+to the selected operation mode, saves through the Supervisor API, and links to
+Alloy's component graph. Saving does not interrupt collection; choose **Save and
+restart** when you are ready to apply the new configuration.
 
-It bundles a fixed Alloy release - the exact version is pinned in `alloy/Dockerfile`, and add-on
-updates are what move it. Only `amd64` and `aarch64` are built, and the add-on is flagged
-`stage: experimental`.
+## Choose one operation mode
 
-## Configuration
+### Fleet Management
 
-### Destinations
+Fleet mode registers Alloy with Grafana Cloud and runs the configuration
+delivered by Fleet Management. Locally generated log, metric, trace and profile
+pipelines are disabled in this mode, even if old local endpoint values remain
+stored after an upgrade.
 
-**At least one of `loki_url` (logs), `prometheus_url` (metrics) or `fleet_url` (Fleet
-Management) must be set.** No single one is required on its own; with all three empty the
-add-on refuses to start with `FATAL: set at least one of loki_url (logs), prometheus_url
-(metrics) or fleet_url (Fleet Management).` Each destination generates its own pipelines
-independently, so a logs-only, metrics-only or Fleet-only deployment is equally valid.
+Copy all three required values from the **API** tab of Fleet Management:
 
-None of the three has a default, so a fresh install starts with all of them empty and you fill
-in the ones you want. **Clearing a field disables that destination** - the add-on regenerates its
-Alloy config on every start, so removing a URL removes the corresponding pipelines.
+- the complete regional Fleet Management URL;
+- the numeric Fleet username/instance ID; and
+- a Grafana Cloud read/write API key.
 
-Options are validated when you save, before the add-on starts. A malformed URL, a duration
-without a unit (`60` rather than `60s`), an empty instance name, or a `fleet_attributes` entry
-that is not `key=value` is rejected in the UI rather than becoming a start-up failure.
+The key is used to authenticate remote configuration and is exported to remote
+pipelines as `GCLOUD_RW_API_KEY`. A Fleet pipeline can therefore use the same
+key for Loki, Prometheus/Mimir, Tempo or Pyroscope without embedding another
+token in its configuration. Grant only the scopes those pipelines need.
 
-### Logs
+The optional collector name and `key=value` attributes control how the collector
+appears and which pipelines target it. Alloy checks for updates every **1m** by
+default; the minimum supported poll interval is 10 seconds.
 
-- **loki_url**: the full URL of your Loki push endpoint, e.g.
-  `http://192.168.1.45:3100/loki/api/v1/push`. Leave empty to disable log shipping.
-- **loki_username** / **loki_password**: optional HTTP basic auth for the Loki endpoint. For
-  Grafana Cloud, username is your numeric Loki instance ID and password is an access-policy token.
-  The password is passed to Alloy via an environment variable, not written into the config file.
-  Set both or neither - a half-configured pair is rejected at startup.
-
-### General
+### Local configuration
 
-- **log_level**: Alloy's own log verbosity (`debug`, `info`, `warn`, `error`). Default: `info`.
-  This controls what the add-on log shows, not which log lines get shipped - the journal is
-  shipped in full regardless.
-- **instance_name**: used both as the `instance` label on every metric and as the collector ID
-  reported to Fleet Management. Default: `homeassistant`.
-- **additional_config**: extra Alloy config blocks to append (advanced users).
-
-## Metrics (host monitoring)
-
-Set `prometheus_url` to a Prometheus/Mimir `remote_write` endpoint to ship host metrics
-collected by Alloy's `unix` exporter (the node_exporter equivalent).
-
-### Options
-
-- **prometheus_url**: remote_write endpoint, e.g. `http://192.168.1.45:9090/api/v1/write`
-  (self-hosted) or `https://prometheus-prod-XX.grafana.net/api/prom/push` (Grafana Cloud).
-- **prometheus_username** / **prometheus_password**: optional HTTP basic auth. For Grafana
-  Cloud, username is your numeric metrics instance ID and password is an access-policy token.
-  The password is passed to Alloy via an environment variable, not written into the config file.
-  Set both or neither - as with Loki, a half-configured pair is rejected at startup.
-- **instance_name**: value of the `instance` label on every metric. Default: `homeassistant`.
-- **metrics_scrape_interval**: how often to scrape. Default: `60s`. Passed to Alloy verbatim, so
-  it takes any Go duration string (`30s`, `1m`, `5m`).
-
-### Sources
-
-Two independent sources feed the same Prometheus endpoint, each with its own switch:
-
-- **host_metrics** (default **on**) - the machine Home Assistant runs on: CPU, memory, disk,
-  load and network, via Alloy's `unix` exporter.
-- **homeassistant_metrics** (default **off**) - Home Assistant Core's own Prometheus endpoint,
-  which exposes entity states and Core internals. Scraped through the Supervisor proxy at
-  `supervisor:80/core/api/prometheus`, authenticated with `SUPERVISOR_TOKEN`, which the
-  Supervisor injects into the add-on. The token is read with `sys.env()` and never written into
-  the generated config.
-
-  **This needs the [`prometheus` integration](https://www.home-assistant.io/integrations/prometheus/)
-  enabled in Home Assistant.** Without it the endpoint returns 404 and the scrape fails.
-
-Both require `prometheus_url`. Enabling `homeassistant_metrics` without it is refused at start-up
-rather than silently collecting nothing; turning both off while `prometheus_url` is set logs a
-warning, since the add-on would then send no metrics at all.
-
-### What is collected
-
-CPU, memory, disk I/O, load average, and network interface stats are **host-wide** — these
-procfs counters are not container-isolated, and `host_network` exposes the real host interfaces.
-
-Metrics are scraped under the job name `integrations/node_exporter`, so Grafana Cloud's
-node_exporter integration dashboards work against them unmodified.
-
-The storage-oriented collectors that cannot see anything useful from inside an add-on container
-are switched off: `ipvs`, `btrfs`, `infiniband`, `xfs`, `zfs`, `nfs`, `nfsd` and `mdadm`.
-Virtual and container network interfaces (`veth*`, `docker*`, `br-*`, `lo`, `cali*`, `hassio*`)
-are excluded from the network stats, leaving the real host NICs.
-
-### Filesystem caveat
-
-HAOS add-ons cannot mount the host root filesystem, so whole-host `df` is not available.
-Instead the add-on reports usage for the three volumes it maps read-only - `share`, `media` and
-`backup` - which all live on the HAOS data partition. In practice that is the data-partition
-fill level. Pseudo-filesystems and the container's own overlay rootfs are excluded, so they do
-not show up as phantom mounts.
-
-### Example: logs + self-hosted Prometheus
-
-```yaml
-loki_url: "http://192.168.1.45:3100/loki/api/v1/push"
-prometheus_url: "http://192.168.1.45:9090/api/v1/write"
-instance_name: home-assistant
-metrics_scrape_interval: 60s
-```
-
-### Example: Grafana Cloud (metrics only)
-
-```yaml
-loki_url: ""
-prometheus_url: "https://prometheus-prod-XX.grafana.net/api/prom/push"
-prometheus_username: "123456"
-prometheus_password: "glc_your_access_policy_token"
-instance_name: home-assistant
-```
-
-### Example: Grafana Cloud (logs + metrics)
-
-Each backend has its own instance ID; the same access-policy token can be used for both,
-provided its scopes cover `logs:write` and `metrics:write`.
-
-```yaml
-loki_url: "https://logs-prod-XX.grafana.net/loki/api/v1/push"
-loki_username: "654321"
-loki_password: "glc_your_access_policy_token"
-prometheus_url: "https://prometheus-prod-XX.grafana.net/api/prom/push"
-prometheus_username: "123456"
-prometheus_password: "glc_your_access_policy_token"
-instance_name: home-assistant
-```
-
-### Credential handling
-
-Passwords are never written into the generated Alloy config. The add-on exports them as
-environment variables and the config references `sys.env("LOKI_PASSWORD")`,
-`sys.env("PROMETHEUS_PASSWORD")` and `sys.env("FLEET_PASSWORD")`, so `/etc/alloy/config.alloy` and
-the debug UI stay safe to share when troubleshooting. The startup banner prints the username but
-never the password.
-
-Note that Home Assistant stores add-on options (including `password`-typed ones) in plain text
-in the add-on's `/data/options.json` and in backups - the `password` schema type only masks the
-field in the UI.
-
-## Fleet Management
-
-Set `fleet_url` to have the add-on register with [Grafana Fleet
-Management](https://grafana.com/docs/grafana-cloud/send-data/fleet-management/). Alloy polls the
-endpoint and runs the configuration it receives **alongside** the local pipelines generated from
-the options above, in a separate controller. Nothing you configure locally is replaced or
-disabled by remote configuration.
-
-The fetched configuration is cached in the add-on's data directory, so it survives a restart and
-a temporary loss of connectivity to Grafana Cloud.
-
-### Options
-
-- **fleet_url**: the Fleet Management service URL, e.g.
-  `https://fleet-management-prod-001.grafana.net`. Copy it from the API tab of the Fleet
-  Management page in your Grafana Cloud stack rather than constructing it by hand - some regions
-  use a longer, nested hostname.
-- **fleet_username** / **fleet_password**: your numeric instance ID and an access token. The
-  predefined `set:alloy-data-write` scope covers both reading remote configuration and writing
-  telemetry. The token is passed to Alloy via an environment variable, not written into the
-  config file. Set both or neither.
-- **fleet_collector_name**: human-readable name for this collector in the Fleet Management UI,
-  e.g. `Home Assistant`. Optional.
-- **fleet_attributes**: comma-separated `key=value` pairs, e.g. `env=home,role=hass`. Fleet
-  Management uses these to decide which pipelines this collector receives. Optional, but without
-  them matching can only be done by collector ID.
-- **fleet_poll_frequency**: how often to check for configuration updates. Default: `5m`. Alloy
-  requires at least `10s`.
-
-The collector ID is not a separate option - it is `instance_name`, so the collector in Fleet
-Management and the `instance` label on your metrics carry the same name.
-
-`fleet_url` counts as a destination on its own: an add-on configured with only Fleet Management
-starts normally and runs whatever pipelines the remote configuration supplies.
-
-### Example: Grafana Cloud with logs, metrics and Fleet Management
-
-```yaml
-loki_url: "https://logs-prod-XX.grafana.net/loki/api/v1/push"
-loki_username: "654321"
-loki_password: "glc_your_access_policy_token"
-prometheus_url: "https://prometheus-prod-XX.grafana.net/api/prom/push"
-prometheus_username: "123456"
-prometheus_password: "glc_your_access_policy_token"
-fleet_url: "https://fleet-management-prod-001.grafana.net"
-fleet_username: "987654"
-fleet_password: "glc_your_access_policy_token"
-fleet_collector_name: "Home Assistant"
-fleet_attributes: "env=home,role=hass"
-instance_name: home-assistant
-```
-
-### Example: Fleet Management only
-
-```yaml
-loki_url: ""
-prometheus_url: ""
-fleet_url: "https://fleet-management-prod-001.grafana.net"
-fleet_username: "987654"
-fleet_password: "glc_your_access_policy_token"
-instance_name: home-assistant
-```
-
-## Labels
-
-Journal entries are shipped to Loki with these labels:
-
-| Label | Source | Always present |
-|-------|--------|----------------|
-| `job` | the static value `systemd-journal` | yes |
-| `unit` | systemd unit name (`__journal__systemd_unit`) | when the entry has one |
-| `hostname` | machine hostname (`__journal__hostname`) | yes |
-| `syslog_identifier` | process identifier (`__journal_syslog_identifier`) | when the entry has one |
-| `transport` | journal transport type (`__journal__transport`) | yes |
-| `container_name` | Docker container name, i.e. the add-on (`__journal_container_name`) | container entries only |
-| `level` | parsed out of the message text, see below | no |
-
-`level` is **not** the systemd priority field. It is extracted with a regex that looks for
-Home Assistant's own log format - a `HH:MM:SS` timestamp followed by a level word:
-
-```
-2026-03-18 19:02:30.204 INFO (MainThread) [homeassistant.setup] Setup of domain sensor took 0.1s
-```
-
-Recognised words are `DEBUG`, `INFO`, `NOTICE`, `WARNING`, `WARN`, `ERROR`, `CRITICAL` and
-`FATAL`, and the label carries them **verbatim in upper case**. Lines that do not match that
-shape - most kernel, Supervisor and third-party container output - get no `level` label at all,
-so a Loki query filtering on `level` silently excludes them. Filter with `level=~".+"` if you
-want to check which entries were parsed.
-
-Blank and whitespace-only journal lines are dropped before they reach Loki.
-
-### Journal path
-
-The add-on reads `/var/log/journal` (the persistent journal) when that directory exists and is
-non-empty, and falls back to `/run/log/journal` (the volatile journal) otherwise. Which one it
-settled on is printed in the startup banner. On a host with no persistent journal, history is
-limited to what survives in the volatile journal across a reboot - which is nothing.
-
-## Debug UI
-
-The Alloy debug UI is available at `http://<haos-ip>:12345` when the add-on is running. Use it to
-inspect component health, view the pipeline DAG, and troubleshoot issues. The same server backs
-the container health check (`/-/ready`), which Home Assistant surfaces as the add-on's health -
-so with the **Watchdog** toggle on, it restarts the add-on if Alloy stops responding.
-
-If Alloy exits on its own rather than hanging - most often because `additional_config` does not
-parse - the add-on stops outright and reports the exit code, instead of quietly restart-looping.
-
-The generated config is written to `/etc/alloy/config.alloy` and is safe to read - no secret is
-ever interpolated into it. Alloy's own state, including the cached Fleet Management
-configuration, lives under `/data/alloy`, which is excluded from Home Assistant backups: it is
-rebuilt on start and the write-ahead log would otherwise grow your backups for no benefit.
-
-## Advanced: Alloy startup flags
-
-Three options control how Alloy itself is launched, without needing to know the flag names:
-
-- **alloy_stability_level**: the lowest component stability Alloy will load, one of
-  `generally-available` (default), `public-preview` or `experimental`. Alloy refuses to start if
-  `additional_config` uses a component below the permitted level, and the error names the
-  component - this is the switch that fixes it.
-- **alloy_disable_telemetry**: on by default, passing `--disable-reporting`. Alloy otherwise
-  reports anonymous usage statistics to Grafana.
-- **alloy_additional_args**: any further flags, separated by spaces, for example
-  `--server.http.enable-pprof=false` to turn off the profiling endpoints that the debug UI
-  exposes on your network. Split on whitespace, so a flag whose value contains a space needs the
-  configuration override below instead. A flag Alloy does not recognise stops the add-on.
-
-The listen address (`0.0.0.0:12345`) and storage path (`/data/alloy`) are fixed: the health
-check and the backup exclusion both depend on them.
-
-## Advanced: Replacing the configuration entirely
-
-Placing a file at **`/config/config.alloy`** in the add-on's own configuration folder replaces
-the generated configuration completely. The add-on log says so on every start.
-
-This is the escape hatch for anything the options cannot express - a different journal pipeline,
-extra receivers, your own relabelling. Reach for it instead of `additional_config` when you want
-to change what the add-on already generates rather than add to it.
-
-With an override in place:
-
-- **Every option that shapes the configuration is ignored**, including the three endpoints. The
-  destination requirement is not enforced, because your file decides where data goes.
-- **The startup flags above still apply**, since they are command-line arguments rather than
-  configuration.
-- **The passwords are still exported**, so `sys.env("LOKI_PASSWORD")`,
-  `sys.env("PROMETHEUS_PASSWORD")` and `sys.env("FLEET_PASSWORD")` work in your file and keep the
-  secrets out of it. `sys.env("SUPERVISOR_TOKEN")` is available too.
-- Changes take effect on add-on restart, as the file is read at start-up.
-
-Remove the file to go back to the generated configuration.
-
-## Advanced: Additional Config
-
-The `additional_config` option lets you append raw Alloy config blocks. For example, to also
-tail a log file from the `share` folder:
-
-```
-local.file_match "extra" { path_targets = [{__path__ = "/share/some-app/app.log"}] }
-loki.source.file "extra" { targets = local.file_match.extra.targets forward_to = [loki.write.loki.receiver] }
-```
-
-Two constraints worth knowing before you write one:
-
-- **Only mapped paths are visible.** The add-on maps `share`, `media` and `backup` read-only,
-  plus its own configuration folder at `/config` read-write. Home Assistant's own configuration
-  directory is **not** mapped, so `home-assistant.log` cannot be tailed from here. For Core's
-  internals use `homeassistant_metrics` instead.
-- **Referenced components must exist.** `loki.write.loki.receiver` is only generated when
-  `loki_url` is set, and `prometheus.remote_write.metrics.receiver` only when `prometheus_url`
-  is - forwarding to one that was not generated is a config error.
-
-This is injected as-is into the config file. Syntax errors will prevent Alloy from starting.
+Local mode generates Alloy configuration from this App's options. Configure at
+least one destination:
+
+- a Loki push URL for logs;
+- a Prometheus/Mimir remote-write URL for metrics;
+- a Tempo OTLP/HTTP URL for traces; or
+- a Pyroscope URL for continuous profiles.
+
+Self-hosted endpoints can omit credentials. Grafana Cloud endpoints normally
+need the numeric tenant or instance ID as the username and an access-policy token
+as the password. Set both halves of a credential pair or neither.
+
+## Local logs
+
+The App reads the HAOS systemd journal and can independently include:
+
+- Home Assistant OS and Supervisor services;
+- the Home Assistant Core container; and
+- other Home Assistant App containers.
+
+All three are enabled by default. **Excluded Apps** accepts comma-separated App
+slugs such as `alloy,mqtt`; Alloy excludes its own container by default to avoid
+feeding its logs back into itself. **Journal replay age** defaults to **24h** and
+limits how far Alloy reads backwards when no saved journal position exists.
+
+Logs retain useful journal labels including unit, hostname, transport and
+container name. Home Assistant-formatted messages also receive a parsed `level`
+label. An empty Loki URL disables log shipping.
+
+## Local metrics
+
+All enabled metric sources share one Prometheus remote-write destination:
+
+- **Host metrics** (on by default): CPU, memory, load, disk I/O and network data
+  from Alloy's Unix exporter.
+- **Home Assistant metrics** (off by default): entity and Core metrics from the
+  Supervisor-authenticated Home Assistant Prometheus endpoint. Enable the
+  [`prometheus` integration](https://www.home-assistant.io/integrations/prometheus/)
+  in Home Assistant first.
+- **Alloy self-monitoring metrics** (on by default): Alloy's own component and
+  process metrics from the internal server on port 12345.
+
+The scrape interval defaults to **60s**. The instance label defaults to
+`homeassistant`. Both controls are under **Advanced & optional configuration
+options** because their defaults suit most installations.
+
+HAOS does not expose its host root filesystem to Apps. Filesystem usage therefore
+covers the mapped `share`, `media` and `backup` paths rather than a host-wide
+`df`. Host CPU, memory, disk-I/O and network counters remain available.
+
+## Local traces
+
+Enable traces after entering a Tempo OTLP/HTTP destination. Alloy then accepts
+OTLP on ports **4317** (gRPC) and **4318** (HTTP) and forwards spans to Tempo.
+Both receivers are loopback-only by default. Enable **Allow OTLP clients on the
+HAOS network** only when a trusted external client must send traces; that binds
+both unauthenticated receivers to every HAOS interface, so restrict them with
+your network firewall.
+
+## Local profiles
+
+Enter a Pyroscope destination and enable **Profile Alloy itself** to send CPU and
+memory profiles for the Alloy process. This is self-profiling, not whole-host or
+Home Assistant Core profiling.
+
+## Advanced & optional configuration options
+
+| Control | Default | Purpose |
+| --- | --- | --- |
+| Instance name | `homeassistant` | Metric instance label and Fleet collector identity. |
+| Metrics scrape interval | `60s` | Frequency for local metric collection. |
+| Fleet poll frequency | `1m` | Frequency for remote-configuration checks. |
+| Disable Alloy usage reporting | on | Passes `--disable-reporting`; no anonymous usage report is sent. |
+| Stability level | generally available | Allows preview components when deliberately raised. |
+| Additional startup arguments | empty | Extra Alloy CLI flags; an invalid flag prevents startup. |
+| Additional Alloy configuration | empty | River blocks appended to generated local configuration. |
+
+A full override at `/config/config.alloy` replaces the generated configuration.
+This is for configurations the form cannot express. Startup controls and secret
+environment variables remain available, but pipeline options are ignored while
+the override exists.
+
+## Secrets and upgrades
+
+Passwords and tokens are referenced from Alloy with `sys.env()` and are never
+written into `/etc/alloy/config.alloy` or shown in the browser. Home Assistant
+still stores App options in `/data/options.json` and includes them in backups;
+the password control masks display, not storage.
+
+Older versions allowed Fleet and local pipelines simultaneously. Such an
+installation continues in a compatibility-only **legacy hybrid** state until a
+mode is chosen, so upgrading does not silently remove a pipeline. The Web UI
+does not allow saving that legacy combination. Select Fleet or Local to migrate.
+The former `fleet_password` value is accepted as an upgrade bridge and is shown
+as the shared Grafana Cloud key; new configurations use `gcloud_rw_api_key`.
+
+## Alloy component graph and network ports
+
+Alloy's component graph is proxied through Home Assistant ingress at **Open Web
+UI > Alloy status**. The internal Alloy server listens only on loopback port
+**12345** for health checks and self-monitoring and is not exposed directly.
+The configuration control plane accepts only Supervisor ingress traffic; its
+separate health endpoint contains no configuration or restart capability.
+
+If Alloy exits because of invalid generated or additional configuration, the App
+stops and reports the error. With Home Assistant's Watchdog enabled, an
+unresponsive Alloy process is restarted after its readiness health check fails.
 
 ## Troubleshooting
 
-- **Add-on refuses to start with `FATAL: set at least one of loki_url ...`**: all three
-  destinations are empty. Set `loki_url`, `prometheus_url` or `fleet_url`.
-- **No logs in Loki**: Check that `loki_url` is reachable from HAOS. Try `ping <loki-host>` from the SSH add-on.
-- **No metrics in Prometheus**: metrics are generated only when `prometheus_url` is set - check
-  the startup banner for the `Metrics ->` line. If it is absent, the option did not take effect.
-  The next banner line, `Metric sources:`, shows which of the two sources are on.
-- **`404` scraping Home Assistant metrics**: the `prometheus` integration is not enabled in Home
-  Assistant. Add it, then restart the add-on.
-- **Options seem to have no effect**: check whether `/config/config.alloy` exists. An override
-  replaces the generated configuration and the log says so on every start.
-- **`401 Unauthorized` / `authentication error` in the add-on log**: the endpoint requires basic
-  auth. Set `loki_username` + `loki_password` (or the `prometheus_*` equivalents). On Grafana
-  Cloud the username is the numeric instance ID from the stack's connection details, not your
-  email address.
-- **Add-on refuses to start with `FATAL: ..._username is set but ..._password is empty`**: basic
-  auth needs both values; fill in the missing one or clear both.
-- **Add-on crashes on start**: Check the add-on log for Alloy config errors. Set `log_level: debug` for verbose output.
-- **"timestamp too old" in Loki**: Normal on first start. Alloy reads the full journal history; Loki rejects entries outside its retention window. Resolves in 1-2 minutes.
-- **Add-on refuses to start with `FATAL: fleet_attributes entry '...' is not key=value`**: every
-  comma-separated segment of `fleet_attributes` must contain an `=` with a non-empty key. Write
-  `env=home,role=hass`, not `env home, role`.
-- **Collector does not appear in Fleet Management**: check the add-on log for the `Fleet` banner
-  line, confirm `fleet_url` matches the API tab exactly, and confirm the token carries the
-  `set:alloy-data-write` scope. A rejected token shows as a `401` from the Fleet Management host in
-  the add-on log.
-- **Collector appears but receives no pipelines**: matching is driven by `fleet_attributes` and the
-  collector ID (`instance_name`). Compare the `Fleet attributes:` banner line against the matchers
-  on your Fleet Management pipelines.
-- **Alloy exits complaining about `poll_frequency`**: the add-on passes `fleet_poll_frequency`
-  through without checking it, and Alloy rejects anything below `10s`.
-- **Log lines have no `level` label**: expected for anything that is not in Home Assistant's log
-  format - see [Labels](#labels). Nothing is dropped, the label is simply absent.
-
-## Support
-
-Report issues at: https://github.com/BroTEK-Solutions/ha-addons/issues
+| Symptom | Check |
+| --- | --- |
+| Fleet registration fails | Re-copy the regional URL, numeric username and shared write key from the Fleet API tab; check the token scopes. |
+| Loki/Prometheus/Tempo/Pyroscope returns 401 | Confirm the numeric tenant ID and token are paired for that specific backend. |
+| Home Assistant scrape returns 404 | Enable Home Assistant's `prometheus` integration. |
+| No expected journal entries | Check the three log source switches, excluded App slugs and replay-age limit. |
+| OTLP sender cannot connect | Enable traces and explicitly allow OTLP clients on the HAOS network. |
+| Alloy will not start | Read the App log for the named option or River component; remove invalid additional arguments/configuration. |

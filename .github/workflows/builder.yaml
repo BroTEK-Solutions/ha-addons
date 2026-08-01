@@ -132,11 +132,31 @@ jobs:
       - name: Install test dependencies
         run: python3 -m pip install --quiet pyyaml voluptuous
 
-      - name: Alloy schema tests
-        run: python3 alloy/tests/config-schema.test.py
+      - name: Set up Go for the ingress UI
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: alloy/ui/go.mod
+          cache: false
+
+      - name: Alloy schema and image contract tests
+        run: |
+          python3 alloy/tests/config-schema.test.py
+          python3 alloy/tests/image-contract.test.py
+
+      - name: Alloy ingress UI tests
+        working-directory: alloy/ui
+        run: go test ./...
+
+      - name: Alloy browser state tests
+        run: node alloy/tests/ui-static.test.mjs
 
       - name: Alloy generator tests
         run: bash alloy/tests/generate-config.test.sh
+
+      - name: Alloy complete-image ingress smoke test
+        run: |
+          docker build --tag local/ha-alloy:smoke alloy
+          bash alloy/tests/image-smoke.test.sh local/ha-alloy:smoke
 
   alloy-init-test:
     name: Alloy initialization tests

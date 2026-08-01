@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Grafana Alloy configuration</title>
+  <link rel="stylesheet" href="app.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header>
+    <div>
+      <p class="eyebrow">Home Assistant App</p>
+      <h1>Grafana Alloy</h1>
+      <p>Choose how Alloy receives configuration, then enable only the telemetry pipelines you need.</p>
+    </div>
+    <nav aria-label="Alloy views">
+      <a class="active" href="./">Configuration</a>
+      <a href="alloy/">Alloy status &amp; component graph</a>
+    </nav>
+  </header>
+
+  <main>
+    <div id="notice" role="status" aria-live="polite"></div>
+    <form id="config-form">
+      <section class="card">
+        <label for="operation_mode">Operation mode</label>
+        <p class="help">Fleet runs configuration delivered by Grafana Cloud. Local configuration builds pipelines from the options on this page.</p>
+        <select id="operation_mode" name="operation_mode" required>
+          <option value="fleet">Fleet Management</option>
+          <option value="local">Local configuration</option>
+        </select>
+        <aside id="legacy-warning" hidden>
+          This installation currently runs legacy Fleet and local pipelines together. Choose a supported mode before saving; existing behavior remains unchanged until then.
+        </aside>
+      </section>
+
+      <div data-mode="fleet" hidden>
+        <section class="card">
+          <h2>Fleet Management</h2>
+          <p>Copy the URL and numeric username from the Fleet Management API page. The shared key is also available to remotely supplied pipelines as <code>GCLOUD_RW_API_KEY</code>.</p>
+          <div class="grid">
+            <div class="field"><label for="fleet_url">Fleet Management URL</label><p class="help">The complete regional service URL, including <code>https://</code>.</p><input id="fleet_url" name="fleet_url" type="url" required></div>
+            <div class="field"><label for="fleet_username">Fleet Management username</label><p class="help">The numeric Fleet instance ID, not an email address.</p><input id="fleet_username" name="fleet_username" autocomplete="username" required></div>
+            <div class="field"><label for="gcloud_rw_api_key">Grafana Cloud read/write API key</label><p class="help">Used for Fleet authentication and remote Loki, Prometheus, Tempo, or Pyroscope pipelines.</p><input id="gcloud_rw_api_key" name="gcloud_rw_api_key" type="password" autocomplete="new-password" data-secret><label class="clear"><input type="checkbox" data-clear-secret="gcloud_rw_api_key"> Clear stored key</label></div>
+          </div>
+          <details>
+            <summary>Advanced &amp; optional configuration options</summary>
+            <div class="grid advanced">
+              <div class="field"><label for="fleet_collector_name">Collector display name</label><p class="help">Optional friendly name shown in Grafana Cloud.</p><input id="fleet_collector_name" name="fleet_collector_name"></div>
+              <div class="field"><label for="fleet_attributes">Collector attributes</label><p class="help">Comma-separated <code>key=value</code> selectors, for example <code>env=home,role=hass</code>.</p><input id="fleet_attributes" name="fleet_attributes"></div>
+              <div class="field"><label for="fleet_poll_frequency">Fleet poll frequency</label><p class="help">How often Alloy checks for changed pipelines. Default: <strong>1m</strong>.</p><input id="fleet_poll_frequency" name="fleet_poll_frequency" value="1m"></div>
+            </div>
+          </details>
+        </section>
+      </div>
+
+      <div data-mode="local" hidden>
+        <section class="card">
+          <h2>Metrics</h2>
+          <p>Collect host, Home Assistant, and Alloy metrics and send them to a Prometheus or Mimir remote-write endpoint.</p>
+          <div class="grid">
+            <div class="field wide"><label for="prometheus_url">Prometheus remote-write endpoint</label><p class="help">For Grafana Cloud this normally ends in <code>/api/prom/push</code>.</p><input id="prometheus_url" name="prometheus_url" type="url"></div>
+            <div class="field"><label for="prometheus_username">Metrics tenant or username</label><p class="help">Grafana Cloud metrics instance ID or basic-auth username.</p><input id="prometheus_username" name="prometheus_username"></div>
+            <div class="field"><label for="prometheus_password">Metrics token</label><p class="help">Access-policy token or basic-auth password.</p><input id="prometheus_password" name="prometheus_password" type="password" data-secret><label class="clear"><input type="checkbox" data-clear-secret="prometheus_password"> Clear stored token</label></div>
+          </div>
+          <div class="toggles">
+            <div><label class="switch"><input name="host_metrics" type="checkbox" checked> Host metrics</label><p class="help">Collect CPU, memory, disk, load and network metrics from the HAOS host.</p></div>
+            <div><label class="switch"><input name="homeassistant_metrics" type="checkbox"> Home Assistant Core metrics</label><p class="help">Scrape Home Assistant entities and Core internals; Home Assistant's Prometheus integration must be enabled.</p></div>
+            <div><label class="switch"><input name="alloy_metrics" type="checkbox" checked> Alloy self-monitoring metrics</label><p class="help">Scrape this Alloy process and its component health from internal port 12345.</p></div>
+          </div>
+          <details><summary>Advanced metrics options</summary><div class="field"><label for="metrics_scrape_interval">Metrics scrape interval</label><p class="help">Default: <strong>60s</strong>. Increase it to reduce ingestion volume.</p><input id="metrics_scrape_interval" name="metrics_scrape_interval" value="60s"></div></details>
+        </section>
+
+        <section class="card">
+          <h2>Logs</h2>
+          <p>Read the HAOS system journal and send selected entries to Loki.</p>
+          <div class="grid">
+            <div class="field wide"><label for="loki_url">Loki push endpoint</label><p class="help">The complete Loki HTTP push URL.</p><input id="loki_url" name="loki_url" type="url"></div>
+            <div class="field"><label for="loki_username">Logs tenant or username</label><p class="help">Grafana Cloud logs instance ID or basic-auth username.</p><input id="loki_username" name="loki_username"></div>
+            <div class="field"><label for="loki_password">Logs token</label><p class="help">Access-policy token or basic-auth password.</p><input id="loki_password" name="loki_password" type="password" data-secret><label class="clear"><input type="checkbox" data-clear-secret="loki_password"> Clear stored token</label></div>
+          </div>
+          <div class="toggles">
+            <div><label class="switch"><input name="logs_system" type="checkbox" checked> HAOS system logs</label><p class="help">Collect operating-system services such as Supervisor, NetworkManager and the kernel.</p></div>
+            <div><label class="switch"><input name="logs_homeassistant" type="checkbox" checked> Home Assistant Core logs</label><p class="help">Collect only the main Home Assistant Core container's journal entries.</p></div>
+            <div><label class="switch"><input name="logs_addons" type="checkbox" checked> Other App logs</label><p class="help">Collect container logs for installed Home Assistant Apps, subject to the exclusion list.</p></div>
+          </div>
+          <details><summary>Advanced log options</summary><div class="grid advanced">
+            <div class="field"><label for="logs_exclude_addons">Apps to exclude</label><p class="help">Comma-separated App slugs. Alloy excludes itself by default.</p><input id="logs_exclude_addons" name="logs_exclude_addons" value="alloy"></div>
+            <div class="field"><label for="logs_max_age">Journal replay age</label><p class="help">Oldest entries read on first start. Default: <strong>24h</strong>.</p><input id="logs_max_age" name="logs_max_age" value="24h"></div>
+          </div></details>
+        </section>
+
+        <section class="card">
+          <h2>Traces</h2>
+          <label class="switch"><input name="traces_enabled" type="checkbox"> Receive and forward OTLP traces</label>
+          <p class="help">When enabled, Alloy listens on OTLP gRPC 4317 and HTTP 4318 on loopback by default.</p>
+          <label class="switch"><input name="traces_network_access" type="checkbox"> Allow OTLP clients on the HAOS network</label>
+          <p class="help">Binds both receivers to every HAOS interface. Enable only when a trusted network client must send traces; protect the ports with your network firewall.</p>
+          <div class="grid">
+            <div class="field wide"><label for="tempo_url">Tempo OTLP HTTP endpoint</label><p class="help">The OTLP HTTP base endpoint supplied by Tempo or Grafana Cloud.</p><input id="tempo_url" name="tempo_url" type="url"></div>
+            <div class="field"><label for="tempo_username">Traces tenant or username</label><p class="help">Numeric Grafana Cloud traces tenant ID or a basic-auth username.</p><input id="tempo_username" name="tempo_username"></div>
+            <div class="field"><label for="tempo_password">Traces token</label><p class="help">Access-policy token or basic-auth password paired with the traces username.</p><input id="tempo_password" name="tempo_password" type="password" data-secret><label class="clear"><input type="checkbox" data-clear-secret="tempo_password"> Clear stored token</label></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Profiles</h2>
+          <label class="switch"><input name="alloy_profiling" type="checkbox"> Profile Alloy itself</label>
+          <p class="help">Continuously scrape Alloy's pprof endpoint and send profiles to Pyroscope.</p>
+          <div class="grid">
+            <div class="field wide"><label for="pyroscope_url">Pyroscope endpoint</label><p class="help">Complete profile write endpoint supplied by Pyroscope or Grafana Cloud.</p><input id="pyroscope_url" name="pyroscope_url" type="url"></div>
+            <div class="field"><label for="pyroscope_username">Profiles tenant or username</label><p class="help">Numeric Grafana Cloud profiles tenant ID or a basic-auth username.</p><input id="pyroscope_username" name="pyroscope_username"></div>
+            <div class="field"><label for="pyroscope_password">Profiles token</label><p class="help">Access-policy token or basic-auth password paired with the profiles username.</p><input id="pyroscope_password" name="pyroscope_password" type="password" data-secret><label class="clear"><input type="checkbox" data-clear-secret="pyroscope_password"> Clear stored token</label></div>
+          </div>
+        </section>
+      </div>
+
+      <section class="card">
+        <details>
+          <summary>Advanced &amp; optional configuration options</summary>
+          <div class="grid advanced">
+            <div class="field"><label for="instance_name">Instance name</label><p class="help">Used for metric labels and Fleet collector identity. Default: <strong>homeassistant</strong>.</p><input id="instance_name" name="instance_name" value="homeassistant"></div>
+            <div class="field"><label for="log_level">Alloy log level</label><p class="help">Changes Alloy's own App log verbosity, not the logs sent to Loki.</p><select id="log_level" name="log_level"><option>debug</option><option selected>info</option><option>warn</option><option>error</option></select></div>
+            <div class="field"><label for="alloy_stability_level">Minimum component stability</label><p class="help">Keep generally available unless additional configuration needs a preview component.</p><select id="alloy_stability_level" name="alloy_stability_level"><option selected>generally-available</option><option>public-preview</option><option>experimental</option></select></div>
+            <div><label class="switch"><input name="alloy_disable_telemetry" type="checkbox" checked> Disable anonymous Alloy usage reporting</label><p class="help">Pass <code>--disable-reporting</code> so Alloy sends no anonymous feature-usage report to Grafana.</p></div>
+            <div class="field wide"><label for="alloy_additional_args">Additional Alloy startup flags</label><p class="help">Whitespace-separated flags. Invalid flags prevent startup.</p><textarea id="alloy_additional_args" name="alloy_additional_args" rows="3"></textarea></div>
+            <div class="field wide"><label for="additional_config">Additional Alloy configuration</label><p class="help">River blocks appended verbatim after the generated configuration.</p><textarea id="additional_config" name="additional_config" rows="8" spellcheck="false"></textarea></div>
+          </div>
+        </details>
+      </section>
+
+      <footer class="actions">
+        <button type="submit">Save</button>
+        <button type="button" id="save-restart" class="primary">Save &amp; restart</button>
+      </footer>
+    </form>
+  </main>
+</body>
+</html>

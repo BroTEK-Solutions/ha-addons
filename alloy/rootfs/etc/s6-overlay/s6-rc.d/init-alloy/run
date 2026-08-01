@@ -44,31 +44,92 @@ config_or() {
 # service and referenced from the generated config via sys.env().
 LOKI_URL=$(config_or loki_url)
 LOKI_USERNAME=$(config_or loki_username)
+LOGS_SYSTEM=$(config_or logs_system true)
+LOGS_HOMEASSISTANT=$(config_or logs_homeassistant true)
+LOGS_ADDONS=$(config_or logs_addons true)
+LOGS_EXCLUDE_ADDONS=$(config_or logs_exclude_addons alloy)
+LOGS_MAX_AGE=$(config_or logs_max_age 24h)
 PROMETHEUS_URL=$(config_or prometheus_url)
 PROMETHEUS_USERNAME=$(config_or prometheus_username)
 INSTANCE_NAME=$(config_or instance_name homeassistant)
 METRICS_SCRAPE_INTERVAL=$(config_or metrics_scrape_interval 60s)
 HOST_METRICS=$(config_or host_metrics true)
 HOMEASSISTANT_METRICS=$(config_or homeassistant_metrics false)
+ALLOY_METRICS=$(config_or alloy_metrics true)
+TEMPO_URL=$(config_or tempo_url)
+TEMPO_USERNAME=$(config_or tempo_username)
+TRACES_ENABLED=$(config_or traces_enabled false)
+TRACES_NETWORK_ACCESS=$(config_or traces_network_access false)
+PYROSCOPE_URL=$(config_or pyroscope_url)
+PYROSCOPE_USERNAME=$(config_or pyroscope_username)
+ALLOY_PROFILING=$(config_or alloy_profiling false)
 LOG_LEVEL=$(config_or log_level info)
 ADDITIONAL_CONFIG=$(config_or additional_config)
 FLEET_URL=$(config_or fleet_url)
 FLEET_USERNAME=$(config_or fleet_username)
 FLEET_COLLECTOR_NAME=$(config_or fleet_collector_name)
 FLEET_ATTRIBUTES=$(config_or fleet_attributes)
-FLEET_POLL_FREQUENCY=$(config_or fleet_poll_frequency 5m)
+FLEET_POLL_FREQUENCY=$(config_or fleet_poll_frequency 1m)
+OPERATION_MODE=$(config_or operation_mode)
+OPERATION_MODE_EXPLICIT=false
+[ -n "${OPERATION_MODE}" ] && OPERATION_MODE_EXPLICIT=true
+
+# Upgrade compatibility: old releases allowed remote and local pipelines at the
+# same time. Infer that state without advertising it as a new selectable mode.
+if [ -z "${OPERATION_MODE}" ]; then
+    local_destination="${LOKI_URL}${PROMETHEUS_URL}${TEMPO_URL}${PYROSCOPE_URL}"
+    if [ -n "${FLEET_URL}" ] && [ -n "${local_destination}" ]; then
+        OPERATION_MODE=legacy-hybrid
+    elif [ -n "${FLEET_URL}" ]; then
+        OPERATION_MODE=fleet
+    else
+        OPERATION_MODE=local
+    fi
+fi
+
 export LOKI_URL LOKI_USERNAME PROMETHEUS_URL PROMETHEUS_USERNAME
 export INSTANCE_NAME METRICS_SCRAPE_INTERVAL LOG_LEVEL ADDITIONAL_CONFIG
-export HOST_METRICS HOMEASSISTANT_METRICS
+export HOST_METRICS HOMEASSISTANT_METRICS ALLOY_METRICS
+export LOGS_SYSTEM LOGS_HOMEASSISTANT LOGS_ADDONS LOGS_EXCLUDE_ADDONS LOGS_MAX_AGE
+export TEMPO_URL TEMPO_USERNAME TRACES_ENABLED TRACES_NETWORK_ACCESS
+export PYROSCOPE_URL PYROSCOPE_USERNAME ALLOY_PROFILING
 export FLEET_URL FLEET_USERNAME FLEET_COLLECTOR_NAME FLEET_ATTRIBUTES FLEET_POLL_FREQUENCY
+export OPERATION_MODE
 
-# Require at least one destination. Fleet Management alone is enough: the remote
-# configuration can supply a complete set of pipelines.
-if [ -z "${LOKI_URL}" ] && [ -z "${PROMETHEUS_URL}" ] && [ -z "${FLEET_URL}" ]; then
-    bashio::log.fatal "Set at least one of loki_url (logs), prometheus_url (metrics)"
-    bashio::log.fatal "or fleet_url (Fleet Management). All three are currently empty."
-    bashio::exit.nok
-fi
+# Require a destination appropriate to the selected mode.
+case "${OPERATION_MODE}" in
+    fleet)
+        if [ -z "${FLEET_URL}" ]; then
+            bashio::log.fatal "Fleet mode requires fleet_url."
+            bashio::exit.nok
+        fi
+        ;;
+    local)
+        if [ -z "${LOKI_URL}" ] && [ -z "${PROMETHEUS_URL}" ] \
+            && [ -z "${TEMPO_URL}" ] && [ -z "${PYROSCOPE_URL}" ]; then
+            if [ "${OPERATION_MODE_EXPLICIT}" = true ]; then
+                bashio::log.fatal "Local mode requires at least one local destination."
+                bashio::log.fatal "Set at least one of loki_url, prometheus_url, tempo_url or pyroscope_url."
+                bashio::exit.nok
+            fi
+            bashio::log.warning "No telemetry destination is configured yet."
+            bashio::log.warning "Open the ingress UI to choose Fleet or Local configuration."
+        fi
+        ;;
+    legacy-hybrid)
+        if [ -z "${LOKI_URL}" ] && [ -z "${PROMETHEUS_URL}" ] \
+            && [ -z "${TEMPO_URL}" ] && [ -z "${PYROSCOPE_URL}" ] \
+            && [ -z "${FLEET_URL}" ]; then
+            bashio::log.fatal "Set at least one of loki_url, prometheus_url, tempo_url,"
+            bashio::log.fatal "pyroscope_url or fleet_url. All destinations are empty."
+            bashio::exit.nok
+        fi
+        ;;
+    *)
+        bashio::log.fatal "operation_mode must be fleet or local."
+        bashio::exit.nok
+        ;;
+esac
 
 # Basic auth needs both halves; half a pair would silently 401 against the backend.
 # $1 = option prefix (loki|prometheus|fleet)
@@ -86,9 +147,39 @@ check_auth_pair() {
     fi
 }
 
-check_auth_pair loki
-check_auth_pair prometheus
-check_auth_pair fleet
+if [ "${OPERATION_MODE}" != fleet ]; then
+    check_auth_pair loki
+    check_auth_pair prometheus
+    check_auth_pair tempo
+    check_auth_pair pyroscope
+fi
+
+# Fleet uses a shared Grafana Cloud key. Accept fleet_password only as an
+# upgrade bridge for existing installs.
+fleet_secret=""
+if bashio::config.has_value 'gcloud_rw_api_key' || bashio::config.has_value 'fleet_password'; then
+    fleet_secret=1
+fi
+if [ "${OPERATION_MODE_EXPLICIT}" = true ] && [ "${OPERATION_MODE}" = fleet ]; then
+    if [ -z "${FLEET_USERNAME}" ]; then
+        bashio::log.fatal "Fleet mode requires fleet_username. Copy the numeric username from Grafana Cloud."
+        bashio::exit.nok
+    fi
+    if [ -z "${fleet_secret}" ]; then
+        bashio::log.fatal "Fleet mode requires gcloud_rw_api_key."
+        bashio::exit.nok
+    fi
+fi
+if [ "${OPERATION_MODE}" != local ]; then
+    if [ -n "${FLEET_USERNAME}" ] && [ -z "${fleet_secret}" ]; then
+        bashio::log.fatal "fleet_username is set but gcloud_rw_api_key is empty."
+        bashio::exit.nok
+    fi
+    if [ -z "${FLEET_USERNAME}" ] && [ -n "${fleet_secret}" ]; then
+        bashio::log.fatal "gcloud_rw_api_key is set but fleet_username is empty."
+        bashio::exit.nok
+    fi
+fi
 
 # Endpoints are interpolated into quoted River strings. Repeat the schema's URL
 # checks here because options.json can be edited outside the UI, and an invalid
@@ -183,20 +274,59 @@ validate_url() {
     fi
 }
 
-validate_url loki_url "${LOKI_URL}"
-validate_url prometheus_url "${PROMETHEUS_URL}"
-validate_url fleet_url "${FLEET_URL}"
+if [ "${OPERATION_MODE}" != fleet ]; then
+    validate_url loki_url "${LOKI_URL}"
+    validate_url prometheus_url "${PROMETHEUS_URL}"
+    validate_url tempo_url "${TEMPO_URL}"
+    validate_url pyroscope_url "${PYROSCOPE_URL}"
+fi
+if [ "${OPERATION_MODE}" != local ]; then
+    validate_url fleet_url "${FLEET_URL}"
+fi
+
+# These values are emitted inside quoted River strings. Repeat the schema guard
+# here because options.json can also be edited outside the Supervisor UI.
+validate_river_string() {
+    local name="${1}" value="${2}"
+    [ -n "${value}" ] || return 0
+    if [[ "${value}" == *'"'* || "${value}" == *\\* || "${value}" =~ [[:cntrl:]] ]]; then
+        bashio::log.fatal "${name} contains a quote, backslash or control character."
+        bashio::exit.nok
+    fi
+}
+
+if [ "${OPERATION_MODE}" != fleet ]; then
+    validate_river_string loki_username "${LOKI_USERNAME}"
+    validate_river_string prometheus_username "${PROMETHEUS_USERNAME}"
+    validate_river_string tempo_username "${TEMPO_USERNAME}"
+    validate_river_string pyroscope_username "${PYROSCOPE_USERNAME}"
+fi
+if [ "${OPERATION_MODE}" != local ]; then
+    validate_river_string fleet_username "${FLEET_USERNAME}"
+    validate_river_string fleet_collector_name "${FLEET_COLLECTOR_NAME}"
+fi
+validate_river_string instance_name "${INSTANCE_NAME}"
+
+if [ "${OPERATION_MODE}" != fleet ] && [ "${TRACES_ENABLED}" = true ] && [ -z "${TEMPO_URL}" ]; then
+    bashio::log.fatal "traces_enabled is on but tempo_url is empty."
+    bashio::exit.nok
+fi
+if [ "${OPERATION_MODE}" != fleet ] && [ "${ALLOY_PROFILING}" = true ] && [ -z "${PYROSCOPE_URL}" ]; then
+    bashio::log.fatal "alloy_profiling is on but pyroscope_url is empty."
+    bashio::exit.nok
+fi
 
 # Both metric sources forward to the Prometheus remote_write receiver, which
 # only exists when prometheus_url is set. Enabling one without it would silently
 # collect nothing.
-if [ -z "${PROMETHEUS_URL}" ]; then
+if [ "${OPERATION_MODE}" != fleet ] && [ -z "${PROMETHEUS_URL}" ]; then
     if bashio::config.true 'homeassistant_metrics'; then
         bashio::log.fatal "homeassistant_metrics is enabled but prometheus_url is empty."
         bashio::log.fatal "Set prometheus_url, or turn homeassistant_metrics off."
         bashio::exit.nok
     fi
-elif [ "${HOST_METRICS}" != "true" ] && [ "${HOMEASSISTANT_METRICS}" != "true" ]; then
+elif [ "${OPERATION_MODE}" != fleet ] && [ "${HOST_METRICS}" != "true" ] \
+    && [ "${HOMEASSISTANT_METRICS}" != "true" ] && [ "${ALLOY_METRICS}" != "true" ]; then
     bashio::log.warning "prometheus_url is set but both host_metrics and"
     bashio::log.warning "homeassistant_metrics are off, so no metrics will be sent."
 fi

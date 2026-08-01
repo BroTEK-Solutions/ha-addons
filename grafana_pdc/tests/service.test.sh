@@ -187,7 +187,7 @@ fi
 
 echo "== OpenSSH launches without putting the token in argv or logs =="
 setup_case
-run_service "$(base_options)"
+run_service '{"signing_token":"SENTINEL_TOKEN","hosted_grafana_id":"12345","cluster":"prod-uk","allowed_endpoints":[],"log_level":"info"}'
 TESTS=$((TESTS + 1))
 if [ "${RUN_RC}" -ne 0 ]; then
     fail "OpenSSH defaults exited ${RUN_RC}: ${RUN_OUT}"
@@ -199,8 +199,16 @@ elif ! contains "${RUN_ENV}" 'GCLOUD_PDC_SIGNING_TOKEN=SENTINEL_TOKEN'; then
     fail "OpenSSH defaults did not export the signing token"
 elif contains "${RUN_ARGV}" 'SENTINEL_TOKEN' || grep -qF 'SENTINEL_TOKEN' <<<"${RUN_OUT}"; then
     fail "OpenSSH defaults exposed signing token in argv or logs"
+elif ! contains "${RUN_ARGV}" '<-connections=1>' \
+  || ! contains "${RUN_ARGV}" '<-domain=grafana.net>' \
+  || ! contains "${RUN_ARGV}" '<-cert-expiry-window=5m>' \
+  || ! contains "${RUN_ARGV}" '<-cert-check-expiry-period=1m>' \
+  || ! contains "${RUN_ARGV}" '<-retrymax=4>' \
+  || ! contains "${RUN_ARGV}" '<-parse-metrics=true>' \
+  || ! contains "${RUN_ARGV}" '<-ssh-flag=-o ConnectTimeout=1>'; then
+    fail "omitted advanced options did not use the pdc-agent 0.0.63 defaults"
 else
-    pass "OpenSSH uses private environment token and fixed key path"
+    pass "OpenSSH uses private token handling and upstream advanced defaults"
 fi
 cleanup; tmp=""
 

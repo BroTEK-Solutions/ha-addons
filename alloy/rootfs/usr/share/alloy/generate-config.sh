@@ -3,31 +3,41 @@
 # NOTE: plain bash (NOT with-contenv) — this is invoked by init-alloy/run, which
 # already has the container env and exports the options as env vars. with-contenv
 # would reset the environment and wipe those exported values.
-# Inputs (env): LOG_LEVEL, JOURNAL_PATH, LOKI_URL, LOKI_USERNAME, PROMETHEUS_URL,
-#   PROMETHEUS_USERNAME, INSTANCE_NAME, METRICS_SCRAPE_INTERVAL, HOST_METRICS,
-#   HOMEASSISTANT_METRICS, FLEET_URL, FLEET_USERNAME, FLEET_COLLECTOR_NAME,
-#   FLEET_ATTRIBUTES, FLEET_POLL_FREQUENCY, ADDITIONAL_CONFIG.
-# HOST_METRICS and HOMEASSISTANT_METRICS are "true"/"false" strings.
+# Inputs are exported by init-alloy/run. OPERATION_MODE is fleet, local, or the
+# upgrade-only legacy-hybrid value. Boolean inputs are "true"/"false" strings.
 # Passwords are NOT interpolated here; the config references sys.env("LOKI_PASSWORD"),
-# sys.env("PROMETHEUS_PASSWORD") and sys.env("FLEET_PASSWORD") so the secrets never land
-# on disk.
+# sys.env() so secrets never land on disk.
 set -eu
 
 LOG_LEVEL="${LOG_LEVEL:-info}"
+OPERATION_MODE="${OPERATION_MODE:-legacy-hybrid}"
 JOURNAL_PATH="${JOURNAL_PATH:-/var/log/journal}"
 LOKI_URL="${LOKI_URL:-}"
 LOKI_USERNAME="${LOKI_USERNAME:-}"
+LOGS_SYSTEM="${LOGS_SYSTEM:-true}"
+LOGS_HOMEASSISTANT="${LOGS_HOMEASSISTANT:-true}"
+LOGS_ADDONS="${LOGS_ADDONS:-true}"
+LOGS_EXCLUDE_ADDONS="${LOGS_EXCLUDE_ADDONS:-alloy}"
+LOGS_MAX_AGE="${LOGS_MAX_AGE:-24h}"
 PROMETHEUS_URL="${PROMETHEUS_URL:-}"
 PROMETHEUS_USERNAME="${PROMETHEUS_USERNAME:-}"
 INSTANCE_NAME="${INSTANCE_NAME:-homeassistant}"
 METRICS_SCRAPE_INTERVAL="${METRICS_SCRAPE_INTERVAL:-60s}"
 HOST_METRICS="${HOST_METRICS:-true}"
 HOMEASSISTANT_METRICS="${HOMEASSISTANT_METRICS:-false}"
+ALLOY_METRICS="${ALLOY_METRICS:-true}"
+TEMPO_URL="${TEMPO_URL:-}"
+TEMPO_USERNAME="${TEMPO_USERNAME:-}"
+TRACES_ENABLED="${TRACES_ENABLED:-false}"
+TRACES_NETWORK_ACCESS="${TRACES_NETWORK_ACCESS:-false}"
+PYROSCOPE_URL="${PYROSCOPE_URL:-}"
+PYROSCOPE_USERNAME="${PYROSCOPE_USERNAME:-}"
+ALLOY_PROFILING="${ALLOY_PROFILING:-false}"
 FLEET_URL="${FLEET_URL:-}"
 FLEET_USERNAME="${FLEET_USERNAME:-}"
 FLEET_COLLECTOR_NAME="${FLEET_COLLECTOR_NAME:-}"
 FLEET_ATTRIBUTES="${FLEET_ATTRIBUTES:-}"
-FLEET_POLL_FREQUENCY="${FLEET_POLL_FREQUENCY:-5m}"
+FLEET_POLL_FREQUENCY="${FLEET_POLL_FREQUENCY:-1m}"
 ADDITIONAL_CONFIG="${ADDITIONAL_CONFIG:-}"
 
 # Emit a basic_auth block when a username is set; a no-op otherwise.
@@ -63,7 +73,7 @@ logging {
 }
 ALLOYCONFIG
 
-if [ -n "${FLEET_URL}" ]; then
+if [ "${OPERATION_MODE}" != "local" ] && [ -n "${FLEET_URL}" ]; then
 cat <<ALLOYCONFIG
 
 // --- Grafana Fleet Management (remote configuration) ---
@@ -85,19 +95,20 @@ cat <<ALLOYCONFIG
   poll_frequency = "${FLEET_POLL_FREQUENCY}"
 ALLOYCONFIG
 
-emit_basic_auth "${FLEET_USERNAME}" FLEET_PASSWORD "  "
+emit_basic_auth "${FLEET_USERNAME}" GCLOUD_RW_API_KEY "  "
 
 cat <<ALLOYCONFIG
 }
 ALLOYCONFIG
 fi
 
-if [ -n "${LOKI_URL}" ]; then
+if [ "${OPERATION_MODE}" != "fleet" ] && [ -n "${LOKI_URL}" ]; then
 cat <<ALLOYCONFIG
 
 // --- Read systemd journal ---
 loki.source.journal "journal" {
   path         = "${JOURNAL_PATH}"
+  max_age      = "${LOGS_MAX_AGE}"
   forward_to   = [loki.process.journal.receiver]
   relabel_rules = loki.relabel.journal.rules
   labels       = {
@@ -108,7 +119,55 @@ loki.source.journal "journal" {
 // --- Relabel journal fields ---
 loki.relabel "journal" {
   forward_to = []
+ALLOYCONFIG
 
+if [ "${LOGS_SYSTEM}" != "true" ]; then
+cat <<'ALLOYCONFIG'
+  rule {
+    source_labels = ["__journal_container_name"]
+    regex         = "^$"
+    action        = "drop"
+  }
+ALLOYCONFIG
+fi
+
+if [ "${LOGS_HOMEASSISTANT}" != "true" ]; then
+cat <<'ALLOYCONFIG'
+  rule {
+    source_labels = ["__journal_container_name"]
+    regex         = "^homeassistant$"
+    action        = "drop"
+  }
+ALLOYCONFIG
+fi
+
+if [ "${LOGS_ADDONS}" != "true" ]; then
+cat <<'ALLOYCONFIG'
+  rule {
+    source_labels = ["__journal_container_name"]
+    regex         = "^addon_.*$"
+    action        = "drop"
+  }
+ALLOYCONFIG
+fi
+
+if [ -n "${LOGS_EXCLUDE_ADDONS}" ]; then
+  excluded_regex=""
+  IFS=',' read -r -a excluded_addons <<<"${LOGS_EXCLUDE_ADDONS}"
+  for addon in "${excluded_addons[@]}"; do
+    [ -n "${excluded_regex}" ] && excluded_regex+="|"
+    excluded_regex+="addon_(?:[^_]+_)?${addon}"
+  done
+cat <<ALLOYCONFIG
+  rule {
+    source_labels = ["__journal_container_name"]
+    regex         = "^(${excluded_regex})$"
+    action        = "drop"
+  }
+ALLOYCONFIG
+fi
+
+cat <<ALLOYCONFIG
   rule {
     source_labels = ["__journal__systemd_unit"]
     target_label  = "unit"
@@ -166,7 +225,7 @@ cat <<ALLOYCONFIG
 ALLOYCONFIG
 fi
 
-if [ -n "${PROMETHEUS_URL}" ] && [ "${HOST_METRICS}" = "true" ]; then
+if [ "${OPERATION_MODE}" != "fleet" ] && [ -n "${PROMETHEUS_URL}" ] && [ "${HOST_METRICS}" = "true" ]; then
 cat <<ALLOYCONFIG
 
 // --- Host metrics (node_exporter equivalent) ---
@@ -208,7 +267,7 @@ prometheus.scrape "host" {
 ALLOYCONFIG
 fi
 
-if [ -n "${PROMETHEUS_URL}" ] && [ "${HOMEASSISTANT_METRICS}" = "true" ]; then
+if [ "${OPERATION_MODE}" != "fleet" ] && [ -n "${PROMETHEUS_URL}" ] && [ "${HOMEASSISTANT_METRICS}" = "true" ]; then
 cat <<ALLOYCONFIG
 
 // --- Home Assistant Core metrics ---
@@ -233,7 +292,24 @@ prometheus.scrape "homeassistant" {
 ALLOYCONFIG
 fi
 
-if [ -n "${PROMETHEUS_URL}" ]; then
+if [ "${OPERATION_MODE}" != "fleet" ] && [ -n "${PROMETHEUS_URL}" ] && [ "${ALLOY_METRICS}" = "true" ]; then
+cat <<ALLOYCONFIG
+
+// --- Alloy self-monitoring metrics ---
+prometheus.scrape "alloy" {
+  targets = [{
+    "__address__" = "127.0.0.1:12345",
+    "instance"    = "${INSTANCE_NAME}",
+  }]
+  forward_to      = [prometheus.remote_write.metrics.receiver]
+  scrape_interval = "${METRICS_SCRAPE_INTERVAL}"
+  metrics_path    = "/metrics"
+  job_name        = "integrations/alloy"
+}
+ALLOYCONFIG
+fi
+
+if [ "${OPERATION_MODE}" != "fleet" ] && [ -n "${PROMETHEUS_URL}" ]; then
 cat <<ALLOYCONFIG
 
 // --- Write to Prometheus ---
@@ -245,6 +321,70 @@ ALLOYCONFIG
 emit_basic_auth "${PROMETHEUS_USERNAME}" PROMETHEUS_PASSWORD "    "
 
 cat <<ALLOYCONFIG
+  }
+}
+ALLOYCONFIG
+fi
+
+if [ "${OPERATION_MODE}" != "fleet" ] && [ "${TRACES_ENABLED}" = "true" ] && [ -n "${TEMPO_URL}" ]; then
+  traces_listen_address="127.0.0.1"
+  [ "${TRACES_NETWORK_ACCESS}" = "true" ] && traces_listen_address="0.0.0.0"
+  if [ -n "${TEMPO_USERNAME}" ]; then
+cat <<ALLOYCONFIG
+
+otelcol.auth.basic "tempo" {
+  username = "${TEMPO_USERNAME}"
+  password = sys.env("TEMPO_PASSWORD")
+}
+ALLOYCONFIG
+  fi
+
+cat <<ALLOYCONFIG
+
+// --- Receive OTLP traces and forward them to Tempo ---
+otelcol.receiver.otlp "local" {
+  grpc {
+    endpoint = "${traces_listen_address}:4317"
+  }
+  http {
+    endpoint = "${traces_listen_address}:4318"
+  }
+  output {
+    traces = [otelcol.exporter.otlphttp.tempo.input]
+  }
+}
+
+otelcol.exporter.otlphttp "tempo" {
+  client {
+    endpoint = "${TEMPO_URL}"
+ALLOYCONFIG
+  if [ -n "${TEMPO_USERNAME}" ]; then
+    printf '    auth = otelcol.auth.basic.tempo.handler\n'
+  fi
+cat <<'ALLOYCONFIG'
+  }
+}
+ALLOYCONFIG
+fi
+
+if [ "${OPERATION_MODE}" != "fleet" ] && [ "${ALLOY_PROFILING}" = "true" ] && [ -n "${PYROSCOPE_URL}" ]; then
+cat <<ALLOYCONFIG
+
+// --- Continuously profile Alloy itself ---
+pyroscope.scrape "alloy" {
+  targets = [{
+    "__address__" = "127.0.0.1:12345",
+    "service_name" = "alloy",
+  }]
+  forward_to = [pyroscope.write.profiles.receiver]
+}
+
+pyroscope.write "profiles" {
+  endpoint {
+    url = "${PYROSCOPE_URL}"
+ALLOYCONFIG
+emit_basic_auth "${PYROSCOPE_USERNAME}" PYROSCOPE_PASSWORD "    "
+cat <<'ALLOYCONFIG'
   }
 }
 ALLOYCONFIG
