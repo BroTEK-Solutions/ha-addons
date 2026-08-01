@@ -270,8 +270,12 @@ def main() -> int:
             isinstance(entry, dict) and bool(entry.get("name")) and bool(entry.get("description")),
         )
     check("translations have no unknown configuration options", set(documented) == set(schema))
-    network = translations.get("network", {}).get("8090/tcp", {})
-    check("8090/tcp has a network description", bool(network.get("description")))
+    network_description = translations.get("network", {}).get("8090/tcp")
+    check(
+        "8090/tcp has a Supervisor-compatible network description",
+        isinstance(network_description, str) and bool(network_description.strip()),
+        "network translations must map the port directly to a string",
+    )
 
     if failures:
         print(f"\n== {len(failures)} FAILED ==")
