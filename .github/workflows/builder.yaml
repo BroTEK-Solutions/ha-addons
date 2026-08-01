@@ -97,8 +97,10 @@ jobs:
 
       - name: Alloy initialization tests
         run: |
+          alloy_base="$(awk '/^FROM ghcr.io\/home-assistant\/base-debian:/ { print $2; exit }' alloy/Dockerfile)"
+          test -n "$alloy_base"
           docker run --rm -v "${PWD}:/w" -w /w \
-            ghcr.io/home-assistant/base-debian:bookworm@sha256:8c7a9e207425e79b6b2ed1628a2b6727fa6e518d9fdddcbe3b1ac20440e70492 \
+            "$alloy_base" \
             bash alloy/tests/init-alloy.test.sh
 
   init:

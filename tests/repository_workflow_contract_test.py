@@ -113,6 +113,13 @@ def main() -> None:
     ):
         if required not in caller:
             fail("PDC service tests must derive the pinned HA base from the App Dockerfile")
+    for required in (
+        "alloy/Dockerfile",
+        r"ghcr.io\/home-assistant\/base-debian:",
+        '"$alloy_base"',
+    ):
+        if required not in caller:
+            fail("Alloy initialization tests must derive the pinned HA base from the App Dockerfile")
     if "needs: [init, test]" not in caller:
         fail("image builds must wait for the complete repository test gate")
     blanket_publish_guard = "github.event_name == 'push' && github.ref == 'refs/heads/main'"

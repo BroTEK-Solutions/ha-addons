@@ -53,7 +53,9 @@
       ],
       "matchUpdateTypes": ["digest", "pin", "patch", "minor"],
       "automerge": true,
-      "addLabels": ["dep:low-risk"]
+      "addLabels": ["dep:low-risk"],
+      "semanticCommitType": "fix",
+      "semanticCommitScope": "deps"
     },
     {
       "description": "Review CI runtime updates manually",

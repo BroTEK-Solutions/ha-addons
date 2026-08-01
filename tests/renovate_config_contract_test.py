@@ -81,6 +81,10 @@ def main() -> None:
         fail("allowlisted non-major App dependencies must automerge after CI")
     if app_dependencies.get("addLabels") != ["dep:low-risk"] or "labels" in app_dependencies:
         fail("App dependency classification must preserve the standard labels")
+    if app_dependencies.get("semanticCommitType") != "fix":
+        fail("App dependency updates must trigger a Release Please patch release")
+    if app_dependencies.get("semanticCommitScope") != "deps":
+        fail("App dependency release commits must retain the deps scope")
 
     runtimes = matching_rule(rules, "Review CI runtime updates manually")
     if set(runtimes.get("matchPackageNames", [])) != {"python", "ubuntu"}:
