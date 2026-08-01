@@ -195,9 +195,40 @@ jobs:
       app: ${{ matrix.app.app }}
       publish: ${{ matrix.app.publish }}
 
+  security:
+    name: Security and workflow lint
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/security.yml
+
+  # The branch ruleset requires only this stable check. Keep all test, build,
+  # and security results behind it so matrix names can change without weakening
+  # Renovate's merge gate. A skipped build is valid when no App changed.
+  ci-success:
+    name: ci-success
+    needs: [test, init, build-app, security]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Fail if any required job did not pass
+        if: >-
+          ${{
+            contains(needs.*.result, 'failure') ||
+            contains(needs.*.result, 'cancelled')
+          }}
+        run: |
+          echo "A required job failed or was cancelled: ${{ join(needs.*.result, ', ') }}"
+          exit 1
+
+      - name: All required jobs passed
+        run: echo "ci-success - ${{ join(needs.*.result, ', ') }}"
+
   release:
     name: Prepare or publish App releases
-    needs: [init, test, build-app]
+    needs: [init, test, build-app, security]
     if: >-
       ${{
         always() &&
@@ -205,6 +236,7 @@ jobs:
         github.ref == 'refs/heads/main' &&
         needs.init.result == 'success' &&
         needs.test.result == 'success' &&
+        needs.security.result == 'success' &&
         (needs.build-app.result == 'success' || needs.build-app.result == 'skipped')
       }}
     permissions:

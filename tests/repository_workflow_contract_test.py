@@ -134,7 +134,7 @@ def main() -> None:
         "app: ${{ matrix.app.app }}",
         "publish: ${{ matrix.app.publish }}",
         "uses: ./.github/workflows/release.yaml",
-        "needs: [init, test, build-app]",
+        "needs: [init, test, build-app, security]",
         "needs.build-app.result == 'success' || needs.build-app.result == 'skipped'",
         "issues: write",
         "RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}",
@@ -152,6 +152,19 @@ def main() -> None:
         fail("version comparison must fetch the base revision in the init job")
 
     security = (ROOT / ".github/workflows/security.yml").read_text()
+    security_triggers = security.split("\npermissions:", 1)[0]
+    for direct_trigger in ("\n  push:", "\n  pull_request:"):
+        if direct_trigger in security_triggers:
+            fail("security checks must run once through the required Build Apps gate")
+    for required in (
+        "workflow_call:",
+        "uses: ./.github/workflows/security.yml",
+        "needs: [test, init, build-app, security]",
+        "needs.security.result == 'success'",
+        "name: ci-success",
+    ):
+        if required not in security + caller:
+            fail(f"required CI gate is missing security contract: {required}")
     trusted_pr_guard = (
         "github.event_name != 'pull_request' || "
         "github.event.pull_request.head.repo.full_name == github.repository"

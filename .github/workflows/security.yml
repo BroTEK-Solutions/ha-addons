@@ -5,9 +5,7 @@ name: Security and workflow lint
 # fleet requires (zizmor fails a reintroduced floating @main).
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_call:
   schedule:
     # Weekly, so newly disclosed CVEs in the add-on image surface without a push.
     - cron: "42 5 * * 2"
