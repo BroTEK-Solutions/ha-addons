@@ -41,6 +41,9 @@ async function loadConfig() {
   legacyWarning.hidden = !data.legacy_hybrid;
   document.querySelectorAll("[data-secret]").forEach((field) => {
     const configured = Boolean(data.secrets[field.name]);
+    field.value = "";
+    const clear = form.querySelector(`[data-clear-secret="${field.name}"]`);
+    if (clear) clear.checked = false;
     field.placeholder = configured ? "Configured — leave blank to keep" : "Not configured";
     field.dataset.configured = String(configured);
   });

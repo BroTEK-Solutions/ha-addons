@@ -98,6 +98,35 @@ func TestMergeOptionsRemovesLegacyFleetAliasWhenSharedKeyChanges(t *testing.T) {
 	}
 }
 
+func TestMergeOptionsPreservesInactiveModeConfiguration(t *testing.T) {
+	current := map[string]any{
+		"operation_mode":       "fleet",
+		"fleet_url":            "https://fleet.example",
+		"fleet_username":       "123",
+		"fleet_poll_frequency": "5m",
+		"gcloud_rw_api_key":    "fleet-secret",
+		"loki_url":             "https://old-logs.example",
+	}
+	submitted := map[string]any{
+		"operation_mode": "local",
+		"loki_url":       "https://new-logs.example",
+	}
+
+	got := mergeOptions(current, submitted, map[string]*string{})
+	for key, want := range map[string]any{
+		"operation_mode":       "local",
+		"loki_url":             "https://new-logs.example",
+		"fleet_url":            "https://fleet.example",
+		"fleet_username":       "123",
+		"fleet_poll_frequency": "5m",
+		"gcloud_rw_api_key":    "fleet-secret",
+	} {
+		if got[key] != want {
+			t.Errorf("merged %s = %#v, want %#v", key, got[key], want)
+		}
+	}
+}
+
 func TestValidateModeRequirementsRejectsInvalidLocalCrossFieldOptions(t *testing.T) {
 	tests := []struct {
 		name    string

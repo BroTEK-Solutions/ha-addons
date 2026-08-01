@@ -131,9 +131,14 @@ func validateModeRequirements(options map[string]any) error {
 }
 
 func mergeOptions(current, submitted map[string]any, updates map[string]*string) map[string]any {
-	merged := make(map[string]any, len(submitted)+len(secretOptionNames))
+	merged := make(map[string]any, len(current)+len(submitted))
 	sharedKeyUpdate, sharedKeyPresent := updates["gcloud_rw_api_key"]
 	sharedKeyChanged := sharedKeyPresent && sharedKeyUpdate != nil
+	for key, value := range current {
+		if !isSecretOption(key) {
+			merged[key] = value
+		}
+	}
 	for key, value := range submitted {
 		if !isSecretOption(key) {
 			merged[key] = value

@@ -147,6 +147,9 @@ jobs:
         working-directory: alloy/ui
         run: go test ./...
 
+      - name: Alloy browser state tests
+        run: node alloy/tests/ui-static.test.mjs
+
       - name: Alloy generator tests
         run: bash alloy/tests/generate-config.test.sh
 
