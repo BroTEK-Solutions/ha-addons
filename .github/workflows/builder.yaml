@@ -71,14 +71,17 @@ jobs:
         run: |
           python3 tests/app_metadata_contract_test.py
           python3 tests/app_version_changed_test.py
+          python3 tests/renovate_config_contract_test.py
           python3 tests/repository_workflow_contract_test.py
           python3 grafana_pdc/tests/config-schema.test.py
           python3 grafana_pdc/tests/image-contract.test.py
 
       - name: PDC service tests in the Home Assistant base
         run: |
+          ha_base="$(awk '/^FROM ghcr.io\/home-assistant\/base:/ { print $2; exit }' grafana_pdc/Dockerfile)"
+          test -n "$ha_base"
           docker run --rm -e BASHIO_BIN=/usr/bin/bashio -v "${PWD}:/w" -w /w \
-            ghcr.io/home-assistant/base:3.23@sha256:445077433f08d1e352285ff22ee2594f6b93ac3260dcf84433c79cd849a946a0 \
+            "$ha_base" \
             bash grafana_pdc/tests/service.test.sh
 
       - name: PDC complete-image smoke test
@@ -94,8 +97,10 @@ jobs:
 
       - name: Alloy initialization tests
         run: |
+          alloy_base="$(awk -F= '/^ARG BUILD_FROM=ghcr.io\/home-assistant\/base-debian:/ { print $2; exit }' alloy/Dockerfile)"
+          test -n "$alloy_base"
           docker run --rm -v "${PWD}:/w" -w /w \
-            ghcr.io/home-assistant/base-debian:bookworm@sha256:8c7a9e207425e79b6b2ed1628a2b6727fa6e518d9fdddcbe3b1ac20440e70492 \
+            "$alloy_base" \
             bash alloy/tests/init-alloy.test.sh
 
   init:

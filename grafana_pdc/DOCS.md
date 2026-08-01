@@ -79,10 +79,10 @@ Do **not** use CIDR notation such as `192.0.2.0/24:5432`. `PermitRemoteOpen` is 
 
 `use_gossh` enables the experimental Go SSH implementation. It supports exact allowlist matches
 only: do not use wildcard entries with it, and leave `connections: 1`. Use the normal OpenSSH path
-unless you are deliberately testing the experimental implementation. The PDC 0.0.62 release
-packaged here also predates the upstream `x/crypto` update for a known GoSSH reconnect CPU loop
-([grafana/pdc-agent#320](https://github.com/grafana/pdc-agent/issues/320)); keep GoSSH disabled until
-this App ships a PDC release containing that fix.
+unless you are deliberately testing the experimental implementation. PDC releases before 0.0.63
+have a known GoSSH reconnect CPU loop; the upstream fix shipped in 0.0.63
+([grafana/pdc-agent#320](https://github.com/grafana/pdc-agent/issues/320)). Keep GoSSH disabled when
+running an older App build.
 
 Leaving `allowed_endpoints` empty is allowed, but it is not a deny-all mode. It grants Grafana
 Cloud access to the broad set of IP addresses, names, and ports that the App can reach. Prefer an
