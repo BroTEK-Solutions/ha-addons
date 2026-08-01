@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.0.2...grafana-pdc-v1.0.3) (2026-08-01)
+
+
+### Bug Fixes
+
+* **grafana_pdc:** permit read-only process metrics ([c2874d6](https://github.com/BroTEK-Solutions/ha-addons/commit/c2874d62c044226c9b3de56b802f22459f88ab65))
+
 ## [1.0.2](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.0.1...grafana-pdc-v1.0.2) (2026-08-01)
 
 
