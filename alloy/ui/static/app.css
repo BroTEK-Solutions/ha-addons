@@ -13,6 +13,7 @@ input:focus,select:focus,textarea:focus { outline:2px solid var(--accent); outli
 .toggles { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1rem; margin:1rem 0; } .toggles > div { border:1px solid var(--line); border-radius:8px; padding:.75rem; } .toggles label,.switch,.clear { display:flex; gap:.5rem; align-items:center; font-weight:500; } .toggles input,.switch input,.clear input { width:auto; }
 .clear { margin-top:.4rem; color:var(--muted); font-size:.85rem; }
 details { border-top:1px solid var(--line); margin-top:1rem; padding-top:1rem; } summary { cursor:pointer; }
+.break-glass { border:1px solid #ef6c00; border-radius:8px; padding:1rem; }
 aside,#notice:not(:empty) { padding:.8rem 1rem; border-radius:7px; margin:1rem 0; background:#ffecb3; color:#382f16; }
 #notice.error { background:#ffcdd2; color:#5f1010; } #notice.success { background:#c8e6c9; color:#143c17; }
 .actions { position:sticky; bottom:0; display:flex; justify-content:flex-end; gap:.75rem; padding:1rem; background:color-mix(in srgb,var(--bg) 90%,transparent); backdrop-filter:blur(8px); }

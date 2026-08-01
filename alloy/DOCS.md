@@ -5,9 +5,14 @@ Assistant OS. It can either run pipelines supplied by Grafana Cloud Fleet
 Management or build local pipelines for logs, metrics, traces and profiles.
 
 Open **Web UI** to configure the App. The page shows only the controls relevant
-to the selected operation mode, saves through the Supervisor API, and links to
-Alloy's component graph. Saving does not interrupt collection; choose **Save and
-restart** when you are ready to apply the new configuration.
+to the selected operation mode, validates the complete candidate with Alloy,
+and links to Alloy's component graph. Saving does not interrupt collection;
+choose **Save and restart** when you are ready to apply the new configuration.
+
+The Home Assistant **Configuration** tab deliberately contains only two
+recovery controls: **Safe mode** and **Configuration UI log level**. All pipeline
+settings live in the Web UI, so the same option is never presented in two
+places.
 
 ## Choose one operation mode
 
@@ -109,27 +114,36 @@ Home Assistant Core profiling.
 | Fleet poll frequency | `1m` | Frequency for remote-configuration checks. |
 | Disable Alloy usage reporting | on | Passes `--disable-reporting`; no anonymous usage report is sent. |
 | Stability level | generally available | Allows preview components when deliberately raised. |
-| Additional startup arguments | empty | Extra Alloy CLI flags; an invalid flag prevents startup. |
+| Additional startup arguments | empty | Extra `--flag` or `--flag=value` Alloy CLI arguments, checked before saving. |
 | Additional Alloy configuration | empty | River blocks appended to generated local configuration. |
+| Full manual configuration override | off | Replaces every generated pipeline with the supplied complete Alloy configuration. |
 
-A full override at `/config/config.alloy` replaces the generated configuration.
-This is for configurations the form cannot express. Startup controls and secret
-environment variables remain available, but pipeline options are ignored while
-the override exists.
+The full manual override is the break-glass path for configurations the guided
+form cannot express. Enable it under **Advanced & optional configuration
+options** and paste the complete `config.alloy` contents. The Web UI runs the
+same Alloy binary shipped in the App to validate the candidate before it writes
+anything. Generated Fleet and Local pipeline settings are ignored while the
+override is enabled, but stored secrets remain available through their
+documented environment variables.
 
 ## Secrets and upgrades
 
 Passwords and tokens are referenced from Alloy with `sys.env()` and are never
-written into `/etc/alloy/config.alloy` or shown in the browser. Home Assistant
-still stores App options in `/data/options.json` and includes them in backups;
-the password control masks display, not storage.
+written into `/etc/alloy/config.alloy` or returned to the browser. Operational
+settings are stored atomically in `/data/settings.json` with mode `0600` and are
+included in Home Assistant backups. The password control masks display, not
+storage.
 
-Older versions allowed Fleet and local pipelines simultaneously. Such an
-installation continues in a compatibility-only **legacy hybrid** state until a
-mode is chosen, so upgrading does not silently remove a pipeline. The Web UI
-does not allow saving that legacy combination. Select Fleet or Local to migrate.
-The former `fleet_password` value is accepted as an upgrade bridge and is shown
-as the shared Grafana Cloud key; new configurations use `gcloud_rw_api_key`.
+On first version 2 startup, recognized settings are imported once from the old
+Home Assistant App options. The former `fleet_password` value becomes the shared
+`gcloud_rw_api_key`; unrelated or unknown keys are not imported. An old mixed
+Fleet-and-local configuration is shown as **legacy hybrid** until Fleet or Local
+is selected, and cannot be saved unchanged.
+
+If Alloy cannot start, enable **Safe mode** in the Home Assistant Configuration
+tab and restart the App. Safe mode starts Alloy with only logging configured,
+while leaving the Web UI available so the stored operational configuration can
+be repaired. Disable safe mode and restart after the candidate saves cleanly.
 
 ## Alloy component graph and network ports
 
@@ -137,11 +151,10 @@ Alloy's component graph is proxied through Home Assistant ingress at **Open Web
 UI > Alloy status**. The internal Alloy server listens only on loopback port
 **12345** for health checks and self-monitoring and is not exposed directly.
 The configuration control plane accepts only Supervisor ingress traffic; its
-separate health endpoint contains no configuration or restart capability.
-
-If Alloy exits because of invalid generated or additional configuration, the App
-stops and reports the error. With Home Assistant's Watchdog enabled, an
-unresponsive Alloy process is restarted after its readiness health check fails.
+separate health endpoint contains no configuration or restart capability. App
+health follows this recovery UI rather than Alloy readiness. If Alloy exits, S6
+can restart it and the Web UI remains available; **Alloy status & component
+graph** reports an upstream error until Alloy is ready again.
 
 ## Troubleshooting
 
@@ -152,4 +165,4 @@ unresponsive Alloy process is restarted after its readiness health check fails.
 | Home Assistant scrape returns 404 | Enable Home Assistant's `prometheus` integration. |
 | No expected journal entries | Check the three log source switches, excluded App slugs and replay-age limit. |
 | OTLP sender cannot connect | Enable traces and explicitly allow OTLP clients on the HAOS network. |
-| Alloy will not start | Read the App log for the named option or River component; remove invalid additional arguments/configuration. |
+| Alloy will not start | Open the Web UI, correct the rejected setting or manual configuration, and use Safe mode from the Home Assistant Configuration tab if recovery is needed. |

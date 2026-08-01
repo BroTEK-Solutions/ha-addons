@@ -36,8 +36,7 @@ COPY --from=ui-builder /out/alloy-ui /usr/bin/alloy-ui
 # add-on's health, which is what the user-facing Watchdog toggle acts on. This
 # replaces the `watchdog:` config key, which is obsolete.
 HEALTHCHECK --start-period=30s --interval=30s --timeout=5s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:12345/-/ready >/dev/null \
-    && curl -fsS http://127.0.0.1:8099/healthz >/dev/null || exit 1
+    CMD curl -fsS http://127.0.0.1:8099/healthz >/dev/null || exit 1
 
 EXPOSE 8099/tcp
 

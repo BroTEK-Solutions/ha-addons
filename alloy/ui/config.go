@@ -77,6 +77,12 @@ func optionEnabled(options map[string]any, key string) bool {
 }
 
 func validateModeRequirements(options map[string]any) error {
+	if optionEnabled(options, "manual_config_enabled") {
+		if !optionHasValue(options, "manual_config") {
+			return errors.New("manual configuration override requires complete config.alloy contents")
+		}
+		return nil
+	}
 	mode, _ := options["operation_mode"].(string)
 	switch mode {
 	case "fleet":

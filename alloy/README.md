@@ -16,5 +16,10 @@ Alloy's UI and port 12345 are available only through Home Assistant ingress.
 OTLP ports 4317 and 4318 remain loopback-only unless network access is
 explicitly enabled for trusted senders.
 
+Version 2 uses the ingress page as the single operational configuration source.
+The native Home Assistant Configuration tab contains only safe mode and UI log
+level recovery controls. Advanced users can enable a validated, full manual
+Alloy configuration override from the ingress page.
+
 See the App's **Documentation** tab for setup, defaults, security boundaries and
 migration guidance.

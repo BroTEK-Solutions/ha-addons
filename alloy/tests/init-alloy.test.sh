@@ -2,11 +2,9 @@
 # Test harness for the init-alloy service script.
 # Usage: alloy/tests/init-alloy.test.sh
 #
-# init-alloy/run is what turns add-on options into an Alloy config, and every
-# way it can refuse to start is a message a user has to act on. It runs under
-# bashio, which reads options from the Supervisor API - but bashio caches that
-# response on disk and the cache directory is overridable, so seeding the cache
-# lets the real script run unmodified with no Supervisor present.
+# init-alloy/run is what turns ingress-managed settings into an Alloy config, and every
+# way it can refuse to start is a message a user has to act on. Operational
+# settings come from the v2 settings store; bashio contains recovery options only.
 set -u
 
 ADDON_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -31,8 +29,8 @@ pass() { echo "  ✓ $1"; }
 # check list. Parameter expansion rather than sed, per ShellCheck SC2001.
 indent() { echo "      ${1//$'\n'/$'\n'      }"; }
 
-# Run init-alloy/run against a given options.json.
-# $1 = options JSON. Sets RUN_RC, RUN_OUT and RUN_CONFIG.
+# Run init-alloy/run against a given settings.json.
+# $1 = settings JSON. Sets RUN_RC, RUN_OUT and RUN_CONFIG.
 run_init() {
   local tmp
   tmp="$(mktemp -d)"
@@ -40,18 +38,15 @@ run_init() {
   # directory is owner-only.
   mkdir -p "${tmp}/cache" "${tmp}/etc" "${tmp}/data"
   chmod 0700 "${tmp}/cache"
-  printf '%s' "$1" >"${tmp}/cache/addons.self.options.config.cache"
-
-  # $2, when given, is written to the add-on config folder as a config.alloy
-  # override.
-  mkdir -p "${tmp}/addon_config"
-  [ -n "${2:-}" ] && printf '%s' "$2" >"${tmp}/addon_config/config.alloy"
+  printf '%s' '{"safe_mode":false,"ui_log_level":"info"}' >"${tmp}/cache/addons.self.options.config.cache"
+  printf '%s' "$1" >"${tmp}/data/settings.json"
 
   RUN_OUT="$(
     CACHE_DIR="${tmp}/cache" \
     CONFIG_DIR="${tmp}/etc" \
     DATA_DIR="${tmp}/data" \
-    ADDON_CONFIG_DIR="${tmp}/addon_config" \
+    SETTINGS_FILE="${tmp}/data/settings.json" \
+    LEGACY_OPTIONS_FILE="${tmp}/data/options.json" \
     GENERATOR="${GENERATOR}" \
       "${BASHIO_BIN}" "${INIT}" 2>&1
   )"
@@ -330,19 +325,19 @@ expect_fatal "home assistant metrics without a Prometheus endpoint" \
   "homeassistant_metrics is enabled but prometheus_url is empty"
 
 echo
-echo "== a user config.alloy replaces the generated one =="
+echo "== an ingress-managed manual config replaces the generated one =="
 TESTS=$((TESTS + 1))
-run_init "{${LOKI}}" 'logging { level = "debug" }'
+run_init '{"manual_config_enabled":true,"manual_config":"logging { level = \"debug\" }"}'
 if [ "${RUN_RC}" -ne 0 ]; then
   fail "override run exited ${RUN_RC}"
   indent "${RUN_OUT}"
 elif [ "${RUN_CONFIG}" != 'logging { level = "debug" }' ]; then
   fail "override was not used verbatim, got: ${RUN_CONFIG}"
 else
-  pass "the override is copied verbatim"
+  pass "the manual override is copied verbatim"
 fi
 TESTS=$((TESTS + 1))
-if grep -qF "Add-on options are ignored" <<<"${RUN_OUT}"; then
+if grep -qF "manual Alloy configuration override" <<<"${RUN_OUT}"; then
   pass "the override is announced in the log"
 else
   fail "the override was silent"
@@ -350,7 +345,7 @@ fi
 # With an override the options no longer describe what Alloy does, so the
 # destination requirement must not be enforced.
 TESTS=$((TESTS + 1))
-run_init '{"instance_name":"hass"}' 'logging { level = "info" }'
+run_init '{"manual_config_enabled":true,"manual_config":"logging { level = \"info\" }"}'
 if [ "${RUN_RC}" -eq 0 ]; then
   pass "an override starts with no destination configured"
 else
@@ -404,13 +399,13 @@ fi
 TESTS=$((TESTS + 1))
 run_finish 256 11
 if [ "${FINISH_RC}" -ne 0 ]; then
-  fail "SIGSEGV finish did not hand off to halt"
-elif [ "${FINISH_HALTED}" != true ] || [ "${FINISH_EXIT_CODE}" != 139 ]; then
-  fail "SIGSEGV finish did not preserve exit code 139 and halt the App"
+  fail "SIGSEGV finish returned a failure instead of allowing supervision to restart Alloy"
+elif [ "${FINISH_HALTED}" = true ] || [ -n "${FINISH_EXIT_CODE}" ]; then
+  fail "SIGSEGV halted the App and took down the configuration UI"
 elif ! grep -qF "signal 11" <<<"${FINISH_OUT}"; then
   fail "SIGSEGV finish did not report signal 11"
 else
-  pass "SIGSEGV stops the App with exit code 139"
+  pass "SIGSEGV leaves the configuration UI running while Alloy is restarted"
 fi
 
 echo

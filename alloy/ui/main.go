@@ -11,6 +11,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -18,8 +20,6 @@ import (
 var staticFiles embed.FS
 
 type supervisorAPI interface {
-	Options(context.Context) (map[string]any, error)
-	Save(context.Context, map[string]any) error
 	Restart(context.Context) error
 }
 
@@ -33,7 +33,13 @@ type saveRequest struct {
 	Secrets map[string]*string `json:"secrets"`
 }
 
-func newAppHandler(supervisor supervisorAPI, alloyURL string) (http.Handler, error) {
+type statusResponse struct {
+	AlloyReady     bool `json:"alloy_ready"`
+	SafeMode       bool `json:"safe_mode"`
+	ManualOverride bool `json:"manual_override"`
+}
+
+func newAppHandler(store settingsStore, validator candidateValidator, supervisor supervisorAPI, alloyURL string) (http.Handler, error) {
 	proxy, err := newAlloyProxy(alloyURL)
 	if err != nil {
 		return nil, err
@@ -44,10 +50,28 @@ func newAppHandler(supervisor supervisorAPI, alloyURL string) (http.Handler, err
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/alloy/", proxy)
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
+			return
+		}
+		settings, err := store.Load()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		manualOverride, _ := settings["manual_config_enabled"].(bool)
+		writeJSON(w, http.StatusOK, statusResponse{
+			AlloyReady:     alloyReady(r.Context(), alloyURL),
+			SafeMode:       envBool("SAFE_MODE"),
+			ManualOverride: manualOverride,
+		})
+	})
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			options, err := supervisor.Options(r.Context())
+			options, err := store.Load()
 			if err != nil {
 				writeError(w, http.StatusBadGateway, err)
 				return
@@ -66,11 +90,12 @@ func newAppHandler(supervisor supervisorAPI, alloyURL string) (http.Handler, err
 				return
 			}
 			mode, _ := input.Options["operation_mode"].(string)
-			if mode != "fleet" && mode != "local" {
+			manualOverride, _ := input.Options["manual_config_enabled"].(bool)
+			if !manualOverride && mode != "fleet" && mode != "local" {
 				writeError(w, http.StatusBadRequest, errors.New("choose Fleet Management or Local configuration before saving"))
 				return
 			}
-			current, err := supervisor.Options(r.Context())
+			current, err := store.Load()
 			if err != nil {
 				writeError(w, http.StatusBadGateway, err)
 				return
@@ -80,8 +105,12 @@ func newAppHandler(supervisor supervisorAPI, alloyURL string) (http.Handler, err
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			if err := supervisor.Save(r.Context(), candidate); err != nil {
-				writeError(w, http.StatusBadGateway, err)
+			if err := validator.Validate(r.Context(), candidate); err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			if err := store.Save(candidate); err != nil {
+				writeError(w, http.StatusInternalServerError, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, apiResponse{OK: true, Message: "Configuration saved. Restart Alloy to apply it."})
@@ -104,6 +133,26 @@ func newAppHandler(supervisor supervisorAPI, alloyURL string) (http.Handler, err
 	})
 	mux.Handle("/", http.FileServer(http.FS(assets)))
 	return securityHeaders(mux), nil
+}
+
+func alloyReady(ctx context.Context, alloyURL string) bool {
+	probeContext, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(probeContext, http.MethodGet, strings.TrimRight(alloyURL, "/")+"/-/ready", nil)
+	if err != nil {
+		return false
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	return response.StatusCode >= 200 && response.StatusCode < 300
+}
+
+func envBool(key string) bool {
+	value, err := strconv.ParseBool(os.Getenv(key))
+	return err == nil && value
 }
 
 func ingressOnly(sourceIP string, next http.Handler) http.Handler {
@@ -147,13 +196,25 @@ func writeError(w http.ResponseWriter, status int, err error) {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--migrate-only" {
+		store := newFileStore(
+			envOr("SETTINGS_FILE", "/data/settings.json"),
+			envOr("LEGACY_OPTIONS_FILE", "/data/options.json"),
+		)
+		if _, err := store.Load(); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	token := os.Getenv("SUPERVISOR_TOKEN")
 	if token == "" {
 		log.Fatal("SUPERVISOR_TOKEN is required")
 	}
 	client := &http.Client{Timeout: 15 * time.Second}
 	supervisor := newSupervisorClient(envOr("SUPERVISOR_URL", "http://supervisor"), token, client)
-	handler, err := newAppHandler(supervisor, envOr("ALLOY_URL", "http://127.0.0.1:12345"))
+	store := newFileStore(envOr("SETTINGS_FILE", "/data/settings.json"), envOr("LEGACY_OPTIONS_FILE", "/data/options.json"))
+	validator := newAlloyValidator(envOr("GENERATOR", "/usr/share/alloy/generate-config.sh"), envOr("ALLOY_BIN", "/usr/bin/alloy"))
+	handler, err := newAppHandler(store, validator, supervisor, envOr("ALLOY_URL", "http://127.0.0.1:12345"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -163,7 +224,9 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	log.Printf("Alloy configuration UI listening on %s", server.Addr)
+	if level := envOr("UI_LOG_LEVEL", "info"); level == "debug" || level == "info" {
+		log.Printf("Alloy configuration UI listening on %s", server.Addr)
+	}
 	log.Fatal(server.ListenAndServe())
 }
 

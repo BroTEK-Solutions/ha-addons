@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,19 +12,26 @@ import (
 )
 
 type fakeSupervisor struct {
-	options   map[string]any
-	saved     map[string]any
 	restarted bool
 }
 
-func (f *fakeSupervisor) Options(context.Context) (map[string]any, error) {
-	return f.options, nil
+type fakeStore struct {
+	settings map[string]any
+	saved    map[string]any
+	saves    int
 }
 
-func (f *fakeSupervisor) Save(_ context.Context, options map[string]any) error {
-	f.saved = options
+func (f *fakeStore) Load() (map[string]any, error) { return f.settings, nil }
+func (f *fakeStore) Save(settings map[string]any) error {
+	f.saved = settings
+	f.settings = settings
+	f.saves++
 	return nil
 }
+
+type fakeValidator struct{ err error }
+
+func (f fakeValidator) Validate(context.Context, map[string]any) error { return f.err }
 
 func TestIngressSourceRestrictionProtectsTheControlPlane(t *testing.T) {
 	called := false
@@ -64,7 +72,7 @@ func (f *fakeSupervisor) Restart(context.Context) error {
 }
 
 func TestConfigAPIProjectsAndSavesWithoutReturningStoredSecrets(t *testing.T) {
-	supervisor := &fakeSupervisor{options: map[string]any{
+	store := &fakeStore{settings: map[string]any{
 		"operation_mode": "local",
 		"loki_url":       "https://logs.example",
 		"loki_username":  "123",
@@ -74,7 +82,7 @@ func TestConfigAPIProjectsAndSavesWithoutReturningStoredSecrets(t *testing.T) {
 		_, _ = io.WriteString(w, "alloy")
 	}))
 	defer alloy.Close()
-	handler, err := newAppHandler(supervisor, alloy.URL)
+	handler, err := newAppHandler(store, fakeValidator{}, &fakeSupervisor{}, alloy.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,17 +101,76 @@ func TestConfigAPIProjectsAndSavesWithoutReturningStoredSecrets(t *testing.T) {
 	if post.Code != http.StatusOK {
 		t.Fatalf("POST /api/config = %d %s", post.Code, post.Body.String())
 	}
-	if supervisor.saved["loki_password"] != "stored-secret" || supervisor.saved["loki_url"] != "https://new.example" {
-		t.Fatalf("saved options = %#v", supervisor.saved)
+	if store.saved["loki_password"] != "stored-secret" || store.saved["loki_url"] != "https://new.example" {
+		t.Fatalf("saved options = %#v", store.saved)
+	}
+}
+
+func TestStatusAPIReportsRecoveryStateWhenAlloyIsUnavailable(t *testing.T) {
+	t.Setenv("SAFE_MODE", "true")
+	store := &fakeStore{settings: map[string]any{"manual_config_enabled": true}}
+	alloy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "not ready", http.StatusServiceUnavailable)
+	}))
+	defer alloy.Close()
+	handler, err := newAppHandler(store, fakeValidator{}, &fakeSupervisor{}, alloy.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/status", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /api/status = %d %s", response.Code, response.Body.String())
+	}
+	var status struct {
+		AlloyReady     bool `json:"alloy_ready"`
+		SafeMode       bool `json:"safe_mode"`
+		ManualOverride bool `json:"manual_override"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if status.AlloyReady || !status.SafeMode || !status.ManualOverride {
+		t.Fatalf("status = %#v", status)
+	}
+}
+
+func TestConfigAPIRejectsCandidateBeforePersistence(t *testing.T) {
+	store := &fakeStore{settings: map[string]any{"operation_mode": "local", "loki_url": "https://old.example"}}
+	handler, err := newAppHandler(store, fakeValidator{err: errors.New("Alloy rejected candidate")}, &fakeSupervisor{}, "http://127.0.0.1:12345")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewBufferString(`{"options":{"operation_mode":"local","loki_url":"https://new.example"},"secrets":{}}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest || store.saves != 0 || store.settings["loki_url"] != "https://old.example" {
+		t.Fatalf("response=%d saves=%d settings=%#v", response.Code, store.saves, store.settings)
+	}
+}
+
+func TestConfigAPISavesManualOverrideWithoutOperationMode(t *testing.T) {
+	store := &fakeStore{settings: map[string]any{}}
+	handler, err := newAppHandler(store, fakeValidator{}, &fakeSupervisor{}, "http://127.0.0.1:12345")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/config", bytes.NewBufferString(`{"options":{"manual_config_enabled":true,"manual_config":"logging {}"},"secrets":{}}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || store.saves != 1 {
+		t.Fatalf("response=%d body=%s saves=%d", response.Code, response.Body.String(), store.saves)
 	}
 }
 
 func TestConfigAPIRejectsLegacyHybridSaveWithoutExplicitMode(t *testing.T) {
-	supervisor := &fakeSupervisor{options: map[string]any{
+	store := &fakeStore{settings: map[string]any{
 		"fleet_url": "https://fleet.example",
 		"loki_url":  "https://logs.example",
 	}}
-	handler, err := newAppHandler(supervisor, "http://127.0.0.1:12345")
+	handler, err := newAppHandler(store, fakeValidator{}, &fakeSupervisor{}, "http://127.0.0.1:12345")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,8 +194,8 @@ func TestConfigAPIRejectsIncompleteFleetCredentials(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			supervisor := &fakeSupervisor{options: map[string]any{}}
-			handler, err := newAppHandler(supervisor, "http://127.0.0.1:12345")
+			store := &fakeStore{settings: map[string]any{}}
+			handler, err := newAppHandler(store, fakeValidator{}, &fakeSupervisor{}, "http://127.0.0.1:12345")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -144,8 +211,8 @@ func TestConfigAPIRejectsIncompleteFleetCredentials(t *testing.T) {
 }
 
 func TestRestartAPIRequestsSelfRestart(t *testing.T) {
-	supervisor := &fakeSupervisor{options: map[string]any{}}
-	handler, err := newAppHandler(supervisor, "http://127.0.0.1:12345")
+	supervisor := &fakeSupervisor{}
+	handler, err := newAppHandler(&fakeStore{settings: map[string]any{}}, fakeValidator{}, supervisor, "http://127.0.0.1:12345")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,8 +224,7 @@ func TestRestartAPIRequestsSelfRestart(t *testing.T) {
 }
 
 func TestStaticUIContainsConditionalAccessibleConfiguration(t *testing.T) {
-	supervisor := &fakeSupervisor{options: map[string]any{}}
-	handler, err := newAppHandler(supervisor, "http://127.0.0.1:12345")
+	handler, err := newAppHandler(&fakeStore{settings: map[string]any{}}, fakeValidator{}, &fakeSupervisor{}, "http://127.0.0.1:12345")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,6 +247,8 @@ func TestStaticUIContainsConditionalAccessibleConfiguration(t *testing.T) {
 		"Scrape Home Assistant entities and Core internals; Home Assistant's Prometheus integration must be enabled.",
 		"Numeric Grafana Cloud traces tenant ID or a basic-auth username.",
 		"Changes Alloy's own App log verbosity, not the logs sent to Loki.",
+		"Full manual Alloy configuration override",
+		"Break-glass mode replaces every generated pipeline",
 		"href=\"alloy/\"",
 	} {
 		if !bytes.Contains([]byte(body), []byte(required)) {

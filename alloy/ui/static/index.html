@@ -22,6 +22,7 @@
 
   <main>
     <div id="notice" role="status" aria-live="polite"></div>
+    <aside id="runtime-status" role="status" aria-live="polite" hidden></aside>
     <form id="config-form">
       <section class="card">
         <label for="operation_mode">Operation mode</label>
@@ -124,8 +125,17 @@
             <div class="field"><label for="log_level">Alloy log level</label><p class="help">Changes Alloy's own App log verbosity, not the logs sent to Loki.</p><select id="log_level" name="log_level"><option>debug</option><option selected>info</option><option>warn</option><option>error</option></select></div>
             <div class="field"><label for="alloy_stability_level">Minimum component stability</label><p class="help">Keep generally available unless additional configuration needs a preview component.</p><select id="alloy_stability_level" name="alloy_stability_level"><option selected>generally-available</option><option>public-preview</option><option>experimental</option></select></div>
             <div><label class="switch"><input name="alloy_disable_telemetry" type="checkbox" checked> Disable anonymous Alloy usage reporting</label><p class="help">Pass <code>--disable-reporting</code> so Alloy sends no anonymous feature-usage report to Grafana.</p></div>
-            <div class="field wide"><label for="alloy_additional_args">Additional Alloy startup flags</label><p class="help">Whitespace-separated flags. Invalid flags prevent startup.</p><textarea id="alloy_additional_args" name="alloy_additional_args" rows="3"></textarea></div>
+            <div class="field wide"><label for="alloy_additional_args">Additional Alloy startup flags</label><p class="help">Whitespace-separated <code>--flag</code> or <code>--flag=value</code> arguments. Invalid flags are rejected before saving.</p><textarea id="alloy_additional_args" name="alloy_additional_args" rows="3"></textarea></div>
             <div class="field wide"><label for="additional_config">Additional Alloy configuration</label><p class="help">River blocks appended verbatim after the generated configuration.</p><textarea id="additional_config" name="additional_config" rows="8" spellcheck="false"></textarea></div>
+            <div class="field wide break-glass">
+              <label class="switch"><input id="manual_config_enabled" name="manual_config_enabled" type="checkbox"> Full manual Alloy configuration override</label>
+              <p class="help">Break-glass mode replaces every generated pipeline with the complete Alloy configuration below. The candidate must pass Alloy validation before it can be saved.</p>
+              <div id="manual-config-panel" hidden>
+                <aside>Generated Fleet and Local settings are ignored while this override is enabled. Stored credentials remain available through their documented environment variables.</aside>
+                <label for="manual_config">Complete config.alloy contents</label>
+                <textarea id="manual_config" name="manual_config" rows="18" spellcheck="false" disabled></textarea>
+              </div>
+            </div>
           </div>
         </details>
       </section>
