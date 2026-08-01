@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 const settingsSchemaVersion = 2
@@ -106,6 +107,16 @@ func (s *fileStore) Save(settings map[string]any) error {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("create settings directory: %w", err)
 	}
+	lock, err := os.OpenFile(s.path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("open settings lock: %w", err)
+	}
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		return fmt.Errorf("lock settings: %w", err)
+	}
+	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) //nolint:errcheck -- closing the descriptor also releases the lock
+
 	temporary, err := os.CreateTemp(dir, "."+filepath.Base(s.path)+".tmp-*")
 	if err != nil {
 		return fmt.Errorf("create temporary settings: %w", err)

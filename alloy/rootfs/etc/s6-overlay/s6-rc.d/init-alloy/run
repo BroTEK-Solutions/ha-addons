@@ -28,6 +28,13 @@ if [ ! -f "${SETTINGS_FILE}" ]; then
     fi
 fi
 
+# Serialize the settings snapshot, config generation, and applied marker with
+# ingress saves. A save that arrives during initialization waits, then retains
+# restart_required=true for the next restart instead of being marked applied.
+exec {SETTINGS_LOCK_FD}>"${SETTINGS_FILE}.lock"
+chmod 0600 "${SETTINGS_FILE}.lock"
+flock -x "${SETTINGS_LOCK_FD}"
+
 settings_has_value() {
     jq -e --arg key "${1}" \
         '.[$key] != null and ((.[$key] | tostring) | length) > 0' \

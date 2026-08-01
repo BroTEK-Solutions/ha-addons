@@ -3,10 +3,35 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"syscall"
 	"testing"
+	"time"
 )
+
+func TestFileStoreLockHelper(t *testing.T) {
+	if os.Getenv("ALLOY_STORE_LOCK_HELPER") != "1" {
+		return
+	}
+	lock, err := os.OpenFile(os.Getenv("ALLOY_STORE_LOCK_PATH"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		os.Exit(2)
+	}
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		os.Exit(3)
+	}
+	if err := os.WriteFile(os.Getenv("ALLOY_STORE_LOCK_READY"), []byte("ready"), 0o600); err != nil {
+		os.Exit(4)
+	}
+	for {
+		if _, err := os.Stat(os.Getenv("ALLOY_STORE_LOCK_RELEASE")); err == nil {
+			os.Exit(0)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
 
 func TestFileStoreReturnsV2DefaultsWhenNoStateExists(t *testing.T) {
 	dir := t.TempDir()
@@ -126,6 +151,58 @@ func TestFileStoreSavesAtomicallyWithOwnerOnlyPermissions(t *testing.T) {
 	matches, err := filepath.Glob(filepath.Join(dir, ".settings.json.tmp-*"))
 	if err != nil || len(matches) != 0 {
 		t.Fatalf("temporary files after save = %v, %v", matches, err)
+	}
+}
+
+func TestFileStoreSaveWaitsForTheInitializationLock(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+	readyPath := filepath.Join(dir, "ready")
+	releasePath := filepath.Join(dir, "release")
+	command := exec.Command(os.Args[0], "-test.run=^TestFileStoreLockHelper$")
+	command.Env = append(os.Environ(),
+		"ALLOY_STORE_LOCK_HELPER=1",
+		"ALLOY_STORE_LOCK_PATH="+settingsPath+".lock",
+		"ALLOY_STORE_LOCK_READY="+readyPath,
+		"ALLOY_STORE_LOCK_RELEASE="+releasePath,
+	)
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = command.Process.Kill() }()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, err := os.Stat(readyPath); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("lock helper did not become ready")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- newFileStore(settingsPath, filepath.Join(dir, "legacy.json")).Save(map[string]any{"operation_mode": "fleet"})
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("Save returned before initialization released the lock: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if err := os.WriteFile(releasePath, []byte("release"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Save did not resume after initialization released the lock")
+	}
+	if err := command.Wait(); err != nil {
+		t.Fatal(err)
 	}
 }
 
