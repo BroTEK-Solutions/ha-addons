@@ -8,12 +8,11 @@
     "dependencies",
     "renovate"
   ],
-  "internalChecksFilter": "strict",
-  "minimumReleaseAge": "12 hours",
-  "minimumReleaseAgeBehaviour": "timestamp-required",
+  "automerge": true,
   "automergeType": "pr",
-  "platformAutomerge": false,
+  "platformAutomerge": true,
   "rebaseWhen": "behind-base-branch",
+  "internalChecksFilter": "strict",
   "customManagers": [
     {
       "customType": "regex",
@@ -51,23 +50,20 @@
       "addLabels": ["dep:gha"]
     },
     {
-      "description": "Automerge non-major App dependencies after CI",
+      "description": "Classify App dependency updates",
       "matchPackageNames": [
         "grafana/alloy",
         "grafana/pdc-agent",
         "ghcr.io/home-assistant/base",
         "ghcr.io/home-assistant/base-debian"
       ],
-      "matchUpdateTypes": ["digest", "pin", "patch", "minor"],
-      "automerge": true,
-      "addLabels": ["dep:low-risk"],
+      "addLabels": ["dep:app"],
       "semanticCommitType": "fix",
       "semanticCommitScope": "deps"
     },
     {
-      "description": "Review CI runtime updates manually",
+      "description": "Classify CI runtime updates",
       "matchDepNames": ["python", "ubuntu"],
-      "automerge": false,
       "addLabels": ["dep:toolchain"]
     }
   ]

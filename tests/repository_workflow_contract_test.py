@@ -30,6 +30,8 @@ def main() -> None:
 
     caller = caller_path.read_text()
     reusable = reusable_path.read_text()
+    caller_config = yaml.safe_load(caller)
+    jobs = caller_config["jobs"]
 
     for release_file in (
         release_workflow_path,
@@ -98,18 +100,42 @@ def main() -> None:
     for app_file in ("config.yaml", "Dockerfile", "rootfs", "apparmor.txt"):
         if app_file not in caller:
             fail(f"changed-App detection must monitor {app_file}")
-    for command in (
-        "python3 tests/app_metadata_contract_test.py",
-        "python3 tests/app_version_changed_test.py",
-        "python3 tests/renovate_config_contract_test.py",
-        "python3 tests/repository_workflow_contract_test.py",
-        "python3 grafana_pdc/tests/config-schema.test.py",
-        "bash grafana_pdc/tests/service.test.sh",
-        "bash grafana_pdc/tests/image-smoke.test.sh",
-        "python3 grafana_pdc/tests/image-contract.test.py",
-    ):
-        if command not in caller:
-            fail(f"repository test gate must run: {command}")
+    test_lanes = {
+        "quality",
+        "pdc-test",
+        "alloy-generator-test",
+        "alloy-init-test",
+    }
+    if "test" in jobs or not test_lanes.issubset(jobs):
+        fail("independent repository and App tests must use four parallel jobs")
+
+    def job_text(job_name: str) -> str:
+        return json.dumps(jobs[job_name], sort_keys=True)
+
+    expected_commands = {
+        "quality": (
+            "python3 tests/app_metadata_contract_test.py",
+            "python3 tests/app_version_changed_test.py",
+            "python3 tests/renovate_config_contract_test.py",
+            "python3 tests/repository_workflow_contract_test.py",
+        ),
+        "pdc-test": (
+            "python3 grafana_pdc/tests/config-schema.test.py",
+            "python3 grafana_pdc/tests/image-contract.test.py",
+            "bash grafana_pdc/tests/service.test.sh",
+            "bash grafana_pdc/tests/image-smoke.test.sh",
+        ),
+        "alloy-generator-test": (
+            "python3 alloy/tests/config-schema.test.py",
+            "bash alloy/tests/generate-config.test.sh",
+        ),
+        "alloy-init-test": ("bash alloy/tests/init-alloy.test.sh",),
+    }
+    for job_name, commands in expected_commands.items():
+        lane = job_text(job_name)
+        for command in commands:
+            if command not in lane:
+                fail(f"{job_name} must run: {command}")
     for required in (
         "BASHIO_BIN=/usr/bin/bashio",
         "grafana_pdc/Dockerfile",
@@ -125,8 +151,9 @@ def main() -> None:
     ):
         if required not in caller:
             fail("Alloy initialization tests must derive the pinned HA base from the App Dockerfile")
-    if "needs: [init, test]" not in caller:
-        fail("image builds must wait for the complete repository test gate")
+    complete_test_gate = {"init", *test_lanes}
+    if set(jobs["build-app"].get("needs", [])) != complete_test_gate:
+        fail("image builds must wait for all repository and App test lanes")
     blanket_publish_guard = "github.event_name == 'push' && github.ref == 'refs/heads/main'"
     if blanket_publish_guard in caller:
         fail("an ordinary main push must not overwrite an existing stable App version")
@@ -139,8 +166,6 @@ def main() -> None:
         "app: ${{ matrix.app.app }}",
         "publish: ${{ matrix.app.publish }}",
         "uses: ./.github/workflows/release.yaml",
-        "needs: [init, test, build-app, security]",
-        "needs.build-app.result == 'success' || needs.build-app.result == 'skipped'",
         "issues: write",
         "RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}",
     ):
@@ -161,11 +186,27 @@ def main() -> None:
     for direct_trigger in ("\n  push:", "\n  pull_request:"):
         if direct_trigger in security_triggers:
             fail("security checks must run once through the required Build Apps gate")
+    aggregate_gate = {"init", *test_lanes, "build-app", "security"}
+    if set(jobs["ci-success"].get("needs", [])) != aggregate_gate:
+        fail("ci-success must aggregate every build, security, and test result")
+    if set(jobs["release"].get("needs", [])) != aggregate_gate:
+        fail("release automation must wait for the same complete gate")
+    release_condition = jobs["release"].get("if", "")
+    for result in (*sorted(test_lanes), "init", "security"):
+        if f"needs.{result}.result == 'success'" not in release_condition:
+            fail(f"release automation must require successful {result}")
+    if not all(
+        required in release_condition
+        for required in (
+            "needs.build-app.result == 'success'",
+            "needs.build-app.result == 'skipped'",
+        )
+    ):
+        fail("release automation must accept only successful or skipped App builds")
+
     for required in (
         "workflow_call:",
         "uses: ./.github/workflows/security.yml",
-        "needs: [test, init, build-app, security]",
-        "needs.security.result == 'success'",
         "name: ci-success",
     ):
         if required not in security + caller:
