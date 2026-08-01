@@ -32,9 +32,10 @@ tags and GitHub Releases:
 
 The two Synthetic Monitoring Apps are generated from `synthetic_monitoring_shared/`. Run
 `python3 scripts/sync_synthetic_monitoring_variants.py` after changing their shared launcher,
-configuration, documentation or branding. CI runs the same command in check mode and rejects drift.
-Their Dockerfiles remain variant-owned so Renovate can update Grafana's standard and `-browser`
-images independently; a contract test requires every other Dockerfile line to stay equivalent.
+configuration, user documentation, translations or branding. CI runs the same command in check
+mode and rejects drift. Dockerfiles remain variant-owned so Renovate can update Grafana's standard
+and `-browser` images independently; a contract test requires every other Dockerfile line to stay
+equivalent. Changelogs are also variant-owned because Release Please updates each package directly.
 
 Use Conventional Commits for App changes. `feat` selects a minor release, fixes and other
 non-breaking changes select a patch release, and a `!` or `BREAKING CHANGE` footer selects a major

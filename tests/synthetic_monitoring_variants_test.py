@@ -32,6 +32,9 @@ def fail(message: str) -> None:
 
 
 def main() -> None:
+    if (ROOT / "synthetic_monitoring_shared/template/CHANGELOG.md").exists():
+        fail("release-managed changelogs must not be generator-owned")
+
     sync = ROOT / "scripts/sync_synthetic_monitoring_variants.py"
     result = subprocess.run(
         [sys.executable, str(sync), "--check"],

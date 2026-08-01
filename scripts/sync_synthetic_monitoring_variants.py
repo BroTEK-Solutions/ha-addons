@@ -67,9 +67,11 @@ def synchronize(check: bool) -> int:
         expected = expected_files(slug, values)
         expected_paths = set(expected)
         existing_paths = {path for path in app_dir.rglob("*") if path.is_file()} if app_dir.exists() else set()
-        # Dockerfiles intentionally remain variant-owned so Renovate can update
-        # Grafana's standard and -browser images without rewriting generated files.
-        existing_paths.discard(app_dir / "Dockerfile")
+        # Dockerfiles remain variant-owned for Renovate. Changelogs remain
+        # variant-owned because Release Please prepends package release notes.
+        existing_paths.difference_update(
+            {app_dir / "Dockerfile", app_dir / "CHANGELOG.md"}
+        )
         for destination, content in expected.items():
             if destination.exists() and destination.read_bytes() == content:
                 continue
