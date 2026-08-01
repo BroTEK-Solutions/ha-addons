@@ -70,6 +70,7 @@ jobs:
       - name: Repository contract tests
         run: |
           python3 tests/app_metadata_contract_test.py
+          python3 tests/app_version_changed_test.py
           python3 tests/repository_workflow_contract_test.py
           python3 grafana_pdc/tests/config-schema.test.py
           python3 grafana_pdc/tests/image-contract.test.py
@@ -110,6 +111,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Read changed files
@@ -127,6 +129,9 @@ jobs:
           APPS: ${{ steps.apps.outputs.addons }}
           CHANGED_FILES: ${{ steps.changed_files.outputs.all_changed_files }}
           EVENT_NAME: ${{ github.event_name }}
+          TRIGGER_REF: ${{ github.ref }}
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
         run: |
           # shellcheck disable=SC2206
           apps=(${APPS})
@@ -149,16 +154,27 @@ jobs:
           fi
 
           if [[ ${#changed_apps[@]} -gt 0 ]]; then
+            app_matrix=()
+            for app in "${changed_apps[@]}"; do
+              publish=false
+              if [[ "$EVENT_NAME" == "push" && "$TRIGGER_REF" == "refs/heads/main" ]]; then
+                publish=$(python3 scripts/app_version_changed.py "$BASE_SHA" "$HEAD_SHA" "$app")
+              fi
+              app_matrix+=("$(jq -nc \
+                --arg app "$app" \
+                --argjson publish "$publish" \
+                '{app: $app, publish: $publish}')")
+            done
             {
               echo "changed=true"
-              echo "changed_apps=$(jq -nc '$ARGS.positional' --args "${changed_apps[@]}")"
+              echo "changed_apps=$(jq -nc '$ARGS.positional | map(fromjson)' --args "${app_matrix[@]}")"
             } >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
   build-app:
-    name: Build ${{ matrix.app }}
+    name: Build ${{ matrix.app.app }}
     needs: [init, test]
     if: needs.init.outputs.changed == 'true'
     permissions:
@@ -171,5 +187,24 @@ jobs:
         app: ${{ fromJSON(needs.init.outputs.changed_apps) }}
     uses: ./.github/workflows/build-app.yaml
     with:
-      app: ${{ matrix.app }}
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      app: ${{ matrix.app.app }}
+      publish: ${{ matrix.app.publish }}
+
+  release:
+    name: Prepare or publish App releases
+    needs: [init, test, build-app]
+    if: >-
+      ${{
+        always() &&
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/main' &&
+        needs.init.result == 'success' &&
+        needs.test.result == 'success' &&
+        (needs.build-app.result == 'success' || needs.build-app.result == 'skipped')
+      }}
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    uses: ./.github/workflows/release.yaml
+    secrets: inherit
