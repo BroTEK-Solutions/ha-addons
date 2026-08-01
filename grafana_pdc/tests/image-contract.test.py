@@ -121,6 +121,7 @@ def main() -> None:
         "/usr/bin/pdc mr,",
         "/usr/bin/ssh ix,",
         "/proc/[0-9]*/{stat,limits,cgroup} r,",
+        "/proc/[0-9]*/mountinfo r,",
         "/proc/[0-9]*/net/netstat r,",
         "/proc/[0-9]*/fd/ r,",
         "/proc/sys/net/core/somaxconn r,",
@@ -132,8 +133,8 @@ def main() -> None:
     ):
         require(apparmor, rule, f"AppArmor must permit the required least-privilege rule: {rule}")
     capabilities = set(re.findall(r"^\s*capability\s+([a-z0-9_]+),", apparmor, re.MULTILINE))
-    if capabilities != {"chown", "setgid", "setuid"}:
-        fail("AppArmor must grant only chown/setgid/setuid needed by init and s6-setuidgid")
+    if capabilities != {"chown", "kill", "setgid", "setuid"}:
+        fail("AppArmor must grant only chown/kill/setgid/setuid needed by init and S6")
     for forbidden in ("/dev/**", "/proc/** rw", "/sys/**", "/mnt/**", "/media/**"):
         if forbidden in apparmor:
             fail(f"AppArmor must not grant host-wide access: {forbidden}")

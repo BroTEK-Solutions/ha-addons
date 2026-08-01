@@ -7,6 +7,7 @@ profile grafana_pdc flags=(attach_disconnected,mediate_deleted) {
   file,
   signal (send) set=(kill,term,int,hup,cont),
   capability chown,
+  capability kill,
   capability setgid,
   capability setuid,
 
@@ -48,6 +49,7 @@ profile grafana_pdc flags=(attach_disconnected,mediate_deleted) {
     /usr/bin/ssh ix,
     # Prometheus process metrics and OpenSSH close-from discovery.
     /proc/[0-9]*/{stat,limits,cgroup} r,
+    /proc/[0-9]*/mountinfo r,
     /proc/[0-9]*/net/netstat r,
     /proc/[0-9]*/fd/ r,
     /proc/sys/net/core/somaxconn r,
