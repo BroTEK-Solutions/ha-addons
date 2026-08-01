@@ -13,7 +13,7 @@ trap cleanup EXIT
 
 mkdir -p "${tmp}/data"
 chmod 0700 "${tmp}/data"
-printf '%s' '{"schema_version":2,"gcloud_rw_api_key":"stored-secret"}' \
+printf '%s' '{"schema_version":2,"gcloud_rw_api_key":"stored-secret","alloy_additional_args":"--disable-reporting\n--server.http.memory-addr=alloy.test:12345"}' \
     >"${tmp}/data/settings.json"
 # The generated helper expands these variables inside the container.
 # shellcheck disable=SC2016
@@ -21,6 +21,7 @@ printf '%s\n' \
     '#!/bin/sh' \
     '[ -z "${FLEET_PASSWORD:-}" ] || exit 41' \
     '[ "${GCLOUD_RW_API_KEY:-}" = stored-secret ] || exit 42' \
+    'case " $* " in *" --disable-reporting --server.http.memory-addr=alloy.test:12345 "*) ;; *) exit 43;; esac' \
     >"${tmp}/fake-alloy"
 chmod +x "${tmp}/fake-alloy"
 docker run --rm \

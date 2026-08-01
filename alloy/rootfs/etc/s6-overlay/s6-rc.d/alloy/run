@@ -47,7 +47,12 @@ fi
 # config.alloy override instead.
 additional_args=$(setting alloy_additional_args)
 if [ -n "${additional_args}" ]; then
-    read -r -a extra_args <<<"${additional_args}"
+    declare -a extra_args=()
+    mapfile -d '' -t extra_args < <(
+        jq -j --arg key alloy_additional_args \
+            '(.[$key] // "") | scan("\\S+") | (., "\u0000")' \
+            "${SETTINGS_FILE}"
+    )
     args+=("${extra_args[@]}")
     bashio::log.info "Extra Alloy flags: ${extra_args[*]}"
 fi
