@@ -137,7 +137,7 @@ async function generateFleetReference() {
     const hostname = location.hostname.includes(":") ? `[${location.hostname}]` : location.hostname;
     fleetReferenceCommand.textContent = `curl -fsSL http://${hostname}:8099${data.path} | gcx fleet pipelines create -f -`;
     fleetReferenceExpiry.textContent = `This download expires at ${new Date(data.expires_at).toLocaleTimeString()}.`;
-    fleetReferenceDownload.href = data.path;
+    fleetReferenceDownload.href = data.path.replace(/^\/+/, "");
     fleetReference.hidden = false;
     setNotice("Fleet starter pipeline is ready. gcx will create it once; later changes belong in Fleet Management.", "success");
   } catch (error) {

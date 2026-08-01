@@ -187,11 +187,11 @@ OUT="$(gen OPERATION_MODE=fleet FLEET_REFERENCE_PIPELINE=true \
   FLEET_URL=https://fleet-management-prod-001.example.invalid FLEET_USERNAME=987654 \
   LOKI_URL=https://logs.example.net/loki/api/v1/push LOKI_USERNAME=111 \
   PROMETHEUS_URL=https://prom.example.net/api/prom/push PROMETHEUS_USERNAME=222 \
-  ADDITIONAL_CONFIG='prometheus.exporter.self "extra" {}')"
+  ADDITIONAL_CONFIG='prometheus.exporter.self "retained-local-config" {}')"
 check_contains "$OUT" 'loki.source.journal "journal"'
 check_contains "$OUT" 'prometheus.exporter.unix "host"'
 check_contains "$OUT" 'password = sys.env("GCLOUD_RW_API_KEY")'
-check_contains "$OUT" 'prometheus.exporter.self "extra" {}'
+check_absent   "$OUT" 'prometheus.exporter.self "retained-local-config" {}'
 check_absent   "$OUT" 'logging {'
 check_absent   "$OUT" 'remotecfg {'
 check_absent   "$OUT" 'sys.env("LOKI_PASSWORD")'

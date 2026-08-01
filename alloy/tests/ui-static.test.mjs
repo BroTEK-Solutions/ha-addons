@@ -100,6 +100,10 @@ assert.equal(
   "curl -fsSL http://homeassistant.local:8099/fleet-pipeline/reference-token | gcx fleet pipelines create -f -",
   "the command must pipe the short-lived manifest to gcx",
 );
-assert.equal(fleetReferenceDownload.href, "/fleet-pipeline/reference-token");
+assert.equal(
+  fleetReferenceDownload.href,
+  "fleet-pipeline/reference-token",
+  "the browser link must stay relative to the Home Assistant ingress prefix",
+);
 assert.equal(fleetReference.hidden, false);
 console.log("PASS: configuration reload resets secret controls");

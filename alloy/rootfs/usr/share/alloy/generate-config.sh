@@ -410,6 +410,7 @@ cat <<'ALLOYCONFIG'
 ALLOYCONFIG
 fi
 
-if pipeline_enabled && [ -n "${ADDITIONAL_CONFIG}" ] && [ "${ADDITIONAL_CONFIG}" != "null" ]; then
+if [ "${FLEET_REFERENCE_PIPELINE}" != "true" ] && pipeline_enabled \
+  && [ -n "${ADDITIONAL_CONFIG}" ] && [ "${ADDITIONAL_CONFIG}" != "null" ]; then
   printf '\n// --- Additional user config ---\n%s\n' "${ADDITIONAL_CONFIG}"
 fi
