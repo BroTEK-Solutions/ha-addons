@@ -129,10 +129,12 @@ def main() -> None:
         "needs: [init, test, build-app]",
         "needs.build-app.result == 'success' || needs.build-app.result == 'skipped'",
         "issues: write",
-        "secrets: inherit",
+        "RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}",
     ):
         if required not in caller:
             fail(f"builder is missing immutable-release contract: {required}")
+    if "secrets: inherit" in caller:
+        fail("the release workflow must receive only its named release token")
     if 'EVENT_NAME: ${{ github.event_name }}' not in caller:
         fail("changed-App selection must receive the triggering event name")
     if '"$EVENT_NAME" == "workflow_dispatch"' not in caller:
