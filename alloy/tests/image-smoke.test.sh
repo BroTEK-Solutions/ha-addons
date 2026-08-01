@@ -88,7 +88,7 @@ invalid_status="$(docker exec "${CONTAINER}" curl -sS -o /tmp/save-invalid.json 
     --data '{"options":{"manual_config_enabled":true,"manual_config":"not valid alloy syntax"},"secrets":{}}' \
     http://127.0.0.1:8099/api/config)"
 test "${invalid_status}" = 400
-grep -qF 'logging { level = \"info\" }' "${tmp}/data/settings.json"
+docker exec "${CONTAINER}" grep -qF 'logging { level = \"info\" }' /data/settings.json
 
 docker exec "${CONTAINER}" sh -c 'kill "$(cat /tmp/alloy.pid)"'
 for _ in {1..10}; do
