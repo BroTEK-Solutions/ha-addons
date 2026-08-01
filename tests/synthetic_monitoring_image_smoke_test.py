@@ -82,6 +82,14 @@ def smoke_launcher(image: str, variant: str) -> None:
                 "--detach",
                 "--name",
                 container,
+                "--cap-drop",
+                "ALL",
+                "--cap-add",
+                "NET_RAW",
+                "--cap-add",
+                "SETGID",
+                "--cap-add",
+                "SETUID",
                 *network_args,
                 "--volume",
                 f"{data_volume}:/data:ro",
@@ -124,6 +132,22 @@ def smoke_launcher(image: str, variant: str) -> None:
                 uid = process.split(maxsplit=1)[0]
                 if uid in {"0", "root"}:
                     fail(f"{variant} left a runtime process as root: {process!r}")
+            capabilities = docker(
+                "exec",
+                "--user",
+                "12345:12345",
+                container,
+                "/bin/sh",
+                "-c",
+                'for proc in /proc/[0-9]*; do '
+                'case "$(cat "$proc/comm" 2>/dev/null)" in synthetic-monit*) '
+                'grep "^CapEff:" "$proc/status";; esac; done; true',
+            ).stdout.split()
+            if capabilities != ["CapEff:", "0000000000002000"]:
+                fail(
+                    f"{variant} agent effective capabilities are {capabilities!r}, "
+                    "expected only CAP_NET_RAW"
+                )
         finally:
             docker("rm", "--force", container, check=False)
     finally:
