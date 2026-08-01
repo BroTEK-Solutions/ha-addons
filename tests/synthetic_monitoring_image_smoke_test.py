@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import json
 import os
+import socketserver
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -27,16 +29,30 @@ def docker(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     )
 
 
+class HoldOpenTCPServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
+class HoldOpenHandler(socketserver.BaseRequestHandler):
+    def handle(self) -> None:
+        time.sleep(15)
+
+
 def smoke_launcher(image: str, variant: str) -> None:
     token = "smoke-test-token"
     container = f"ha-sm-{variant}-{uuid.uuid4().hex[:12]}"
+    api_server = HoldOpenTCPServer(("0.0.0.0", 0), HoldOpenHandler)
+    server_thread = threading.Thread(target=api_server.serve_forever, daemon=True)
+    server_thread.start()
+    api_address = f"host.docker.internal:{api_server.server_address[1]}"
     with tempfile.TemporaryDirectory(prefix="ha-sm-options-") as directory:
         options_path = Path(directory) / "options.json"
         options_path.write_text(
             json.dumps(
                 {
                     "api_token": token,
-                    "api_server_address": "192.0.2.1:443",
+                    "api_server_address": api_address,
                     "log_level": "warn",
                     "allow_private_networks": False,
                     "disable_usage_reports": True,
@@ -50,6 +66,8 @@ def smoke_launcher(image: str, variant: str) -> None:
                 "--detach",
                 "--name",
                 container,
+                "--add-host",
+                "host.docker.internal:host-gateway",
                 "--volume",
                 f"{directory}:/data:ro",
                 image,
@@ -73,10 +91,12 @@ def smoke_launcher(image: str, variant: str) -> None:
             logs = docker("logs", container).stdout
             if token in process_list or token in logs:
                 fail(f"{variant} launcher exposed its API token")
-            if "--api-server-address=192.0.2.1:443" not in process_list:
+            if f"--api-server-address={api_address}" not in process_list:
                 fail(f"{variant} launcher did not pass the configured API address")
         finally:
             docker("rm", "--force", container, check=False)
+            api_server.shutdown()
+            api_server.server_close()
 
 
 def main() -> None:
