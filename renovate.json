@@ -59,7 +59,7 @@
     },
     {
       "description": "Review CI runtime updates manually",
-      "matchPackageNames": ["python", "ubuntu"],
+      "matchDepNames": ["python", "ubuntu"],
       "automerge": false,
       "addLabels": ["dep:toolchain"]
     }

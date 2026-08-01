@@ -87,8 +87,10 @@ def main() -> None:
         fail("App dependency release commits must retain the deps scope")
 
     runtimes = matching_rule(rules, "Review CI runtime updates manually")
-    if set(runtimes.get("matchPackageNames", [])) != {"python", "ubuntu"}:
-        fail("Python and runner-image updates must remain manual")
+    if set(runtimes.get("matchDepNames", [])) != {"python", "ubuntu"}:
+        fail("Python and runner-image dependency names must remain manual")
+    if "matchPackageNames" in runtimes:
+        fail("CI runtime rules must match extracted dependency names, not registry package names")
     if runtimes.get("automerge") is not False:
         fail("CI runtime updates must not automerge")
     if runtimes.get("addLabels") != ["dep:toolchain"] or "labels" in runtimes:
