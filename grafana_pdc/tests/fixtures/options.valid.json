@@ -1,0 +1,18 @@
+{
+  "signing_token": "SMOKE_TEST_TOKEN_NOT_REAL",
+  "hosted_grafana_id": "123456789",
+  "cluster": "example-cluster",
+  "allowed_endpoints": ["homeassistant:8123"],
+  "log_level": "info",
+  "connections": 1,
+  "region_format": false,
+  "domain": "grafana.net",
+  "api_fqdn": "",
+  "gateway_fqdn": "",
+  "cert_expiry_window": "5m",
+  "cert_check_expiry_period": "1m",
+  "retry_max": 4,
+  "parse_metrics": true,
+  "use_gossh": false,
+  "connect_timeout_seconds": 1
+}

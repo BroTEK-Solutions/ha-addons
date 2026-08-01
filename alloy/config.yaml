@@ -1,5 +1,5 @@
 name: Grafana Alloy
-version: "1.5.1"
+version: "1.7.0"
 slug: alloy
 description: >-
   Ship Home Assistant OS logs to Loki and host system metrics to Prometheus
@@ -7,49 +7,114 @@ description: >-
   Replacement for the deprecated Promtail add-on, plus node_exporter-style
   host monitoring (CPU, memory, disk, network).
 url: https://github.com/BroTEK-Solutions/ha-addons
-image: ghcr.io/brotek-solutions/{arch}-addon-alloy
-codeowners:
-  - "@rknightion"
+image: ghcr.io/brotek-solutions/app-alloy
 arch:
   - aarch64
   - amd64
 init: false
 startup: services
-boot: auto
 journald: true
 host_network: true
+# Grants SUPERVISOR_TOKEN so the add-on can scrape Home Assistant Core's own
+# Prometheus endpoint. Only used when homeassistant_metrics is enabled.
+homeassistant_api: true
+webui: "http://[HOST]:[PORT:12345]"
 map:
-  - addon_config:rw
-  - share
-  - media
-  - backup
+  - type: share
+    read_only: true
+  - type: media
+    read_only: true
+  - type: backup
+    read_only: true
+  # Writable so a file-editor add-on can drop in a config.alloy override.
+  - type: addon_config
+    read_only: false
 ports:
   12345/tcp: 12345
-ports_description:
-  12345/tcp: "Alloy debug UI"
-watchdog: "http://[HOST]:[PORT:12345]/-/ready"
+backup_exclude:
+  # Alloy's WAL and its cached Fleet Management configuration. Both are
+  # regenerated on start, and the WAL grows unboundedly relative to its value
+  # in a backup.
+  - "alloy/**"
+# No default is set for the three destination URLs on purpose. A default in
+# `options` makes an option required regardless of the `?` in `schema`, which is
+# what previously made a metrics-only or Fleet-only install impossible.
 options:
-  loki_url: "http://localhost:3100/loki/api/v1/push"
   instance_name: homeassistant
   metrics_scrape_interval: 60s
+  host_metrics: true
+  homeassistant_metrics: false
   fleet_poll_frequency: 5m
   log_level: info
+  alloy_stability_level: generally-available
+  alloy_disable_telemetry: true
 schema:
-  loki_url: "url?"
+  # `url` is deliberately not used for the endpoints. Supervisor validates it
+  # with voluptuous' Url(), which rejects an empty string, so clearing the field
+  # in the UI produces a validation error instead of disabling the destination.
+  # This pattern accepts an empty value and still catches malformed authority,
+  # port and percent-escape syntax before the option is saved.
+  #
+  # Whitespace, double quotes and backslashes are excluded rather than using a
+  # bare `.+`: the generator interpolates these values into quoted River
+  # strings, so a quote or backslash would produce a config Alloy cannot parse,
+  # and whitespace is not valid in a URL anyway. The folded expression uses
+  # Python's verbose regex mode so it can stay readable; the YAML anchor keeps
+  # all three endpoint fields on the same validation contract.
+  loki_url: &endpoint_url >-
+    match((?x)
+    ^$|^https?://
+    (?:
+    \[(?:
+    (?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,7}:|
+    (?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|
+    (?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|
+    (?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|
+    [0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})|
+    :(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)|
+    (?:(?:[0-9A-Fa-f]{1,4}:){6}|
+    ::(?:[0-9A-Fa-f]{1,4}:){0,5}|
+    [0-9A-Fa-f]{1,4}::(?:[0-9A-Fa-f]{1,4}:){0,4}|
+    (?:[0-9A-Fa-f]{1,4}:){2}:(?:[0-9A-Fa-f]{1,4}:){0,3}|
+    (?:[0-9A-Fa-f]{1,4}:){3}:(?:[0-9A-Fa-f]{1,4}:){0,2}|
+    (?:[0-9A-Fa-f]{1,4}:){4}:(?:[0-9A-Fa-f]{1,4}:)?|
+    (?:[0-9A-Fa-f]{1,4}:){5}:)
+    (?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])
+    (?:\.(?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])){3}
+    )
+    (?:%25(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+)?\]|
+    [A-Za-z0-9._-]+
+    )
+    (?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?
+    (?:[/?#](?:[^%\s"\\]|%[0-9A-Fa-f]{2})*)?$
+    )?
   loki_username: "str?"
   loki_password: "password?"
-  prometheus_url: "url?"
+  prometheus_url: *endpoint_url
   prometheus_username: "str?"
   prometheus_password: "password?"
-  instance_name: "str?"
-  metrics_scrape_interval: "str?"
-  fleet_url: "url?"
+  instance_name: "str(1,)"
+  # The positive Go duration grammar Alloy accepts, so `+1m30s`, `.5s`, `1.s`
+  # and both microsecond symbols stay valid. Zero and negative intervals cannot
+  # schedule useful work and are rejected before Alloy starts.
+  metrics_scrape_interval: 'match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)'
+  host_metrics: "bool"
+  homeassistant_metrics: "bool"
+  fleet_url: *endpoint_url
   fleet_username: "str?"
   fleet_password: "password?"
   fleet_collector_name: "str?"
-  fleet_attributes: "str?"
-  fleet_poll_frequency: "str?"
+  # Quotes and backslashes are excluded here too, so the UI rejects what
+  # init-alloy/run would otherwise refuse to start on.
+  fleet_attributes: 'match(^$|^[^=,"\\]+=[^,"\\]*(,[^=,"\\]+=[^,"\\]*)*$)?'
+  fleet_poll_frequency: 'match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)'
   log_level: "list(debug|info|warn|error)"
+  alloy_stability_level: "list(generally-available|public-preview|experimental)"
+  alloy_disable_telemetry: "bool"
+  alloy_additional_args: "str?"
   additional_config: "str?"
 stage: experimental
 apparmor: false

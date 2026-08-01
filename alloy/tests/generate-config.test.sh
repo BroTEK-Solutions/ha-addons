@@ -5,7 +5,14 @@ set -u
 
 ADDON_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GEN="${ADDON_ROOT}/rootfs/usr/share/alloy/generate-config.sh"
-ALLOY_IMAGE="grafana/alloy:v1.17.0"
+# Parsed from the Dockerfile rather than duplicated, so the container used to
+# validate the generated config can never drift from the shipped binary.
+ALLOY_VERSION="$(sed -n 's/^[[:space:]]*ALLOY_VERSION="\([^"]*\)".*/\1/p' "${ADDON_ROOT}/Dockerfile")"
+if [ -z "${ALLOY_VERSION}" ]; then
+  echo "FATAL: could not parse ALLOY_VERSION out of ${ADDON_ROOT}/Dockerfile" >&2
+  exit 1
+fi
+ALLOY_IMAGE="grafana/alloy:v${ALLOY_VERSION}"
 FAILS=0
 TESTS=0
 
@@ -96,6 +103,15 @@ check_contains "$OUT" 'password = sys.env("PROMETHEUS_PASSWORD")'
 check_absent   "$OUT" 'loki.source.journal'
 validate_alloy "$OUT" "metrics-only"
 
+echo "== Go duration forms accepted by Alloy =="
+OUT="$(gen LOG_LEVEL=info PROMETHEUS_URL=http://prom:9090/api/v1/write METRICS_SCRAPE_INTERVAL=+15s)"
+check_contains "$OUT" 'scrape_interval = "+15s"'
+validate_alloy "$OUT" "metrics-leading-plus-duration"
+
+OUT="$(gen LOG_LEVEL=info FLEET_URL=https://fleet-management-prod-001.example.invalid FLEET_POLL_FREQUENCY=+10s)"
+check_contains "$OUT" 'poll_frequency = "+10s"'
+validate_alloy "$OUT" "fleet-leading-plus-duration"
+
 echo "== both, no auth =="
 OUT="$(gen LOG_LEVEL=warn JOURNAL_PATH=/run/log/journal LOKI_URL=http://loki:3100/loki/api/v1/push PROMETHEUS_URL=http://prom:9090/api/v1/write)"
 check_contains "$OUT" 'loki.source.journal "journal"'
@@ -153,6 +169,13 @@ check_contains "$OUT" 'attributes     = {'
 check_contains "$OUT" '"env" = "home",'
 check_absent   "$OUT" '"role"'
 
+echo "== fleet, equals signs in attribute values =="
+OUT="$(gen LOG_LEVEL=info FLEET_URL=https://fleet-management-prod-001.example.invalid \
+  FLEET_ATTRIBUTES='query=a=b,token=YWJjZA==')"
+check_contains "$OUT" '"query" = "a=b",'
+check_contains "$OUT" '"token" = "YWJjZA==",'
+validate_alloy "$OUT" "fleet-attribute-equals"
+
 echo "== all three backends (each secret confined to its own block) =="
 OUT="$(gen LOG_LEVEL=info LOKI_URL=https://logs.example.net/loki/api/v1/push LOKI_USERNAME=111 \
   PROMETHEUS_URL=https://prom.example.net/api/prom/push PROMETHEUS_USERNAME=222 \
@@ -167,6 +190,32 @@ check_absent   "$FLEET_BLOCK" 'PROMETHEUS_PASSWORD'
 check_absent   "$LOKI_BLOCK"  'FLEET_PASSWORD'
 check_absent   "$PROM_BLOCK"  'FLEET_PASSWORD'
 validate_alloy "$OUT" "all-three"
+
+echo "== metric sources are individually selectable =="
+OUT="$(gen PROMETHEUS_URL=https://prom.example.net/api/prom/push HOST_METRICS=false)"
+check_absent   "$OUT" 'prometheus.exporter.unix'
+check_contains "$OUT" 'prometheus.remote_write "metrics"'
+validate_alloy "$OUT" "no-host-metrics"
+
+OUT="$(gen PROMETHEUS_URL=https://prom.example.net/api/prom/push HOMEASSISTANT_METRICS=true)"
+check_contains "$OUT" 'prometheus.scrape "homeassistant"'
+check_contains "$OUT" '"__address__" = "supervisor:80"'
+check_contains "$OUT" 'metrics_path    = "/core/api/prometheus"'
+# The Supervisor token is read from the environment, never written into the file.
+check_contains "$OUT" 'bearer_token    = sys.env("SUPERVISOR_TOKEN")'
+check_contains "$OUT" 'prometheus.exporter.unix'
+validate_alloy "$OUT" "host-and-hass-metrics"
+
+# Home Assistant metrics alone, with the host exporter switched off.
+OUT="$(gen PROMETHEUS_URL=https://prom.example.net/api/prom/push HOMEASSISTANT_METRICS=true HOST_METRICS=false)"
+check_contains "$OUT" 'prometheus.scrape "homeassistant"'
+check_absent   "$OUT" 'prometheus.exporter.unix'
+validate_alloy "$OUT" "hass-metrics-only"
+
+# Nothing Home Assistant-shaped should appear unless it was asked for.
+OUT="$(gen PROMETHEUS_URL=https://prom.example.net/api/prom/push)"
+check_absent   "$OUT" 'core/api/prometheus'
+check_absent   "$OUT" 'SUPERVISOR_TOKEN'
 
 echo "== passwords never reach the generated config =="
 # Passwords are in the generator's environment (as they are at runtime); the config

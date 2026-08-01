@@ -1,5 +1,101 @@
 # Changelog
 
+## 1.7.0 - 2026-07-31
+
+### Fixed
+- Alloy now stops the App after an unexpected terminating signal instead of treating every
+  signal as an intentional shutdown and entering an invisible restart loop. SIGTERM remains a
+  clean stop; crash signals are reported using the conventional `128 + signal` exit code
+
+### Added
+- **Home Assistant Core metrics.** New `homeassistant_metrics` option, off by default, scrapes
+  Core's own Prometheus endpoint through the Supervisor proxy for entity states and Core
+  internals. Requires the `prometheus` integration enabled in Home Assistant. The Supervisor
+  token is read with `sys.env()` and never written into the generated config
+- **`host_metrics`**, on by default, so the host exporter can be turned off for a
+  Home Assistant-only or logs-only setup. Enabling either source without `prometheus_url` is now
+  refused at start-up instead of silently collecting nothing
+- **A full configuration override.** A file at `/config/config.alloy` replaces the generated
+  configuration entirely, for anything the options cannot express. Options that shape the config
+  are then ignored - announced in the log on every start - while the startup flags still apply
+  and the passwords stay available as `sys.env()`
+- **Alloy startup flags as options.** `alloy_stability_level` for loading public-preview or
+  experimental components, `alloy_disable_telemetry` (on by default, passing
+  `--disable-reporting`), and `alloy_additional_args` for anything else
+- `.github/CODEOWNERS`, and yamllint in CI alongside the add-on linter
+
+### Changed
+- Alloy updated to **1.18.0** (from 1.17.0). The breaking changes in that release are all in
+  `otelcol.*` components, none of which this add-on uses
+- The endpoint options now reject missing authorities, non-numeric or out-of-range ports,
+  invalid percent escapes, malformed bracketed IPv6 literals, whitespace, double quotes and
+  backslashes. Valid RFC 6874 scoped literals such as `[fe80::1%25eth0]` and IPv4-embedded IPv6
+  literals remain accepted. The same checks run at start-up because `options.json` can be edited
+  outside the UI
+- `metrics_scrape_interval` and `fleet_poll_frequency` accept positive Go duration forms such as
+  `+1m30s`, `.5s`, `1.s`, `100us`, `100µs` and `100μs`. Zero and negative intervals are rejected.
+  The 1.6.0 pattern allowed only one unsigned decimal and one unit, which would have rejected
+  working configurations on upgrade
+- `fleet_attributes` rejects quotes and backslashes in the UI, matching what start-up validation
+  already refused. Values may contain additional equals signs, so query fragments and padded
+  base64 values such as `query=a=b` and `token=YWJjZA==` remain valid
+- The add-on's own configuration folder is mapped read-write again, to hold the override file
+
+### Removed
+- `codeowners` from `config.yaml` stays removed: it is not a Home Assistant add-on option and
+  Supervisor strips unknown keys, so it never did anything. Ownership now lives in
+  `.github/CODEOWNERS`, where the Community Add-ons repository keeps it too
+
+## 1.6.0 - 2026-07-31
+
+### Fixed
+- **A metrics-only or Fleet Management-only install could not be configured.** `loki_url` carried
+  a default in `options:`, and a default overrides the `?` in `schema:` and makes an option
+  required. Supervisor validates a `url` with voluptuous, which rejects an empty string, so
+  clearing the field failed validation and leaving it set pointed the add-on at a Loki that was
+  not there. The default is gone, and the three endpoint options now use a pattern that accepts
+  an empty value, so clearing one in the UI disables that destination
+
+### Added
+- `translations/en.yaml`, giving every option a readable name and description in the add-on
+  configuration UI instead of a raw snake_case key
+- `icon.png` and `logo.png`, so the add-on is no longer a blank tile in the store
+- An `OPEN WEB UI` button for the Alloy debug UI, via the `webui` option
+- Option validation in the UI: endpoints must look like URLs, `metrics_scrape_interval` and
+  `fleet_poll_frequency` must carry a unit, `instance_name` cannot be empty, and
+  `fleet_attributes` must be well-formed `key=value` pairs. Previously these were accepted and
+  became a start-up failure
+- `alloy/tests/config-schema.test.py`, which validates the options and schema against
+  Supervisor's own `RE_SCHEMA_ELEMENT` and voluptuous, so this class of bug fails in CI
+- `alloy/tests/init-alloy.test.sh`, covering the service script's start-up validation - every
+  refuse-to-start path and each destination working on its own. It had no tests before
+- A Renovate configuration that tracks the pinned Alloy release
+- The add-on now stops, reporting the exit code, when Alloy exits on its own - most often an
+  `additional_config` that does not parse. Previously s6 restarted it indefinitely while the
+  add-on still reported itself as running
+- CI runs the Home Assistant add-on linter, which validates `config.yaml` and `build.yaml`
+  against the add-on JSON schemas
+- OCI image labels (source, documentation, licence) on the published images
+
+### Changed
+- The service scripts now use `bashio` rather than hand-rolled `jq`. `bashio::config.has_value`
+  distinguishes unset from null from empty, which is the distinction the `loki_url` bug turned on
+- `/data/alloy` is excluded from Home Assistant backups. It holds Alloy's write-ahead log and its
+  cached Fleet Management configuration, both rebuilt on start
+- The Alloy version is now defined only in `alloy/Dockerfile`; the test suite parses it from
+  there rather than keeping a second copy
+- `map` uses the current list syntax with explicit `read_only`, and no longer requests write
+  access to the add-on config folder, which nothing used
+- `ports_description` moved into `translations/en.yaml`
+- Health is now reported through a Docker `HEALTHCHECK` rather than the obsolete `watchdog`
+  config key. Supervisor reads the container's health status, so the Watchdog toggle behaves as
+  before
+
+### Removed
+- `codeowners`, which is a Community Add-ons extension rather than a Home Assistant add-on option
+  and was inherited from the upstream fork
+- `boot: auto`, which only restated the default
+
 ## 1.5.1 - 2026-07-31
 
 ### Changed

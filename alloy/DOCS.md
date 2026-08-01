@@ -18,8 +18,13 @@ add-on refuses to start with `FATAL: set at least one of loki_url (logs), promet
 (metrics) or fleet_url (Fleet Management).` Each destination generates its own pipelines
 independently, so a logs-only, metrics-only or Fleet-only deployment is equally valid.
 
-Note that the shipped default for `loki_url` is `http://localhost:3100/loki/api/v1/push`,
-which almost certainly is not your Loki. Point it at a real endpoint or clear it.
+None of the three has a default, so a fresh install starts with all of them empty and you fill
+in the ones you want. **Clearing a field disables that destination** - the add-on regenerates its
+Alloy config on every start, so removing a URL removes the corresponding pipelines.
+
+Options are validated when you save, before the add-on starts. A malformed URL, a duration
+without a unit (`60` rather than `60s`), an empty instance name, or a `fleet_attributes` entry
+that is not `key=value` is rejected in the UI rather than becoming a start-up failure.
 
 ### Logs
 
@@ -56,6 +61,25 @@ collected by Alloy's `unix` exporter (the node_exporter equivalent).
 - **metrics_scrape_interval**: how often to scrape. Default: `60s`. Passed to Alloy verbatim, so
   it takes any Go duration string (`30s`, `1m`, `5m`).
 
+### Sources
+
+Two independent sources feed the same Prometheus endpoint, each with its own switch:
+
+- **host_metrics** (default **on**) - the machine Home Assistant runs on: CPU, memory, disk,
+  load and network, via Alloy's `unix` exporter.
+- **homeassistant_metrics** (default **off**) - Home Assistant Core's own Prometheus endpoint,
+  which exposes entity states and Core internals. Scraped through the Supervisor proxy at
+  `supervisor:80/core/api/prometheus`, authenticated with `SUPERVISOR_TOKEN`, which the
+  Supervisor injects into the add-on. The token is read with `sys.env()` and never written into
+  the generated config.
+
+  **This needs the [`prometheus` integration](https://www.home-assistant.io/integrations/prometheus/)
+  enabled in Home Assistant.** Without it the endpoint returns 404 and the scrape fails.
+
+Both require `prometheus_url`. Enabling `homeassistant_metrics` without it is refused at start-up
+rather than silently collecting nothing; turning both off while `prometheus_url` is set logs a
+warning, since the add-on would then send no metrics at all.
+
 ### What is collected
 
 CPU, memory, disk I/O, load average, and network interface stats are **host-wide** — these
@@ -72,10 +96,10 @@ are excluded from the network stats, leaving the real host NICs.
 ### Filesystem caveat
 
 HAOS add-ons cannot mount the host root filesystem, so whole-host `df` is not available.
-Instead the add-on reports usage for the volumes it does map - `share`, `media`, `backup` and
-its own config folder - which all live on the HAOS data partition. In practice that is the
-data-partition fill level. Pseudo-filesystems and the container's own overlay rootfs are
-excluded, so they do not show up as phantom mounts.
+Instead the add-on reports usage for the three volumes it maps read-only - `share`, `media` and
+`backup` - which all live on the HAOS data partition. In practice that is the data-partition
+fill level. Pseudo-filesystems and the container's own overlay rootfs are excluded, so they do
+not show up as phantom mounts.
 
 ### Example: logs + self-hosted Prometheus
 
@@ -225,12 +249,57 @@ limited to what survives in the volatile journal across a reboot - which is noth
 ## Debug UI
 
 The Alloy debug UI is available at `http://<haos-ip>:12345` when the add-on is running. Use it to
-inspect component health, view the pipeline DAG, and troubleshoot issues. The same endpoint backs
-the add-on watchdog (`/-/ready`), so Home Assistant restarts the add-on if Alloy stops responding.
+inspect component health, view the pipeline DAG, and troubleshoot issues. The same server backs
+the container health check (`/-/ready`), which Home Assistant surfaces as the add-on's health -
+so with the **Watchdog** toggle on, it restarts the add-on if Alloy stops responding.
+
+If Alloy exits on its own rather than hanging - most often because `additional_config` does not
+parse - the add-on stops outright and reports the exit code, instead of quietly restart-looping.
 
 The generated config is written to `/etc/alloy/config.alloy` and is safe to read - no secret is
 ever interpolated into it. Alloy's own state, including the cached Fleet Management
-configuration, lives under `/data/alloy`.
+configuration, lives under `/data/alloy`, which is excluded from Home Assistant backups: it is
+rebuilt on start and the write-ahead log would otherwise grow your backups for no benefit.
+
+## Advanced: Alloy startup flags
+
+Three options control how Alloy itself is launched, without needing to know the flag names:
+
+- **alloy_stability_level**: the lowest component stability Alloy will load, one of
+  `generally-available` (default), `public-preview` or `experimental`. Alloy refuses to start if
+  `additional_config` uses a component below the permitted level, and the error names the
+  component - this is the switch that fixes it.
+- **alloy_disable_telemetry**: on by default, passing `--disable-reporting`. Alloy otherwise
+  reports anonymous usage statistics to Grafana.
+- **alloy_additional_args**: any further flags, separated by spaces, for example
+  `--server.http.enable-pprof=false` to turn off the profiling endpoints that the debug UI
+  exposes on your network. Split on whitespace, so a flag whose value contains a space needs the
+  configuration override below instead. A flag Alloy does not recognise stops the add-on.
+
+The listen address (`0.0.0.0:12345`) and storage path (`/data/alloy`) are fixed: the health
+check and the backup exclusion both depend on them.
+
+## Advanced: Replacing the configuration entirely
+
+Placing a file at **`/config/config.alloy`** in the add-on's own configuration folder replaces
+the generated configuration completely. The add-on log says so on every start.
+
+This is the escape hatch for anything the options cannot express - a different journal pipeline,
+extra receivers, your own relabelling. Reach for it instead of `additional_config` when you want
+to change what the add-on already generates rather than add to it.
+
+With an override in place:
+
+- **Every option that shapes the configuration is ignored**, including the three endpoints. The
+  destination requirement is not enforced, because your file decides where data goes.
+- **The startup flags above still apply**, since they are command-line arguments rather than
+  configuration.
+- **The passwords are still exported**, so `sys.env("LOKI_PASSWORD")`,
+  `sys.env("PROMETHEUS_PASSWORD")` and `sys.env("FLEET_PASSWORD")` work in your file and keep the
+  secrets out of it. `sys.env("SUPERVISOR_TOKEN")` is available too.
+- Changes take effect on add-on restart, as the file is read at start-up.
+
+Remove the file to go back to the generated configuration.
 
 ## Advanced: Additional Config
 
@@ -244,9 +313,10 @@ loki.source.file "extra" { targets = local.file_match.extra.targets forward_to =
 
 Two constraints worth knowing before you write one:
 
-- **Only mapped paths are visible.** The add-on maps `share`, `media`, `backup` and its own
-  config folder (at `/config`). Home Assistant's own configuration directory is **not** mapped,
-  so `home-assistant.log` cannot be tailed from here.
+- **Only mapped paths are visible.** The add-on maps `share`, `media` and `backup` read-only,
+  plus its own configuration folder at `/config` read-write. Home Assistant's own configuration
+  directory is **not** mapped, so `home-assistant.log` cannot be tailed from here. For Core's
+  internals use `homeassistant_metrics` instead.
 - **Referenced components must exist.** `loki.write.loki.receiver` is only generated when
   `loki_url` is set, and `prometheus.remote_write.metrics.receiver` only when `prometheus_url`
   is - forwarding to one that was not generated is a config error.
@@ -260,6 +330,11 @@ This is injected as-is into the config file. Syntax errors will prevent Alloy fr
 - **No logs in Loki**: Check that `loki_url` is reachable from HAOS. Try `ping <loki-host>` from the SSH add-on.
 - **No metrics in Prometheus**: metrics are generated only when `prometheus_url` is set - check
   the startup banner for the `Metrics ->` line. If it is absent, the option did not take effect.
+  The next banner line, `Metric sources:`, shows which of the two sources are on.
+- **`404` scraping Home Assistant metrics**: the `prometheus` integration is not enabled in Home
+  Assistant. Add it, then restart the add-on.
+- **Options seem to have no effect**: check whether `/config/config.alloy` exists. An override
+  replaces the generated configuration and the log says so on every start.
 - **`401 Unauthorized` / `authentication error` in the add-on log**: the endpoint requires basic
   auth. Set `loki_username` + `loki_password` (or the `prometheus_*` equivalents). On Grafana
   Cloud the username is the numeric instance ID from the stack's connection details, not your

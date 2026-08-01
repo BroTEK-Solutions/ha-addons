@@ -23,20 +23,20 @@ jobs:
     uses: rknightion/.github/.github/workflows/actionlint.yml@0228d8b9f1e36ff3a1d0906574d70fa174ddc7bf # v1.5.1
 
   # Actions security audit: unpinned refs, over-broad permissions, credential
-  # persistence. Guards against regressing the hardening in build.yaml.
+  # persistence. Guards against regressing the App build hardening.
   zizmor:
     permissions:
       contents: read
-      security-events: write
-      actions: read
+      security-events: write # Required to upload zizmor SARIF findings.
+      actions: read # Required to read workflow metadata during the audit.
     uses: rknightion/.github/.github/workflows/zizmor.yml@0228d8b9f1e36ff3a1d0906574d70fa174ddc7bf # v1.5.1
 
-  # hadolint + Trivy over the add-on Dockerfile (apt-get layer, curl'd Alloy release).
-  # Skipped on pull_request: fork PRs cannot be granted security-events: write, so the
-  # SARIF upload would 403.
+  # hadolint + Trivy recursively cover both App Dockerfiles and their filesystems.
+  # Fork PRs cannot be granted security-events: write, so their SARIF upload would
+  # fail. Trusted same-repository PRs still run the complete pre-merge scan.
   docker-security:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
-      security-events: write
+      security-events: write # Required to upload Docker scan SARIF findings.
     uses: rknightion/.github/.github/workflows/docker-security.yml@0228d8b9f1e36ff3a1d0906574d70fa174ddc7bf # v1.5.1

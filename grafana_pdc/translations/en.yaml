@@ -1,0 +1,87 @@
+---
+configuration:
+  signing_token:
+    name: Signing token
+    description: >-
+      The PDC signing token from your Grafana Cloud stack. Keep this secret;
+      it authorizes this connector to join your stack and needs the
+      pdc-signing:write scope.
+  hosted_grafana_id:
+    name: Hosted Grafana ID
+    description: >-
+      The positive numeric instance ID for your Grafana Cloud stack. This is
+      not your Grafana username or email address.
+  cluster:
+    name: Cluster name
+    description: >-
+      The PDC cluster value shown in Grafana Cloud Configuration Details,
+      using lowercase letters, numbers and hyphens.
+  allowed_endpoints:
+    name: Allowed endpoints
+    description: >-
+      Hostname or IP and port entries that Grafana may reach through this
+      connector, such as homeassistant:8123. Leave empty to allow every
+      endpoint reachable from the App network.
+  log_level:
+    name: Log level
+    description: >-
+      Verbosity of Private Data Source Connect logs. Use debug only while
+      investigating a connection problem.
+  connections:
+    name: Connections
+    description: >-
+      Number of concurrent PDC connections to maintain, from 1 to 50. The
+      experimental GoSSH implementation requires exactly 1.
+  region_format:
+    name: Use region endpoint format
+    description: >-
+      Enable the alternate regional endpoint naming format when your Grafana
+      Cloud stack requires it.
+  domain:
+    name: Grafana domain
+    description: >-
+      Grafana Cloud domain used to derive service endpoints. Leave this at
+      grafana.net unless your stack uses a different Grafana domain.
+  api_fqdn:
+    name: API FQDN override
+    description: >-
+      Optional API hostname override. Leave empty to derive it from the Grafana
+      domain and use this only when directed by Grafana support.
+  gateway_fqdn:
+    name: Gateway FQDN override
+    description: >-
+      Optional gateway hostname override. Leave empty to derive it from the
+      Grafana domain and use this only when directed by Grafana support.
+  cert_expiry_window:
+    name: Certificate expiry window
+    description: >-
+      How long before a certificate expires PDC should renew it, as a duration
+      such as 5m or 1h.
+  cert_check_expiry_period:
+    name: Certificate check interval
+    description: >-
+      How often PDC checks certificate expiry, as a duration such as 1m or
+      30s. Set to 0 to check only during startup.
+  retry_max:
+    name: Maximum retries
+    description: >-
+      Number of HTTP API retry attempts, from 0 to 20.
+  parse_metrics:
+    name: Parse metrics
+    description: >-
+      Parse and expose PDC metrics on the local metrics endpoint for Home
+      Assistant health monitoring.
+  use_gossh:
+    name: Use GoSSH (experimental)
+    description: >-
+      Use the experimental GoSSH connection implementation. Leave disabled
+      unless Grafana support asks you to enable this advanced option.
+  connect_timeout_seconds:
+    name: Connection timeout
+    description: >-
+      Number of seconds to wait for a connection attempt, from 1 to 600.
+network:
+  8090/tcp:
+    description: >-
+      Private Data Source Connect metrics endpoint. No host port is assigned by
+      default; map one only when you need to inspect metrics externally.

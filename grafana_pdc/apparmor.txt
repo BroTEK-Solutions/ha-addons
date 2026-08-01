@@ -1,0 +1,58 @@
+#include <tunables/global>
+
+profile grafana_pdc flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  # Required by the Home Assistant S6 base image.
+  file,
+  signal (send) set=(kill,term,int,hup,cont),
+  capability chown,
+  capability setgid,
+  capability setuid,
+
+  /init ix,
+  /bin/** ix,
+  /usr/bin/** ix,
+  /run/{s6,s6-rc*,service}/** ix,
+  /package/** ix,
+  /command/** ix,
+  # curl runs under this profile for the IPv4 loopback health probe.
+  network inet stream,
+  /etc/services.d/** rwix,
+  /etc/cont-init.d/** rwix,
+  /etc/cont-finish.d/** rwix,
+  /run/{,**} rwk,
+  /dev/tty rw,
+
+  # Bashio and the add-on's transient setup files.
+  /usr/lib/bashio/** ix,
+  /tmp/** rwk,
+
+  # Persistent state is limited to SSH material managed by the service.
+  /data/options.json r,
+  /data/ssh/ rwk,
+  /data/ssh/** rwk,
+
+  # The service gets its own constrained profile.
+  /usr/bin/pdc cx -> pdc,
+
+  profile pdc flags=(attach_disconnected,mediate_deleted) {
+    #include <abstractions/base>
+    #include <abstractions/nameservice>
+
+    signal (receive) peer=*_grafana_pdc,
+    network,
+
+    /usr/bin/pdc r,
+    /usr/bin/ssh ix,
+    /etc/ssh/** r,
+    /etc/ssl/certs/** r,
+    /etc/ssl/openssl.cnf r,
+    /etc/passwd r,
+    /etc/group r,
+    /data/ssh/ rwk,
+    /data/ssh/** rwk,
+    /dev/null rw,
+    /dev/urandom r,
+  }
+}
