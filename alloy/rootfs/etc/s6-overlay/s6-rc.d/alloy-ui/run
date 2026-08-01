@@ -1,3 +1,10 @@
 #!/usr/bin/with-contenv bashio
 # shellcheck shell=bash
+if bashio::config.true 'safe_mode'; then
+    export SAFE_MODE=true
+else
+    export SAFE_MODE=false
+fi
+UI_LOG_LEVEL="$(bashio::config 'ui_log_level')"
+export UI_LOG_LEVEL
 exec /usr/bin/alloy-ui

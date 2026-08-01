@@ -31,23 +31,6 @@ func newSupervisorClient(baseURL, token string, client *http.Client) *supervisor
 	}
 }
 
-func (c *supervisorClient) Options(ctx context.Context) (map[string]any, error) {
-	var data struct {
-		Options map[string]any `json:"options"`
-	}
-	if err := c.call(ctx, http.MethodGet, "/addons/self/info", nil, &data); err != nil {
-		return nil, err
-	}
-	if data.Options == nil {
-		data.Options = map[string]any{}
-	}
-	return data.Options, nil
-}
-
-func (c *supervisorClient) Save(ctx context.Context, options map[string]any) error {
-	return c.call(ctx, http.MethodPost, "/addons/self/options", map[string]any{"options": options}, nil)
-}
-
 func (c *supervisorClient) Restart(ctx context.Context) error {
 	return c.call(ctx, http.MethodPost, "/addons/self/restart", map[string]any{}, nil)
 }

@@ -1,7 +1,10 @@
 const form = document.querySelector("#config-form");
 const notice = document.querySelector("#notice");
+const runtimeStatus = document.querySelector("#runtime-status");
 const modeSelect = document.querySelector("#operation_mode");
 const legacyWarning = document.querySelector("#legacy-warning");
+const manualToggle = document.querySelector("#manual_config_enabled");
+const manualPanel = document.querySelector("#manual-config-panel");
 const defaults = {
   instance_name: "homeassistant", metrics_scrape_interval: "60s", fleet_poll_frequency: "1m",
   logs_exclude_addons: "alloy", logs_max_age: "24h", log_level: "info",
@@ -9,11 +12,24 @@ const defaults = {
   alloy_metrics: true, logs_system: true, logs_homeassistant: true, logs_addons: true,
   traces_enabled: false, traces_network_access: false, alloy_profiling: false,
   alloy_disable_telemetry: true,
+  manual_config_enabled: false,
 };
 
 function setNotice(message, kind = "") {
   notice.textContent = message;
   notice.className = kind;
+}
+
+async function loadStatus() {
+  const response = await fetch("api/status", { headers: { Accept: "application/json" } });
+  const status = await response.json();
+  if (!response.ok) return;
+  const messages = [];
+  if (status.safe_mode) messages.push("Safe mode is active; saved pipelines are not running.");
+  if (!status.alloy_ready) messages.push("Alloy is not ready, but this recovery page remains available.");
+  if (status.manual_override) messages.push("The full manual configuration override is active.");
+  runtimeStatus.textContent = messages.join(" ");
+  runtimeStatus.hidden = messages.length === 0;
 }
 
 function setMode(mode) {
@@ -29,6 +45,14 @@ function setField(name, value) {
   if (!field || field.dataset.secret !== undefined) return;
   if (field.type === "checkbox") field.checked = Boolean(value);
   else field.value = value ?? "";
+}
+
+function setManualOverride(enabled) {
+  manualPanel.hidden = !enabled;
+  manualPanel.querySelectorAll("input,select,textarea").forEach((field) => {
+    field.disabled = !enabled;
+    if (field.name === "manual_config") field.required = enabled;
+  });
 }
 
 async function loadConfig() {
@@ -48,6 +72,7 @@ async function loadConfig() {
     field.dataset.configured = String(configured);
   });
   setMode(modeSelect.value);
+  setManualOverride(manualToggle.checked);
   setNotice("");
 }
 
@@ -94,6 +119,8 @@ async function save(restart) {
 }
 
 modeSelect.addEventListener("change", () => { legacyWarning.hidden = true; setMode(modeSelect.value); });
+manualToggle.addEventListener("change", () => setManualOverride(manualToggle.checked));
 form.addEventListener("submit", (event) => { event.preventDefault(); void save(false); });
 document.querySelector("#save-restart").addEventListener("click", () => { void save(true); });
 loadConfig().catch((error) => setNotice(error.message, "error"));
+loadStatus().catch(() => {});

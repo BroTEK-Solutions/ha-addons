@@ -2,10 +2,8 @@ name: Grafana Alloy
 version: 1.8.0
 slug: alloy
 description: >-
-  Ship Home Assistant OS logs to Loki and host system metrics to Prometheus
-  using Grafana Alloy, optionally managed from Grafana Fleet Management.
-  Replacement for the deprecated Promtail add-on, plus node_exporter-style host
-  monitoring (CPU, memory, disk, network).
+  Ship Home Assistant OS logs, metrics, traces and profiles with Grafana Alloy,
+  configured through a guided ingress web interface.
 url: https://github.com/BroTEK-Solutions/ha-addons
 image: ghcr.io/brotek-solutions/app-alloy
 arch:
@@ -26,148 +24,13 @@ map:
     read_only: true
   - type: backup
     read_only: true
-  - type: addon_config
-    read_only: false
 backup_exclude:
   - alloy/**
 options:
-  host_metrics: true
-  homeassistant_metrics: false
-  alloy_metrics: true
-  logs_system: true
-  logs_homeassistant: true
-  logs_addons: true
-  traces_enabled: false
-  traces_network_access: false
-  alloy_profiling: false
-  log_level: info
-  alloy_stability_level: generally-available
+  safe_mode: false
+  ui_log_level: info
 schema:
-  operation_mode: list(fleet|local)?
-  loki_url: >-
-    match((?x) ^$|^https?:// (?: \[(?: (?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,7}:| (?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|
-    (?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|
-    (?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|
-    [0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})|
-    :(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)| (?:(?:[0-9A-Fa-f]{1,4}:){6}|
-    ::(?:[0-9A-Fa-f]{1,4}:){0,5}| [0-9A-Fa-f]{1,4}::(?:[0-9A-Fa-f]{1,4}:){0,4}|
-    (?:[0-9A-Fa-f]{1,4}:){2}:(?:[0-9A-Fa-f]{1,4}:){0,3}|
-    (?:[0-9A-Fa-f]{1,4}:){3}:(?:[0-9A-Fa-f]{1,4}:){0,2}|
-    (?:[0-9A-Fa-f]{1,4}:){4}:(?:[0-9A-Fa-f]{1,4}:)?| (?:[0-9A-Fa-f]{1,4}:){5}:)
-    (?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])
-    (?:\.(?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])){3} )
-    (?:%25(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+)?\]| [A-Za-z0-9._-]+ )
-    (?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?
-    (?:[/?#](?:[^%\s"\\]|%[0-9A-Fa-f]{2})*)?$ )?
-  loki_username: match(^$|^[^"\\\x00-\x1F\x7F]+$)?
-  loki_password: password?
-  logs_system: bool
-  logs_homeassistant: bool
-  logs_addons: bool
-  logs_exclude_addons: match(^$|^[a-z0-9_-]+(,[a-z0-9_-]+)*$)?
-  logs_max_age: >-
-    match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)?
-  prometheus_url: >-
-    match((?x) ^$|^https?:// (?: \[(?: (?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,7}:| (?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|
-    (?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|
-    (?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|
-    [0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})|
-    :(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)| (?:(?:[0-9A-Fa-f]{1,4}:){6}|
-    ::(?:[0-9A-Fa-f]{1,4}:){0,5}| [0-9A-Fa-f]{1,4}::(?:[0-9A-Fa-f]{1,4}:){0,4}|
-    (?:[0-9A-Fa-f]{1,4}:){2}:(?:[0-9A-Fa-f]{1,4}:){0,3}|
-    (?:[0-9A-Fa-f]{1,4}:){3}:(?:[0-9A-Fa-f]{1,4}:){0,2}|
-    (?:[0-9A-Fa-f]{1,4}:){4}:(?:[0-9A-Fa-f]{1,4}:)?| (?:[0-9A-Fa-f]{1,4}:){5}:)
-    (?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])
-    (?:\.(?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])){3} )
-    (?:%25(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+)?\]| [A-Za-z0-9._-]+ )
-    (?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?
-    (?:[/?#](?:[^%\s"\\]|%[0-9A-Fa-f]{2})*)?$ )?
-  prometheus_username: match(^$|^[^"\\\x00-\x1F\x7F]+$)?
-  prometheus_password: password?
-  instance_name: match(^[^"\\\x00-\x1F\x7F]+$)?
-  metrics_scrape_interval: >-
-    match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)?
-  host_metrics: bool
-  homeassistant_metrics: bool
-  alloy_metrics: bool
-  tempo_url: >-
-    match((?x) ^$|^https?:// (?: \[(?: (?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,7}:| (?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|
-    (?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|
-    (?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|
-    [0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})|
-    :(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)| (?:(?:[0-9A-Fa-f]{1,4}:){6}|
-    ::(?:[0-9A-Fa-f]{1,4}:){0,5}| [0-9A-Fa-f]{1,4}::(?:[0-9A-Fa-f]{1,4}:){0,4}|
-    (?:[0-9A-Fa-f]{1,4}:){2}:(?:[0-9A-Fa-f]{1,4}:){0,3}|
-    (?:[0-9A-Fa-f]{1,4}:){3}:(?:[0-9A-Fa-f]{1,4}:){0,2}|
-    (?:[0-9A-Fa-f]{1,4}:){4}:(?:[0-9A-Fa-f]{1,4}:)?| (?:[0-9A-Fa-f]{1,4}:){5}:)
-    (?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])
-    (?:\.(?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])){3} )
-    (?:%25(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+)?\]| [A-Za-z0-9._-]+ )
-    (?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?
-    (?:[/?#](?:[^%\s"\\]|%[0-9A-Fa-f]{2})*)?$ )?
-  tempo_username: match(^$|^[^"\\\x00-\x1F\x7F]+$)?
-  tempo_password: password?
-  traces_enabled: bool
-  traces_network_access: bool
-  pyroscope_url: >-
-    match((?x) ^$|^https?:// (?: \[(?: (?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,7}:| (?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|
-    (?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|
-    (?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|
-    [0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})|
-    :(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)| (?:(?:[0-9A-Fa-f]{1,4}:){6}|
-    ::(?:[0-9A-Fa-f]{1,4}:){0,5}| [0-9A-Fa-f]{1,4}::(?:[0-9A-Fa-f]{1,4}:){0,4}|
-    (?:[0-9A-Fa-f]{1,4}:){2}:(?:[0-9A-Fa-f]{1,4}:){0,3}|
-    (?:[0-9A-Fa-f]{1,4}:){3}:(?:[0-9A-Fa-f]{1,4}:){0,2}|
-    (?:[0-9A-Fa-f]{1,4}:){4}:(?:[0-9A-Fa-f]{1,4}:)?| (?:[0-9A-Fa-f]{1,4}:){5}:)
-    (?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])
-    (?:\.(?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])){3} )
-    (?:%25(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+)?\]| [A-Za-z0-9._-]+ )
-    (?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?
-    (?:[/?#](?:[^%\s"\\]|%[0-9A-Fa-f]{2})*)?$ )?
-  pyroscope_username: match(^$|^[^"\\\x00-\x1F\x7F]+$)?
-  pyroscope_password: password?
-  alloy_profiling: bool
-  fleet_url: >-
-    match((?x) ^$|^https?:// (?: \[(?: (?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,7}:| (?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|
-    (?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|
-    (?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|
-    [0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})|
-    :(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)| (?:(?:[0-9A-Fa-f]{1,4}:){6}|
-    ::(?:[0-9A-Fa-f]{1,4}:){0,5}| [0-9A-Fa-f]{1,4}::(?:[0-9A-Fa-f]{1,4}:){0,4}|
-    (?:[0-9A-Fa-f]{1,4}:){2}:(?:[0-9A-Fa-f]{1,4}:){0,3}|
-    (?:[0-9A-Fa-f]{1,4}:){3}:(?:[0-9A-Fa-f]{1,4}:){0,2}|
-    (?:[0-9A-Fa-f]{1,4}:){4}:(?:[0-9A-Fa-f]{1,4}:)?| (?:[0-9A-Fa-f]{1,4}:){5}:)
-    (?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])
-    (?:\.(?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])){3} )
-    (?:%25(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+)?\]| [A-Za-z0-9._-]+ )
-    (?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?
-    (?:[/?#](?:[^%\s"\\]|%[0-9A-Fa-f]{2})*)?$ )?
-  fleet_username: match(^$|^[^"\\\x00-\x1F\x7F]+$)?
-  gcloud_rw_api_key: password?
-  fleet_password: password?
-  fleet_collector_name: match(^$|^[^"\\\x00-\x1F\x7F]+$)?
-  fleet_attributes: match(^$|^[^=,"\\]+=[^,"\\]*(,[^=,"\\]+=[^,"\\]*)*$)?
-  fleet_poll_frequency: >-
-    match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)?
-  log_level: list(debug|info|warn|error)
-  alloy_stability_level: list(generally-available|public-preview|experimental)
-  alloy_disable_telemetry: bool?
-  alloy_additional_args: str?
-  additional_config: str?
+  safe_mode: bool
+  ui_log_level: list(debug|info|warn|error)
 stage: experimental
 apparmor: false

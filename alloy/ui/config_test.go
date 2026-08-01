@@ -184,3 +184,13 @@ func TestValidateModeRequirementsRejectsInvalidLocalCrossFieldOptions(t *testing
 		})
 	}
 }
+
+func TestValidateModeRequirementsAllowsCompleteManualOverrideWithoutDestinations(t *testing.T) {
+	err := validateModeRequirements(map[string]any{
+		"manual_config_enabled": true,
+		"manual_config":         "logging {}",
+	})
+	if err != nil {
+		t.Fatalf("manual override rejected: %v", err)
+	}
+}

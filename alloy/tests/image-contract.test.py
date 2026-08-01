@@ -18,11 +18,12 @@ checks = {
     "UI is built from its module": "COPY ui/ ./" in dockerfile and "go build" in dockerfile,
     "UI binary is copied into runtime": "/usr/bin/alloy-ui" in dockerfile,
     "health checks the unprivileged ingress health endpoint": "127.0.0.1:8099/healthz" in dockerfile,
+    "health does not depend on Alloy readiness": "127.0.0.1:12345/-/ready" not in dockerfile,
     "Alloy serves its UI below the proxy prefix": "--server.http.ui-path-prefix=/alloy" in alloy_run,
     "Alloy debug listener is loopback-only behind ingress": "--server.http.listen-addr=127.0.0.1:12345" in alloy_run,
     "UI service run file exists": ui_run.is_file(),
     "UI service is a longrun": ui_type.is_file() and ui_type.read_text().strip() == "longrun",
-    "UI waits for Alloy": ui_dependency.is_file(),
+    "UI starts independently of Alloy": not ui_dependency.exists(),
     "UI service is in the user bundle": ui_manifest.is_file(),
 }
 
