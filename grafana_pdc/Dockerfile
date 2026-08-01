@@ -1,4 +1,4 @@
-FROM grafana/pdc-agent:0.0.62@sha256:60f4c990b38a5a98d8d1fe6190d1aeba04e9328ffb03f06867f75cfd0e8dd076 AS pdc-source
+FROM grafana/pdc-agent:0.0.63@sha256:3d8346ee5ec30aeaaae5f82db2a77f8347405fbfc4e4a3248ae26d65dd8bf031 AS pdc-source
 
 FROM ghcr.io/home-assistant/base:3.23@sha256:445077433f08d1e352285ff22ee2594f6b93ac3260dcf84433c79cd849a946a0
 
