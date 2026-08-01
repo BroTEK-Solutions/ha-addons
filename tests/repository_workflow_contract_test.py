@@ -55,6 +55,11 @@ def main() -> None:
         fail("per-App Git tags must retain the conventional v prefix")
     if release_config.get("separate-pull-requests") is not False:
         fail("the two independent App releases must share one release PR")
+    if release_config.get("group-pull-request-title-pattern") not in (
+        None,
+        "chore: release ${branch}",
+    ):
+        fail("grouped release PR titles must remain parseable by Release Please")
 
     expected_components = {"alloy": "alloy", "grafana_pdc": "grafana-pdc"}
     packages = release_config.get("packages", {})
