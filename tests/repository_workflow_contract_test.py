@@ -47,7 +47,7 @@ def main() -> None:
 
     expected_versions = {
         app: str(yaml.safe_load((ROOT / app / "config.yaml").read_text())["version"])
-        for app in ("alloy", "grafana_pdc")
+        for app in ("alloy", "grafana_pdc", "grafana_sm", "grafana_sm_browser")
     }
     if release_manifest != expected_versions:
         fail("Release Please manifest versions must match the published App metadata")
@@ -56,14 +56,19 @@ def main() -> None:
     if release_config.get("include-v-in-tag") is not True:
         fail("per-App Git tags must retain the conventional v prefix")
     if release_config.get("separate-pull-requests") is not False:
-        fail("the two independent App releases must share one release PR")
+        fail("the independent App releases must share one release PR")
     if release_config.get("group-pull-request-title-pattern") not in (
         None,
         "chore: release ${branch}",
     ):
         fail("grouped release PR titles must remain parseable by Release Please")
 
-    expected_components = {"alloy": "alloy", "grafana_pdc": "grafana-pdc"}
+    expected_components = {
+        "alloy": "alloy",
+        "grafana_pdc": "grafana-pdc",
+        "grafana_sm": "grafana-sm",
+        "grafana_sm_browser": "grafana-sm-browser",
+    }
     packages = release_config.get("packages", {})
     if set(packages) != set(expected_components):
         fail("Release Please must manage exactly the current App directories")
@@ -105,9 +110,10 @@ def main() -> None:
         "pdc-test",
         "alloy-generator-test",
         "alloy-init-test",
+        "synthetic-monitoring-test",
     }
     if "test" in jobs or not test_lanes.issubset(jobs):
-        fail("independent repository and App tests must use four parallel jobs")
+        fail("independent repository and App tests must use five parallel jobs")
 
     def job_text(job_name: str) -> str:
         return json.dumps(jobs[job_name], sort_keys=True)
@@ -118,6 +124,7 @@ def main() -> None:
             "python3 tests/app_version_changed_test.py",
             "python3 tests/renovate_config_contract_test.py",
             "python3 tests/repository_workflow_contract_test.py",
+            "python3 tests/synthetic_monitoring_variants_test.py",
         ),
         "pdc-test": (
             "python3 grafana_pdc/tests/config-schema.test.py",
@@ -133,6 +140,13 @@ def main() -> None:
             "go test ./...",
         ),
         "alloy-init-test": ("bash alloy/tests/init-alloy.test.sh",),
+        "synthetic-monitoring-test": (
+            "go test ./...",
+            "docker build --tag local/ha-grafana-sm:smoke grafana_sm",
+            "docker build --tag local/ha-grafana-sm-browser:smoke grafana_sm_browser",
+            "python3 tests/synthetic_monitoring_image_smoke_test.py local/ha-grafana-sm:smoke standard",
+            "python3 tests/synthetic_monitoring_image_smoke_test.py local/ha-grafana-sm-browser:smoke browser",
+        ),
     }
     for job_name, commands in expected_commands.items():
         lane = job_text(job_name)
@@ -265,13 +279,15 @@ def main() -> None:
         "generated release PR",
         "alloy-vX.Y.Z",
         "grafana-pdc-vX.Y.Z",
+        "grafana-sm-vX.Y.Z",
+        "grafana-sm-browser-vX.Y.Z",
         "Conventional Commits",
         "Do not edit an App version manually",
     ):
         if release_documentation not in readme:
             fail(f"README is missing release guidance: {release_documentation}")
 
-    for app in ("alloy", "grafana_pdc"):
+    for app in ("alloy", "grafana_pdc", "grafana_sm", "grafana_sm_browser"):
         app_dir = ROOT / app
         for filename in ("README.md", "DOCS.md", "CHANGELOG.md", "translations/en.yaml"):
             if not (app_dir / filename).is_file():

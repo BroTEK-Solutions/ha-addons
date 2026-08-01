@@ -1,0 +1,25 @@
+name: Grafana Synthetic Monitoring Probe with Browser Checks
+version: 1.0.0
+slug: grafana_sm_browser
+description: >-
+  Run a browser-capable private Grafana Cloud Synthetic Monitoring probe from Home Assistant.
+url: https://github.com/BroTEK-Solutions/ha-addons/tree/main/grafana_sm_browser
+image: ghcr.io/brotek-solutions/app-grafana-sm-browser
+arch:
+  - aarch64
+  - amd64
+init: false
+privileged:
+  - NET_RAW
+tmpfs: true
+options:
+  log_level: info
+  allow_private_networks: false
+  disable_usage_reports: false
+schema:
+  api_token: password(1,)
+  api_server_address: >-
+    match(^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*:[1-9][0-9]{0,4}$)
+  log_level: list(warn|info|debug)
+  allow_private_networks: bool
+  disable_usage_reports: bool

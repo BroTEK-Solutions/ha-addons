@@ -1,0 +1,25 @@
+name: {{APP_NAME}}
+version: {{APP_VERSION}}
+slug: {{APP_SLUG}}
+description: >-
+  {{APP_DESCRIPTION}}
+url: https://github.com/BroTEK-Solutions/ha-addons/tree/main/{{APP_SLUG}}
+image: {{APP_IMAGE}}
+arch:
+  - aarch64
+  - amd64
+init: false
+privileged:
+  - NET_RAW
+# {{TMPFS_LINE}}
+options:
+  log_level: info
+  allow_private_networks: false
+  disable_usage_reports: false
+schema:
+  api_token: password(1,)
+  api_server_address: >-
+    match(^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*:[1-9][0-9]{0,4}$)
+  log_level: list(warn|info|debug)
+  allow_private_networks: bool
+  disable_usage_reports: bool

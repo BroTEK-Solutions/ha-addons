@@ -1,0 +1,32 @@
+---
+configuration:
+  api_token:
+    name: Probe authentication token
+    description: >-
+      Copy the one-time token shown after creating this private probe under
+      **Testing & synthetics > Synthetics > Probes**. Each running probe needs
+      its own token. This secret is sent through the process environment, not
+      the command line.
+  api_server_address:
+    name: Probe API server address
+    description: >-
+      Regional Synthetic Monitoring gRPC address in `host:port` form, normally
+      ending in `:443`. Find it from the backend address using Grafana's
+      private-probe region table. Do not enter the backend URL or include
+      `https://`.
+  log_level:
+    name: Log level
+    description: >-
+      Keep **info** for normal operation. Use **debug** temporarily for
+      connection diagnostics because detailed logs can include check targets.
+  allow_private_networks:
+    name: Allow k6 targets in 10.0.0.0/8
+    description: >-
+      Disables the agent's default k6 block on `10.0.0.0/8`. Enable only when
+      scripted, MultiHTTP or browser checks must reach that private range and
+      Grafana administrators are trusted to assign those checks.
+  disable_usage_reports:
+    name: Disable anonymous usage reports
+    description: >-
+      Opts out of the non-personally-identifiable probe usage statistics that
+      Grafana Synthetic Monitoring Agent sends to Grafana by default.

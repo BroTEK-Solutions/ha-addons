@@ -27,6 +27,30 @@
           "jsonpath": "$.version"
         }
       ]
+    },
+    "grafana_sm": {
+      "component": "grafana-sm",
+      "package-name": "grafana-sm",
+      "release-type": "simple",
+      "extra-files": [
+        {
+          "type": "yaml",
+          "path": "config.yaml",
+          "jsonpath": "$.version"
+        }
+      ]
+    },
+    "grafana_sm_browser": {
+      "component": "grafana-sm-browser",
+      "package-name": "grafana-sm-browser",
+      "release-type": "simple",
+      "extra-files": [
+        {
+          "type": "yaml",
+          "path": "config.yaml",
+          "jsonpath": "$.version"
+        }
+      ]
     }
   }
 }
