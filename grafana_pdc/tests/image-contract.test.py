@@ -12,16 +12,6 @@ APP_DIR = Path(__file__).resolve().parents[1]
 DOCKERFILE = APP_DIR / "Dockerfile"
 APPARMOR = APP_DIR / "apparmor.txt"
 
-PDC_IMAGE = (
-    "grafana/pdc-agent:0.0.62@"
-    "sha256:60f4c990b38a5a98d8d1fe6190d1aeba04e9328ffb03f06867f75cfd0e8dd076"
-)
-HA_BASE = (
-    "ghcr.io/home-assistant/base:3.23@"
-    "sha256:445077433f08d1e352285ff22ee2594f6b93ac3260dcf84433c79cd849a946a0"
-)
-
-
 def fail(message: str) -> None:
     print(f"FAIL: {message}", file=sys.stderr)
     raise SystemExit(1)
@@ -42,8 +32,18 @@ def main() -> None:
     dockerfile = require_file(DOCKERFILE)
     apparmor = require_file(APPARMOR)
 
-    require(dockerfile, f"FROM {PDC_IMAGE} AS pdc-source", "PDC source image must be pinned")
-    require(dockerfile, f"FROM {HA_BASE}", "HA Alpine runtime base must be pinned")
+    if not re.search(
+        r"^FROM grafana/pdc-agent:[^@\s]+@sha256:[0-9a-f]{64} AS pdc-source$",
+        dockerfile,
+        re.MULTILINE,
+    ):
+        fail("PDC source image must use a tag and immutable digest")
+    if not re.search(
+        r"^FROM ghcr\.io/home-assistant/base:[^@\s]+@sha256:[0-9a-f]{64}$",
+        dockerfile,
+        re.MULTILINE,
+    ):
+        fail("HA Alpine runtime base must use a tag and immutable digest")
     require(
         dockerfile,
         "COPY --from=pdc-source /usr/bin/pdc /usr/bin/pdc",

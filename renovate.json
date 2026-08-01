@@ -4,6 +4,15 @@
     "config:recommended",
     "helpers:pinGitHubActionDigests"
   ],
+  "labels": [
+    "dependencies",
+    "renovate"
+  ],
+  "internalChecksFilter": "strict",
+  "minimumReleaseAge": "12 hours",
+  "minimumReleaseAgeBehaviour": "timestamp-required",
+  "automergeType": "pr",
+  "platformAutomerge": false,
   "customManagers": [
     {
       "customType": "regex",
@@ -19,21 +28,44 @@
     {
       "description": "Keep the App build, manifest, and multi-architecture matrix actions on one Home Assistant builder release.",
       "matchManagers": ["github-actions"],
-      "matchPackageNames": [
-        "home-assistant/builder/actions/build-image",
-        "home-assistant/builder/actions/prepare-multi-arch-matrix",
-        "home-assistant/builder/actions/publish-multi-arch-manifest"
-      ],
+      "matchPackageNames": ["home-assistant/builder"],
       "groupName": "Home Assistant builder App actions"
     },
     {
       "description": "Keep Home Assistant metadata and App discovery helpers on one actions revision.",
       "matchManagers": ["github-actions"],
-      "matchPackageNames": [
-        "home-assistant/actions/helpers/find-addons",
-        "home-assistant/actions/helpers/info"
-      ],
+      "matchPackageNames": ["home-assistant/actions"],
       "groupName": "Home Assistant App helper actions"
+    },
+    {
+      "description": "Keep shared security workflows on their reviewed floating ref",
+      "matchDepNames": ["rknightion/.github"],
+      "pinDigests": false,
+      "enabled": false
+    },
+    {
+      "description": "Automerge GitHub Actions after CI",
+      "matchManagers": ["github-actions"],
+      "automerge": true,
+      "labels": ["dep:gha"]
+    },
+    {
+      "description": "Automerge non-major App dependencies after CI",
+      "matchPackageNames": [
+        "grafana/alloy",
+        "grafana/pdc-agent",
+        "ghcr.io/home-assistant/base",
+        "ghcr.io/home-assistant/base-debian"
+      ],
+      "matchUpdateTypes": ["digest", "pin", "patch", "minor"],
+      "automerge": true,
+      "labels": ["dep:low-risk"]
+    },
+    {
+      "description": "Review CI runtime updates manually",
+      "matchPackageNames": ["python", "ubuntu"],
+      "automerge": false,
+      "labels": ["dep:toolchain"]
     }
   ]
 }

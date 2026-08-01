@@ -14,12 +14,6 @@ import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
-HA_BASE = (
-    "ghcr.io/home-assistant/base:3.23@"
-    "sha256:445077433f08d1e352285ff22ee2594f6b93ac3260dcf84433c79cd849a946a0"
-)
-
-
 def fail(message: str) -> None:
     print(f"FAIL: {message}", file=sys.stderr)
     raise SystemExit(1)
@@ -102,6 +96,7 @@ def main() -> None:
     for command in (
         "python3 tests/app_metadata_contract_test.py",
         "python3 tests/app_version_changed_test.py",
+        "python3 tests/renovate_config_contract_test.py",
         "python3 tests/repository_workflow_contract_test.py",
         "python3 grafana_pdc/tests/config-schema.test.py",
         "bash grafana_pdc/tests/service.test.sh",
@@ -110,8 +105,14 @@ def main() -> None:
     ):
         if command not in caller:
             fail(f"repository test gate must run: {command}")
-    if "BASHIO_BIN=/usr/bin/bashio" not in caller or HA_BASE not in caller:
-        fail("PDC service tests must run with real Bashio in the pinned HA base")
+    for required in (
+        "BASHIO_BIN=/usr/bin/bashio",
+        "grafana_pdc/Dockerfile",
+        r"ghcr.io\/home-assistant\/base:",
+        '"$ha_base"',
+    ):
+        if required not in caller:
+            fail("PDC service tests must derive the pinned HA base from the App Dockerfile")
     if "needs: [init, test]" not in caller:
         fail("image builds must wait for the complete repository test gate")
     blanket_publish_guard = "github.event_name == 'push' && github.ref == 'refs/heads/main'"
