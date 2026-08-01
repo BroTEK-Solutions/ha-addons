@@ -30,6 +30,8 @@ def main() -> None:
         fail("Renovate must perform automerge itself so optional CI checks finish first")
     if config.get("automergeType") != "pr":
         fail("Renovate must merge through pull requests")
+    if config.get("rebaseWhen") != "behind-base-branch":
+        fail("Renovate branches must refresh whenever main advances")
     if config.get("internalChecksFilter") != "strict":
         fail("Renovate must hold updates until internal checks pass")
     if config.get("minimumReleaseAge") != "12 hours":
@@ -52,6 +54,19 @@ def main() -> None:
     )
     if helpers.get("matchPackageNames") != ["home-assistant/actions"]:
         fail("Home Assistant helper sub-actions must match Renovate's normalized package name")
+
+    devcontainer = matching_rule(
+        rules,
+        "Keep the development container on the Home Assistant supported major",
+    )
+    if devcontainer.get("matchManagers") != ["devcontainer"]:
+        fail("the development-container constraint must not affect other managers")
+    if devcontainer.get("matchPackageNames") != [
+        "ghcr.io/home-assistant/devcontainer"
+    ]:
+        fail("the development-container constraint must target the official image")
+    if devcontainer.get("allowedVersions") != "<6":
+        fail("the development container must stay on the officially supported v5 major")
 
     if any(
         "rknightion/.github" in rule.get("matchDepNames", [])

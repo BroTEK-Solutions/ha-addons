@@ -156,13 +156,20 @@ def main() -> int:
         "name": "Grafana Private Data Source Connect",
         "slug": "grafana_pdc",
         "image": "ghcr.io/brotek-solutions/app-grafana-pdc",
-        "version": "1.0.0",
         "url": "https://github.com/BroTEK-Solutions/ha-addons/tree/main/grafana_pdc",
         "arch": ["aarch64", "amd64"],
         "init": False,
     }
     for key, value in expected.items():
         check(f"{key} is frozen", config.get(key) == value)
+    check(
+        "version is a stable semantic release",
+        re.fullmatch(
+            r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)",
+            str(config.get("version", "")),
+        )
+        is not None,
+    )
     check("8090/tcp has no default host mapping", config.get("ports") == {"8090/tcp": None})
     for key in (
         "host_network",

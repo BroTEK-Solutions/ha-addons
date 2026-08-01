@@ -13,6 +13,7 @@
   "minimumReleaseAgeBehaviour": "timestamp-required",
   "automergeType": "pr",
   "platformAutomerge": false,
+  "rebaseWhen": "behind-base-branch",
   "customManagers": [
     {
       "customType": "regex",
@@ -36,6 +37,12 @@
       "matchManagers": ["github-actions"],
       "matchPackageNames": ["home-assistant/actions"],
       "groupName": "Home Assistant App helper actions"
+    },
+    {
+      "description": "Keep the development container on the Home Assistant supported major",
+      "matchManagers": ["devcontainer"],
+      "matchPackageNames": ["ghcr.io/home-assistant/devcontainer"],
+      "allowedVersions": "<6"
     },
     {
       "description": "Automerge GitHub Actions after CI",
