@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.0.1...grafana-pdc-v1.0.2) (2026-08-01)
+
+
+### Bug Fixes
+
+* **deps:** update ghcr.io/home-assistant/base docker tag to v3.24 ([#10](https://github.com/BroTEK-Solutions/ha-addons/issues/10)) ([eae17c8](https://github.com/BroTEK-Solutions/ha-addons/commit/eae17c8fccfd0025fdc3bd9290a7aa86c1c1c88b))
+* **grafana_pdc:** allow executable memory mappings ([15a7570](https://github.com/BroTEK-Solutions/ha-addons/commit/15a75706a83bdc055a5b8438e5debf6fb2baa068))
+
 ## [1.0.1](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.0.0...grafana-pdc-v1.0.1) (2026-08-01)
 
 
