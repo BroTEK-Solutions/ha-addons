@@ -1,11 +1,11 @@
 name: Grafana Alloy
-version: "1.7.0"
+version: 1.8.0
 slug: alloy
 description: >-
   Ship Home Assistant OS logs to Loki and host system metrics to Prometheus
   using Grafana Alloy, optionally managed from Grafana Fleet Management.
-  Replacement for the deprecated Promtail add-on, plus node_exporter-style
-  host monitoring (CPU, memory, disk, network).
+  Replacement for the deprecated Promtail add-on, plus node_exporter-style host
+  monitoring (CPU, memory, disk, network).
 url: https://github.com/BroTEK-Solutions/ha-addons
 image: ghcr.io/brotek-solutions/app-alloy
 arch:
@@ -15,10 +15,7 @@ init: false
 startup: services
 journald: true
 host_network: true
-# Grants SUPERVISOR_TOKEN so the add-on can scrape Home Assistant Core's own
-# Prometheus endpoint. Only used when homeassistant_metrics is enabled.
 homeassistant_api: true
-# The ingress UI configures this App and proxies Alloy's component graph.
 ingress: true
 ingress_stream: true
 hassio_api: true
@@ -29,17 +26,10 @@ map:
     read_only: true
   - type: backup
     read_only: true
-  # Writable so a file-editor add-on can drop in a config.alloy override.
   - type: addon_config
     read_only: false
 backup_exclude:
-  # Alloy's WAL and its cached Fleet Management configuration. Both are
-  # regenerated on start, and the WAL grows unboundedly relative to its value
-  # in a backup.
-  - "alloy/**"
-# No default is set for the three destination URLs on purpose. A default in
-# `options` makes an option required regardless of the `?` in `schema`, which is
-# what previously made a metrics-only or Fleet-only install impossible.
+  - alloy/**
 options:
   host_metrics: true
   homeassistant_metrics: false
@@ -53,93 +43,131 @@ options:
   log_level: info
   alloy_stability_level: generally-available
 schema:
-  operation_mode: "list(fleet|local)?"
-  # `url` is deliberately not used for the endpoints. Supervisor validates it
-  # with voluptuous' Url(), which rejects an empty string, so clearing the field
-  # in the UI produces a validation error instead of disabling the destination.
-  # This pattern accepts an empty value and still catches malformed authority,
-  # port and percent-escape syntax before the option is saved.
-  #
-  # Whitespace, double quotes and backslashes are excluded rather than using a
-  # bare `.+`: the generator interpolates these values into quoted River
-  # strings, so a quote or backslash would produce a config Alloy cannot parse,
-  # and whitespace is not valid in a URL anyway. The folded expression uses
-  # Python's verbose regex mode so it can stay readable; the YAML anchor keeps
-  # all three endpoint fields on the same validation contract.
-  loki_url: &endpoint_url >-
-    match((?x)
-    ^$|^https?://
-    (?:
-    \[(?:
-    (?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|
-    (?:[0-9A-Fa-f]{1,4}:){1,7}:|
-    (?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|
+  operation_mode: list(fleet|local)?
+  loki_url: >-
+    match((?x) ^$|^https?:// (?: \[(?: (?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,7}:| (?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|
     (?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|
     (?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|
     (?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|
     (?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|
     [0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})|
-    :(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)|
-    (?:(?:[0-9A-Fa-f]{1,4}:){6}|
-    ::(?:[0-9A-Fa-f]{1,4}:){0,5}|
-    [0-9A-Fa-f]{1,4}::(?:[0-9A-Fa-f]{1,4}:){0,4}|
+    :(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)| (?:(?:[0-9A-Fa-f]{1,4}:){6}|
+    ::(?:[0-9A-Fa-f]{1,4}:){0,5}| [0-9A-Fa-f]{1,4}::(?:[0-9A-Fa-f]{1,4}:){0,4}|
     (?:[0-9A-Fa-f]{1,4}:){2}:(?:[0-9A-Fa-f]{1,4}:){0,3}|
     (?:[0-9A-Fa-f]{1,4}:){3}:(?:[0-9A-Fa-f]{1,4}:){0,2}|
-    (?:[0-9A-Fa-f]{1,4}:){4}:(?:[0-9A-Fa-f]{1,4}:)?|
-    (?:[0-9A-Fa-f]{1,4}:){5}:)
+    (?:[0-9A-Fa-f]{1,4}:){4}:(?:[0-9A-Fa-f]{1,4}:)?| (?:[0-9A-Fa-f]{1,4}:){5}:)
     (?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])
-    (?:\.(?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])){3}
-    )
-    (?:%25(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+)?\]|
-    [A-Za-z0-9._-]+
-    )
+    (?:\.(?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])){3} )
+    (?:%25(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+)?\]| [A-Za-z0-9._-]+ )
     (?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?
-    (?:[/?#](?:[^%\s"\\]|%[0-9A-Fa-f]{2})*)?$
-    )?
-  # Basic-auth usernames are emitted inside quoted River strings. Empty is
-  # still valid (no auth), but quotes, backslashes and control characters are
-  # rejected before they can make the generated configuration unparseable.
-  loki_username: &river_optional_string 'match(^$|^[^"\\\x00-\x1F\x7F]+$)?'
-  loki_password: "password?"
-  logs_system: "bool"
-  logs_homeassistant: "bool"
-  logs_addons: "bool"
-  logs_exclude_addons: 'match(^$|^[a-z0-9_-]+(,[a-z0-9_-]+)*$)?'
-  logs_max_age: 'match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)?'
-  prometheus_url: *endpoint_url
-  prometheus_username: *river_optional_string
-  prometheus_password: "password?"
-  instance_name: 'match(^[^"\\\x00-\x1F\x7F]+$)?'
-  # The positive Go duration grammar Alloy accepts, so `+1m30s`, `.5s`, `1.s`
-  # and both microsecond symbols stay valid. Zero and negative intervals cannot
-  # schedule useful work and are rejected before Alloy starts.
-  metrics_scrape_interval: 'match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)?'
-  host_metrics: "bool"
-  homeassistant_metrics: "bool"
-  alloy_metrics: "bool"
-  tempo_url: *endpoint_url
-  tempo_username: *river_optional_string
-  tempo_password: "password?"
-  traces_enabled: "bool"
-  traces_network_access: "bool"
-  pyroscope_url: *endpoint_url
-  pyroscope_username: *river_optional_string
-  pyroscope_password: "password?"
-  alloy_profiling: "bool"
-  fleet_url: *endpoint_url
-  fleet_username: *river_optional_string
-  gcloud_rw_api_key: "password?"
-  # Retained for upgrades. The UI migrates this value to gcloud_rw_api_key.
-  fleet_password: "password?"
-  fleet_collector_name: *river_optional_string
-  # Quotes and backslashes are excluded here too, so the UI rejects what
-  # init-alloy/run would otherwise refuse to start on.
-  fleet_attributes: 'match(^$|^[^=,"\\]+=[^,"\\]*(,[^=,"\\]+=[^,"\\]*)*$)?'
-  fleet_poll_frequency: 'match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)?'
-  log_level: "list(debug|info|warn|error)"
-  alloy_stability_level: "list(generally-available|public-preview|experimental)"
-  alloy_disable_telemetry: "bool?"
-  alloy_additional_args: "str?"
-  additional_config: "str?"
+    (?:[/?#](?:[^%\s"\\]|%[0-9A-Fa-f]{2})*)?$ )?
+  loki_username: match(^$|^[^"\\\x00-\x1F\x7F]+$)?
+  loki_password: password?
+  logs_system: bool
+  logs_homeassistant: bool
+  logs_addons: bool
+  logs_exclude_addons: match(^$|^[a-z0-9_-]+(,[a-z0-9_-]+)*$)?
+  logs_max_age: >-
+    match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)?
+  prometheus_url: >-
+    match((?x) ^$|^https?:// (?: \[(?: (?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,7}:| (?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|
+    (?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|
+    (?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|
+    [0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})|
+    :(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)| (?:(?:[0-9A-Fa-f]{1,4}:){6}|
+    ::(?:[0-9A-Fa-f]{1,4}:){0,5}| [0-9A-Fa-f]{1,4}::(?:[0-9A-Fa-f]{1,4}:){0,4}|
+    (?:[0-9A-Fa-f]{1,4}:){2}:(?:[0-9A-Fa-f]{1,4}:){0,3}|
+    (?:[0-9A-Fa-f]{1,4}:){3}:(?:[0-9A-Fa-f]{1,4}:){0,2}|
+    (?:[0-9A-Fa-f]{1,4}:){4}:(?:[0-9A-Fa-f]{1,4}:)?| (?:[0-9A-Fa-f]{1,4}:){5}:)
+    (?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])
+    (?:\.(?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])){3} )
+    (?:%25(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+)?\]| [A-Za-z0-9._-]+ )
+    (?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?
+    (?:[/?#](?:[^%\s"\\]|%[0-9A-Fa-f]{2})*)?$ )?
+  prometheus_username: match(^$|^[^"\\\x00-\x1F\x7F]+$)?
+  prometheus_password: password?
+  instance_name: match(^[^"\\\x00-\x1F\x7F]+$)?
+  metrics_scrape_interval: >-
+    match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)?
+  host_metrics: bool
+  homeassistant_metrics: bool
+  alloy_metrics: bool
+  tempo_url: >-
+    match((?x) ^$|^https?:// (?: \[(?: (?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,7}:| (?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|
+    (?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|
+    (?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|
+    [0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})|
+    :(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)| (?:(?:[0-9A-Fa-f]{1,4}:){6}|
+    ::(?:[0-9A-Fa-f]{1,4}:){0,5}| [0-9A-Fa-f]{1,4}::(?:[0-9A-Fa-f]{1,4}:){0,4}|
+    (?:[0-9A-Fa-f]{1,4}:){2}:(?:[0-9A-Fa-f]{1,4}:){0,3}|
+    (?:[0-9A-Fa-f]{1,4}:){3}:(?:[0-9A-Fa-f]{1,4}:){0,2}|
+    (?:[0-9A-Fa-f]{1,4}:){4}:(?:[0-9A-Fa-f]{1,4}:)?| (?:[0-9A-Fa-f]{1,4}:){5}:)
+    (?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])
+    (?:\.(?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])){3} )
+    (?:%25(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+)?\]| [A-Za-z0-9._-]+ )
+    (?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?
+    (?:[/?#](?:[^%\s"\\]|%[0-9A-Fa-f]{2})*)?$ )?
+  tempo_username: match(^$|^[^"\\\x00-\x1F\x7F]+$)?
+  tempo_password: password?
+  traces_enabled: bool
+  traces_network_access: bool
+  pyroscope_url: >-
+    match((?x) ^$|^https?:// (?: \[(?: (?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,7}:| (?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|
+    (?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|
+    (?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|
+    [0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})|
+    :(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)| (?:(?:[0-9A-Fa-f]{1,4}:){6}|
+    ::(?:[0-9A-Fa-f]{1,4}:){0,5}| [0-9A-Fa-f]{1,4}::(?:[0-9A-Fa-f]{1,4}:){0,4}|
+    (?:[0-9A-Fa-f]{1,4}:){2}:(?:[0-9A-Fa-f]{1,4}:){0,3}|
+    (?:[0-9A-Fa-f]{1,4}:){3}:(?:[0-9A-Fa-f]{1,4}:){0,2}|
+    (?:[0-9A-Fa-f]{1,4}:){4}:(?:[0-9A-Fa-f]{1,4}:)?| (?:[0-9A-Fa-f]{1,4}:){5}:)
+    (?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])
+    (?:\.(?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])){3} )
+    (?:%25(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+)?\]| [A-Za-z0-9._-]+ )
+    (?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?
+    (?:[/?#](?:[^%\s"\\]|%[0-9A-Fa-f]{2})*)?$ )?
+  pyroscope_username: match(^$|^[^"\\\x00-\x1F\x7F]+$)?
+  pyroscope_password: password?
+  alloy_profiling: bool
+  fleet_url: >-
+    match((?x) ^$|^https?:// (?: \[(?: (?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,7}:| (?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}|
+    (?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}|
+    (?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}|
+    (?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}|
+    [0-9A-Fa-f]{1,4}:(?:(?::[0-9A-Fa-f]{1,4}){1,6})|
+    :(?:(?::[0-9A-Fa-f]{1,4}){1,7}|:)| (?:(?:[0-9A-Fa-f]{1,4}:){6}|
+    ::(?:[0-9A-Fa-f]{1,4}:){0,5}| [0-9A-Fa-f]{1,4}::(?:[0-9A-Fa-f]{1,4}:){0,4}|
+    (?:[0-9A-Fa-f]{1,4}:){2}:(?:[0-9A-Fa-f]{1,4}:){0,3}|
+    (?:[0-9A-Fa-f]{1,4}:){3}:(?:[0-9A-Fa-f]{1,4}:){0,2}|
+    (?:[0-9A-Fa-f]{1,4}:){4}:(?:[0-9A-Fa-f]{1,4}:)?| (?:[0-9A-Fa-f]{1,4}:){5}:)
+    (?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])
+    (?:\.(?:0|[1-9]\d?|1\d{2}|2[0-4]\d|25[0-5])){3} )
+    (?:%25(?:[A-Za-z0-9._~-]|%[0-9A-Fa-f]{2})+)?\]| [A-Za-z0-9._-]+ )
+    (?::(?:[1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5]))?
+    (?:[/?#](?:[^%\s"\\]|%[0-9A-Fa-f]{2})*)?$ )?
+  fleet_username: match(^$|^[^"\\\x00-\x1F\x7F]+$)?
+  gcloud_rw_api_key: password?
+  fleet_password: password?
+  fleet_collector_name: match(^$|^[^"\\\x00-\x1F\x7F]+$)?
+  fleet_attributes: match(^$|^[^=,"\\]+=[^,"\\]*(,[^=,"\\]+=[^,"\\]*)*$)?
+  fleet_poll_frequency: >-
+    match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)?
+  log_level: list(debug|info|warn|error)
+  alloy_stability_level: list(generally-available|public-preview|experimental)
+  alloy_disable_telemetry: bool?
+  alloy_additional_args: str?
+  additional_config: str?
 stage: experimental
 apparmor: false
