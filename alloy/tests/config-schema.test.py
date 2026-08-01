@@ -45,6 +45,9 @@ TRANSLATIONS = Path(__file__).resolve().parents[1] / "translations" / "en.yaml"
 
 # Representative user input: (option, value, should_be_accepted).
 CASES: list[tuple[str, object, bool]] = [
+    ("operation_mode", "fleet", True),
+    ("operation_mode", "local", True),
+    ("operation_mode", "hybrid", False),
     # Clearing a destination in the UI must disable it, not fail validation.
     ("loki_url", "", True),
     ("prometheus_url", "", True),
@@ -60,6 +63,8 @@ CASES: list[tuple[str, object, bool]] = [
     ("loki_url", "http://[fe80::192.0.2.1%25eth0]:3100/loki/api/v1/push", True),
     ("prometheus_url", "https://prometheus-prod-01.grafana.net/api/prom/push", True),
     ("fleet_url", "https://fleet-management-prod-001.grafana.net", True),
+    ("tempo_url", "https://tempo-prod-01.grafana.net/otlp", True),
+    ("pyroscope_url", "https://profiles-prod-01.grafana.net", True),
     ("loki_url", "not-a-url", False),
     ("loki_url", "192.168.1.45:3100", False),
     ("loki_url", "http:///loki/api/v1/push", False),
@@ -127,6 +132,16 @@ CASES: list[tuple[str, object, bool]] = [
     ("alloy_stability_level", "experimental", True),
     ("alloy_stability_level", "stable", False),
     ("alloy_disable_telemetry", True, True),
+    ("alloy_metrics", True, True),
+    ("logs_system", True, True),
+    ("logs_homeassistant", False, True),
+    ("logs_addons", True, True),
+    ("logs_exclude_addons", "alloy,example", True),
+    ("logs_exclude_addons", "alloy,(.*)", False),
+    ("logs_max_age", "24h", True),
+    ("traces_enabled", True, True),
+    ("traces_network_access", True, True),
+    ("alloy_profiling", True, True),
     ("alloy_additional_args", "", True),
     ("alloy_additional_args", "--server.http.enable-pprof=false", True),
     ("loki_password", "", True),
@@ -176,6 +191,31 @@ def main() -> int:
     schema: dict[str, str] = config["schema"]
     options: dict[str, object] = config.get("options", {})
 
+    print("== ingress and telemetry receiver metadata are private by default ==")
+    check("ingress is enabled", config.get("ingress") is True)
+    check("ingress uses internal port 8099", config.get("ingress_port") == 8099)
+    check("ingress streams proxied responses", config.get("ingress_stream") is True)
+    check("Supervisor API access is enabled", config.get("hassio_api") is True)
+    check("host-network services do not advertise ineffective port mappings", "ports" not in config)
+
+    print("== advanced defaults are runtime defaults, not mandatory UI values ==")
+    runtime_default_only = {
+        "instance_name",
+        "metrics_scrape_interval",
+        "fleet_poll_frequency",
+        "alloy_disable_telemetry",
+    }
+    for key in runtime_default_only:
+        check(f"{key} has no stored default", key not in options)
+    check(
+        "operation_mode supports only Fleet and Local",
+        schema.get("operation_mode") == "list(fleet|local)?",
+    )
+    check(
+        "Grafana Cloud shared write key is masked",
+        schema.get("gcloud_rw_api_key") == "password?",
+    )
+
     print("== every schema entry is a valid Supervisor schema element ==")
     for key, typ in schema.items():
         check(f"{key}: {typ}", RE_SCHEMA_ELEMENT.match(typ) is not None)
@@ -203,6 +243,9 @@ def main() -> int:
 
     print("\n== user input is accepted or rejected as intended ==")
     for key, value, expected in CASES:
+        if key not in schema:
+            check(f"{key}={value!r} has a schema entry", False)
+            continue
         try:
             validate(schema[key], value)
             accepted = True

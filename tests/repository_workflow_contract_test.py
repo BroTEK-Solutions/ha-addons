@@ -127,7 +127,10 @@ def main() -> None:
         ),
         "alloy-generator-test": (
             "python3 alloy/tests/config-schema.test.py",
+            "python3 alloy/tests/image-contract.test.py",
             "bash alloy/tests/generate-config.test.sh",
+            "bash alloy/tests/image-smoke.test.sh",
+            "go test ./...",
         ),
         "alloy-init-test": ("bash alloy/tests/init-alloy.test.sh",),
     }

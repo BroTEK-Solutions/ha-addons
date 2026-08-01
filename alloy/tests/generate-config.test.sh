@@ -141,7 +141,7 @@ OUT="$(gen LOG_LEVEL=info FLEET_URL=https://fleet-management-prod-001.example.in
 check_contains "$OUT" 'remotecfg {'
 check_contains "$OUT" 'url            = "https://fleet-management-prod-001.example.invalid"'
 check_contains "$OUT" 'id             = "homeassistant"'
-check_contains "$OUT" 'poll_frequency = "5m"'
+check_contains "$OUT" 'poll_frequency = "1m"'
 check_absent   "$OUT" 'loki.source.journal'
 check_absent   "$OUT" 'prometheus.exporter.unix'
 check_absent   "$OUT" 'attributes     = {'
@@ -160,8 +160,59 @@ check_contains "$OUT" '"env" = "home",'
 check_contains "$OUT" '"role" = "hass",'
 check_contains "$OUT" 'poll_frequency = "30s"'
 check_contains "$OUT" 'username = "987654"'
-check_contains "$OUT" 'password = sys.env("FLEET_PASSWORD")'
+check_contains "$OUT" 'password = sys.env("GCLOUD_RW_API_KEY")'
 validate_alloy "$OUT" "fleet-full"
+
+echo "== operation modes are exclusive =="
+OUT="$(gen OPERATION_MODE=fleet FLEET_URL=https://fleet-management-prod-001.example.invalid \
+  FLEET_USERNAME=987654 LOKI_URL=https://logs.example.net/loki/api/v1/push \
+  PROMETHEUS_URL=https://prom.example.net/api/prom/push)"
+check_contains "$OUT" 'remotecfg {'
+check_absent   "$OUT" 'loki.write "loki"'
+check_absent   "$OUT" 'prometheus.remote_write "metrics"'
+
+OUT="$(gen OPERATION_MODE=local FLEET_URL=https://fleet-management-prod-001.example.invalid \
+  LOKI_URL=https://logs.example.net/loki/api/v1/push)"
+check_contains "$OUT" 'loki.write "loki"'
+check_absent   "$OUT" 'remotecfg {'
+
+echo "== local signal pipelines =="
+OUT="$(gen OPERATION_MODE=local PROMETHEUS_URL=https://prom.example.net/api/prom/push \
+  HOST_METRICS=false HOMEASSISTANT_METRICS=false ALLOY_METRICS=true)"
+check_contains "$OUT" 'prometheus.scrape "alloy"'
+check_contains "$OUT" '"__address__" = "127.0.0.1:12345"'
+validate_alloy "$OUT" "alloy-self-metrics"
+
+OUT="$(gen OPERATION_MODE=local LOKI_URL=https://logs.example.net/loki/api/v1/push \
+  LOGS_SYSTEM=true LOGS_HOMEASSISTANT=false LOGS_ADDONS=true \
+  LOGS_EXCLUDE_ADDONS=alloy,example LOGS_MAX_AGE=24h)"
+check_contains "$OUT" 'max_age      = "24h"'
+check_contains "$OUT" 'action        = "drop"'
+check_contains "$OUT" 'addon_(?:[^_]+_)?alloy|addon_(?:[^_]+_)?example'
+validate_alloy "$OUT" "filtered-journal"
+
+OUT="$(gen OPERATION_MODE=local TRACES_ENABLED=true \
+  TEMPO_URL=https://tempo.example.net/otlp TEMPO_USERNAME=123)"
+check_contains "$OUT" 'otelcol.receiver.otlp "local"'
+check_contains "$OUT" 'otelcol.exporter.otlphttp "tempo"'
+check_contains "$OUT" 'endpoint = "127.0.0.1:4317"'
+check_contains "$OUT" 'endpoint = "127.0.0.1:4318"'
+check_absent "$OUT" 'endpoint = "0.0.0.0:4317"'
+check_contains "$OUT" 'password = sys.env("TEMPO_PASSWORD")'
+validate_alloy "$OUT" "tempo-otlp"
+
+OUT="$(gen OPERATION_MODE=local TRACES_ENABLED=true TRACES_NETWORK_ACCESS=true \
+  TEMPO_URL=https://tempo.example.net/otlp)"
+check_contains "$OUT" 'endpoint = "0.0.0.0:4317"'
+check_contains "$OUT" 'endpoint = "0.0.0.0:4318"'
+validate_alloy "$OUT" "tempo-network-access"
+
+OUT="$(gen OPERATION_MODE=local ALLOY_PROFILING=true \
+  PYROSCOPE_URL=https://profiles.example.net PYROSCOPE_USERNAME=123)"
+check_contains "$OUT" 'pyroscope.scrape "alloy"'
+check_contains "$OUT" 'pyroscope.write "profiles"'
+check_contains "$OUT" 'password = sys.env("PYROSCOPE_PASSWORD")'
+validate_alloy "$OUT" "alloy-self-profiling"
 
 echo "== fleet, single attribute =="
 OUT="$(gen LOG_LEVEL=info FLEET_URL=https://fleet-management-prod-001.example.invalid FLEET_ATTRIBUTES=env=home)"
@@ -184,11 +235,11 @@ FLEET_BLOCK="$(block "$OUT" 'remotecfg {')"
 LOKI_BLOCK="$(block "$OUT" 'loki.write "loki" {')"
 PROM_BLOCK="$(block "$OUT" 'prometheus.remote_write "metrics" {')"
 check_contains "$FLEET_BLOCK" 'username = "333"'
-check_contains "$FLEET_BLOCK" 'sys.env("FLEET_PASSWORD")'
+check_contains "$FLEET_BLOCK" 'sys.env("GCLOUD_RW_API_KEY")'
 check_absent   "$FLEET_BLOCK" 'LOKI_PASSWORD'
 check_absent   "$FLEET_BLOCK" 'PROMETHEUS_PASSWORD'
-check_absent   "$LOKI_BLOCK"  'FLEET_PASSWORD'
-check_absent   "$PROM_BLOCK"  'FLEET_PASSWORD'
+check_absent   "$LOKI_BLOCK"  'GCLOUD_RW_API_KEY'
+check_absent   "$PROM_BLOCK"  'GCLOUD_RW_API_KEY'
 validate_alloy "$OUT" "all-three"
 
 echo "== metric sources are individually selectable =="
@@ -224,7 +275,7 @@ OUT="$(gen LOG_LEVEL=info LOKI_URL=https://logs.example.net/loki/api/v1/push LOK
   PROMETHEUS_URL=https://prom.example.net/api/prom/push PROMETHEUS_USERNAME=222 \
   FLEET_URL=https://fleet-management-prod-001.example.invalid FLEET_USERNAME=333 \
   LOKI_PASSWORD=SENTINELLOKISECRET PROMETHEUS_PASSWORD=SENTINELPROMSECRET \
-  FLEET_PASSWORD=SENTINELFLEETSECRET)"
+  GCLOUD_RW_API_KEY=SENTINELFLEETSECRET)"
 check_absent "$OUT" 'SENTINELLOKISECRET'
 check_absent "$OUT" 'SENTINELPROMSECRET'
 check_absent "$OUT" 'SENTINELFLEETSECRET'

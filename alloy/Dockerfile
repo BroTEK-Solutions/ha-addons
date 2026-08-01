@@ -1,4 +1,11 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/base-debian:bookworm@sha256:8c7a9e207425e79b6b2ed1628a2b6727fa6e518d9fdddcbe3b1ac20440e70492
+
+FROM golang:1.26-bookworm@sha256:1ecb7edf62a0408027bd5729dfd6b1b8766e578e8df93995b225dfd0944eb651 AS ui-builder
+
+WORKDIR /src
+COPY ui/ ./
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/alloy-ui .
+
 FROM ${BUILD_FROM}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -23,12 +30,16 @@ RUN set -eux; \
     rm -rf /tmp/alloy.zip /tmp/alloy-extract
 
 COPY rootfs /
+COPY --from=ui-builder /out/alloy-ui /usr/bin/alloy-ui
 
 # Supervisor reads the container's Docker health status and surfaces it as the
 # add-on's health, which is what the user-facing Watchdog toggle acts on. This
 # replaces the `watchdog:` config key, which is obsolete.
 HEALTHCHECK --start-period=30s --interval=30s --timeout=5s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:12345/-/ready || exit 1
+    CMD curl -fsS http://127.0.0.1:12345/-/ready >/dev/null \
+    && curl -fsS http://127.0.0.1:8099/healthz >/dev/null || exit 1
+
+EXPOSE 8099/tcp
 
 ARG BUILD_DATE
 LABEL \

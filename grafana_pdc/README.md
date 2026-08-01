@@ -23,8 +23,9 @@ cluster: "example-cluster-copied-from-grafana"
 ```
 
 The cluster is free text. Paste the value Grafana Cloud gives you; this App does not discover
-clusters and does not maintain a region map. Set `region_format: true` only when Grafana Cloud's
-Configuration Details tells you to use the regional endpoint format.
+clusters and does not maintain a region map. The common form contains only credentials,
+destination restrictions and log level. Uncommon controls use pdc-agent's upstream defaults and
+appear under Home Assistant's optional-configuration expander.
 
 See [DOCS.md](DOCS.md) for endpoint restrictions, Home Assistant networking, metrics, persistence,
 and troubleshooting.

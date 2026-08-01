@@ -123,7 +123,7 @@ expect_ok "fleet only" "{${FLEET},\"instance_name\":\"hass\"}" \
 echo
 echo "== defaults are applied when an option is absent =="
 expect_ok "instance_name default" "{${PROM}}" 'replacement  = "homeassistant"'
-expect_ok "poll frequency default" "{${FLEET}}" 'poll_frequency = "5m"'
+expect_ok "poll frequency default" "{${FLEET}}" 'poll_frequency = "1m"'
 expect_ok "scrape interval default" "{${PROM}}" 'scrape_interval = "60s"'
 
 echo
@@ -139,10 +139,54 @@ expect_fatal "prometheus username without password" \
   "prometheus_username is set but prometheus_password is empty"
 expect_fatal "fleet username without password" \
   "{${FLEET},\"fleet_username\":\"123\"}" \
-  "fleet_username is set but fleet_password is empty"
+  "fleet_username is set but gcloud_rw_api_key is empty"
+expect_ok "Fleet shared write key" \
+  "{${FLEET},\"fleet_username\":\"123\",\"gcloud_rw_api_key\":\"secret\"}" \
+  'password = sys.env("GCLOUD_RW_API_KEY")'
 expect_ok "both halves present" \
   "{${LOKI},\"loki_username\":\"123\",\"loki_password\":\"secret\"}" \
   'username = "123"'
+
+echo
+echo "== operation modes are exclusive and upgrades preserve legacy hybrid =="
+TESTS=$((TESTS + 1))
+run_init "{${LOKI},${PROM},${FLEET},\"operation_mode\":\"fleet\",\"fleet_username\":\"123\",\"gcloud_rw_api_key\":\"secret\"}"
+if ! grep -qF "remotecfg" <<<"${RUN_CONFIG}"; then
+  fail "fleet mode did not emit remotecfg"
+elif grep -qF "loki.write" <<<"${RUN_CONFIG}" || grep -qF "prometheus.remote_write" <<<"${RUN_CONFIG}"; then
+  fail "fleet mode emitted a local pipeline"
+else
+  pass "fleet mode emits only remote configuration"
+fi
+TESTS=$((TESTS + 1))
+run_init "{${LOKI},${FLEET},\"operation_mode\":\"local\"}"
+if ! grep -qF "loki.write" <<<"${RUN_CONFIG}"; then
+  fail "local mode did not emit the local log pipeline"
+elif grep -qF "remotecfg" <<<"${RUN_CONFIG}"; then
+  fail "local mode emitted remotecfg"
+else
+  pass "local mode emits no remote configuration"
+fi
+expect_ok "existing mixed install remains legacy hybrid" "{${LOKI},${FLEET}}" \
+  "loki.write" "remotecfg"
+expect_fatal "Fleet mode requires a Fleet endpoint" \
+  "{${LOKI},\"operation_mode\":\"fleet\"}" \
+  "Fleet mode requires fleet_url"
+expect_fatal "Fleet mode requires its instance username" \
+  "{${FLEET},\"operation_mode\":\"fleet\",\"gcloud_rw_api_key\":\"secret\"}" \
+  "Fleet mode requires fleet_username"
+expect_fatal "Fleet mode requires its shared write key" \
+  "{${FLEET},\"operation_mode\":\"fleet\",\"fleet_username\":\"123\"}" \
+  "Fleet mode requires gcloud_rw_api_key"
+expect_fatal "Local mode requires a local destination" \
+  "{${FLEET},\"operation_mode\":\"local\"}" \
+  "Local mode requires at least one local destination"
+expect_fatal "traces require a Tempo endpoint" \
+  "{${LOKI},\"operation_mode\":\"local\",\"traces_enabled\":true}" \
+  "traces_enabled is on but tempo_url is empty"
+expect_fatal "profiling requires a Pyroscope endpoint" \
+  "{${LOKI},\"operation_mode\":\"local\",\"alloy_profiling\":true}" \
+  "alloy_profiling is on but pyroscope_url is empty"
 
 echo
 echo "== endpoints that would corrupt the generated config are refused =="

@@ -18,7 +18,11 @@ host_network: true
 # Grants SUPERVISOR_TOKEN so the add-on can scrape Home Assistant Core's own
 # Prometheus endpoint. Only used when homeassistant_metrics is enabled.
 homeassistant_api: true
-webui: "http://[HOST]:[PORT:12345]"
+# The ingress UI configures this App and proxies Alloy's component graph.
+ingress: true
+ingress_port: 8099
+ingress_stream: true
+hassio_api: true
 map:
   - type: share
     read_only: true
@@ -29,8 +33,6 @@ map:
   # Writable so a file-editor add-on can drop in a config.alloy override.
   - type: addon_config
     read_only: false
-ports:
-  12345/tcp: 12345
 backup_exclude:
   # Alloy's WAL and its cached Fleet Management configuration. Both are
   # regenerated on start, and the WAL grows unboundedly relative to its value
@@ -40,15 +42,19 @@ backup_exclude:
 # `options` makes an option required regardless of the `?` in `schema`, which is
 # what previously made a metrics-only or Fleet-only install impossible.
 options:
-  instance_name: homeassistant
-  metrics_scrape_interval: 60s
   host_metrics: true
   homeassistant_metrics: false
-  fleet_poll_frequency: 5m
+  alloy_metrics: true
+  logs_system: true
+  logs_homeassistant: true
+  logs_addons: true
+  traces_enabled: false
+  traces_network_access: false
+  alloy_profiling: false
   log_level: info
   alloy_stability_level: generally-available
-  alloy_disable_telemetry: true
 schema:
+  operation_mode: "list(fleet|local)?"
   # `url` is deliberately not used for the endpoints. Supervisor validates it
   # with voluptuous' Url(), which rejects an empty string, so clearing the field
   # in the UI produces a validation error instead of disabling the destination.
@@ -93,27 +99,44 @@ schema:
     )?
   loki_username: "str?"
   loki_password: "password?"
+  logs_system: "bool"
+  logs_homeassistant: "bool"
+  logs_addons: "bool"
+  logs_exclude_addons: 'match(^$|^[a-z0-9_-]+(,[a-z0-9_-]+)*$)?'
+  logs_max_age: 'match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)?'
   prometheus_url: *endpoint_url
   prometheus_username: "str?"
   prometheus_password: "password?"
-  instance_name: "str(1,)"
+  instance_name: "str(1,)?"
   # The positive Go duration grammar Alloy accepts, so `+1m30s`, `.5s`, `1.s`
   # and both microsecond symbols stay valid. Zero and negative intervals cannot
   # schedule useful work and are rejected before Alloy starts.
-  metrics_scrape_interval: 'match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)'
+  metrics_scrape_interval: 'match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)?'
   host_metrics: "bool"
   homeassistant_metrics: "bool"
+  alloy_metrics: "bool"
+  tempo_url: *endpoint_url
+  tempo_username: "str?"
+  tempo_password: "password?"
+  traces_enabled: "bool"
+  traces_network_access: "bool"
+  pyroscope_url: *endpoint_url
+  pyroscope_username: "str?"
+  pyroscope_password: "password?"
+  alloy_profiling: "bool"
   fleet_url: *endpoint_url
   fleet_username: "str?"
+  gcloud_rw_api_key: "password?"
+  # Retained for upgrades. The UI migrates this value to gcloud_rw_api_key.
   fleet_password: "password?"
   fleet_collector_name: "str?"
   # Quotes and backslashes are excluded here too, so the UI rejects what
   # init-alloy/run would otherwise refuse to start on.
   fleet_attributes: 'match(^$|^[^=,"\\]+=[^,"\\]*(,[^=,"\\]+=[^,"\\]*)*$)?'
-  fleet_poll_frequency: 'match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)'
+  fleet_poll_frequency: 'match(^\+?(?=.*[1-9])((([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(ns|us|µs|μs|ms|s|m|h))+$)?'
   log_level: "list(debug|info|warn|error)"
   alloy_stability_level: "list(generally-available|public-preview|experimental)"
-  alloy_disable_telemetry: "bool"
+  alloy_disable_telemetry: "bool?"
   alloy_additional_args: "str?"
   additional_config: "str?"
 stage: experimental

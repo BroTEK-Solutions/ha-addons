@@ -31,9 +31,11 @@ CONFIG = ADDON / "config.yaml"
 TRANSLATIONS = ADDON / "translations" / "en.yaml"
 
 REQUIRED = {"signing_token", "hosted_grafana_id", "cluster"}
-DEFAULTS: dict[str, object] = {
+MAIN_DEFAULTS: dict[str, object] = {
     "allowed_endpoints": [],
     "log_level": "info",
+}
+UPSTREAM_DEFAULTS: dict[str, object] = {
     "connections": 1,
     "region_format": False,
     "domain": "grafana.net",
@@ -203,9 +205,10 @@ def main() -> int:
     ):
         check(f"{key} is absent", key not in config)
 
-    print("\n== required and default option semantics ==")
-    check("schema keys are exactly required keys plus defaults", set(schema) == REQUIRED | set(DEFAULTS))
-    check("options are the frozen defaults", options == DEFAULTS)
+    print("\n== required, common and advanced option semantics ==")
+    expected_keys = REQUIRED | set(MAIN_DEFAULTS) | set(UPSTREAM_DEFAULTS)
+    check("schema keys are exactly the supported keys", set(schema) == expected_keys)
+    check("only common options are stored by default", options == MAIN_DEFAULTS)
     for key in REQUIRED:
         check(f"{key} is required and has no default", not str(schema[key]).endswith("?") and key not in options)
         try:
@@ -213,16 +216,38 @@ def main() -> int:
             check(f"missing {key} is rejected", False)
         except vol.Invalid:
             check(f"missing {key} is rejected", True)
+    for key in MAIN_DEFAULTS:
+        check(f"{key} remains in the main form", not str(schema[key]).endswith("?"))
+    for key in UPSTREAM_DEFAULTS:
+        check(
+            f"{key} is an unused optional field",
+            str(schema[key]).endswith("?") and key not in options,
+        )
 
     print("\n== Supervisor schema types, ranges and patterns ==")
     for key, typ in schema.items():
         check(f"{key}: {typ!r} is a valid schema element", valid_schema(typ))
-    for key, value in options.items():
+    for key, value in MAIN_DEFAULTS.items():
         try:
             validate(schema[key], value)
             check(f"default {key}={value!r} validates", True)
         except vol.Invalid as err:
             check(f"default {key}={value!r} validates", False, str(err))
+    for key, value in UPSTREAM_DEFAULTS.items():
+        try:
+            validate(schema[key], value)
+            check(f"upstream default {key}={value!r} validates", True)
+        except vol.Invalid as err:
+            check(f"upstream default {key}={value!r} validates", False, str(err))
+
+    run_script = (ADDON / "rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run").read_text()
+    for key, value in UPSTREAM_DEFAULTS.items():
+        shell_value = str(value).lower() if isinstance(value, bool) else str(value)
+        check(
+            f"runtime fallback for {key} matches upstream {shell_value}",
+            f"config_or {key} {shell_value}" in run_script
+            or f"config_or {key} '{shell_value}'" in run_script,
+        )
     for key, value, expected_valid in CASES:
         try:
             validate(schema[key], value)

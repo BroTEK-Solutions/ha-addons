@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import re
+import hashlib
+import struct
 import sys
 from pathlib import Path
 
@@ -11,6 +13,9 @@ from pathlib import Path
 APP_DIR = Path(__file__).resolve().parents[1]
 DOCKERFILE = APP_DIR / "Dockerfile"
 APPARMOR = APP_DIR / "apparmor.txt"
+ICON = APP_DIR / "icon.png"
+LOGO = APP_DIR / "logo.png"
+BRANDING = APP_DIR / "BRANDING.md"
 
 def fail(message: str) -> None:
     print(f"FAIL: {message}", file=sys.stderr)
@@ -31,6 +36,31 @@ def require(text: str, needle: str, message: str) -> None:
 def main() -> None:
     dockerfile = require_file(DOCKERFILE)
     apparmor = require_file(APPARMOR)
+    branding = require_file(BRANDING)
+
+    def png_size(path: Path) -> tuple[int, int]:
+        data = path.read_bytes()
+        if data[:8] != b"\x89PNG\r\n\x1a\n":
+            fail(f"{path.name} must be a PNG")
+        return struct.unpack(">II", data[16:24])
+
+    if png_size(ICON) != (128, 128):
+        fail("official Grafana Cloud icon must be packaged at 128x128")
+    if png_size(LOGO) != (250, 100):
+        fail("official Grafana Cloud logo must be packaged at 250x100")
+    old_assets = {
+        "54890ff9c250ba605782435968e99f4b9f8a41347c55bad9a9471bc1756f1ba7",
+        "c45827bef691d26cc423b0b1e8227e7d1c7696d38f5f4cd3275c281307d3f65f",
+    }
+    for asset in (ICON, LOGO):
+        digest = hashlib.sha256(asset.read_bytes()).hexdigest()
+        if digest in old_assets:
+            fail(f"{asset.name} must replace the generated artwork")
+    require(
+        branding,
+        "Grafana Cloud",
+        "branding provenance must identify the official Grafana Cloud asset set",
+    )
 
     if not re.search(
         r"^FROM grafana/pdc-agent:[^@\s]+@sha256:[0-9a-f]{64} AS pdc-source$",
