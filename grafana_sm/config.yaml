@@ -1,8 +1,7 @@
 name: Grafana Synthetic Monitoring Probe
-version: 1.0.0
+version: 1.1.0
 slug: grafana_sm
-description: >-
-  Run a private Grafana Cloud Synthetic Monitoring probe from Home Assistant.
+description: Run a private Grafana Cloud Synthetic Monitoring probe from Home Assistant.
 url: https://github.com/BroTEK-Solutions/ha-addons/tree/main/grafana_sm
 image: ghcr.io/brotek-solutions/app-grafana-sm
 arch:
