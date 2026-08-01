@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"unicode"
 )
 
 type candidateValidator interface {
@@ -25,6 +28,9 @@ func newAlloyValidator(generatorPath, alloyPath string) *alloyValidator {
 
 func (v *alloyValidator) Validate(ctx context.Context, settings map[string]any) error {
 	if err := validateModeRequirements(settings); err != nil {
+		return err
+	}
+	if err := v.validateStartupInputs(ctx, settings); err != nil {
 		return err
 	}
 	temporaryDir, err := os.MkdirTemp("", "alloy-candidate-*")
@@ -60,6 +66,99 @@ func (v *alloyValidator) Validate(ctx context.Context, settings map[string]any) 
 	output, err := command.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("Alloy rejected candidate: %s", limitedMessage(string(output)))
+	}
+	return nil
+}
+
+func (v *alloyValidator) validateStartupInputs(ctx context.Context, settings map[string]any) error {
+	additionalArguments := strings.Fields(stringSetting(settings, "alloy_additional_args", ""))
+	if len(additionalArguments) > 0 {
+		for _, argument := range additionalArguments {
+			if argument == "-h" || argument == "--help" || !strings.HasPrefix(argument, "-") {
+				return fmt.Errorf("additional Alloy arguments must use --flag or --flag=value syntax")
+			}
+		}
+		arguments := append([]string{"run"}, additionalArguments...)
+		arguments = append(arguments, "--help")
+		command := exec.CommandContext(ctx, v.alloyPath, arguments...)
+		command.Env = candidateEnvironment(settings)
+		output, err := command.CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("invalid additional Alloy arguments: %s", limitedMessage(string(output)))
+		}
+	}
+
+	if optionEnabled(settings, "manual_config_enabled") {
+		return nil
+	}
+	mode, _ := settings["operation_mode"].(string)
+	if mode != "fleet" {
+		for _, name := range []string{"loki_url", "prometheus_url", "tempo_url", "pyroscope_url"} {
+			if err := validateEndpointSetting(name, stringSetting(settings, name, "")); err != nil {
+				return err
+			}
+		}
+		for _, name := range []string{"loki_username", "prometheus_username", "tempo_username", "pyroscope_username"} {
+			if err := validateRiverString(name, stringSetting(settings, name, "")); err != nil {
+				return err
+			}
+		}
+	}
+	if mode != "local" {
+		if err := validateEndpointSetting("fleet_url", stringSetting(settings, "fleet_url", "")); err != nil {
+			return err
+		}
+		for _, name := range []string{"fleet_username", "fleet_collector_name"} {
+			if err := validateRiverString(name, stringSetting(settings, name, "")); err != nil {
+				return err
+			}
+		}
+		if err := validateFleetAttributes(stringSetting(settings, "fleet_attributes", "")); err != nil {
+			return err
+		}
+	}
+	return validateRiverString("instance_name", stringSetting(settings, "instance_name", "homeassistant"))
+}
+
+func validateEndpointSetting(name, value string) error {
+	if value == "" {
+		return nil
+	}
+	if strings.ContainsAny(value, "\"\\") || strings.ContainsFunc(value, unicode.IsSpace) {
+		return fmt.Errorf("%s is not a valid HTTP(S) URL", name)
+	}
+	parsed, err := url.ParseRequestURI(value)
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil {
+		return fmt.Errorf("%s is not a valid HTTP(S) URL", name)
+	}
+	if port := parsed.Port(); port != "" {
+		number, err := strconv.Atoi(port)
+		if err != nil || number < 1 || number > 65535 {
+			return fmt.Errorf("%s is not a valid HTTP(S) URL", name)
+		}
+	}
+	return nil
+}
+
+func validateRiverString(name, value string) error {
+	if strings.ContainsAny(value, "\"\\") || strings.ContainsFunc(value, unicode.IsControl) {
+		return fmt.Errorf("%s contains a quote, backslash or control character", name)
+	}
+	return nil
+}
+
+func validateFleetAttributes(value string) error {
+	if value == "" {
+		return nil
+	}
+	for _, pair := range strings.Split(value, ",") {
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) != 2 || parts[0] == "" {
+			return fmt.Errorf("fleet_attributes entries must use non-empty key=value pairs")
+		}
+		if strings.ContainsAny(pair, "\"\\") {
+			return fmt.Errorf("fleet_attributes entries cannot contain quotes or backslashes")
+		}
 	}
 	return nil
 }

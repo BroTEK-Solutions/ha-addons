@@ -90,6 +90,20 @@ invalid_status="$(docker exec "${CONTAINER}" curl -sS -o /tmp/save-invalid.json 
 test "${invalid_status}" = 400
 docker exec "${CONTAINER}" grep -qF 'logging { level = \"info\" }' /data/settings.json
 
+attributes_status="$(docker exec "${CONTAINER}" curl -sS -o /tmp/save-attributes.json -w '%{http_code}' \
+    -H 'Content-Type: application/json' \
+    --data '{"options":{"manual_config_enabled":false,"operation_mode":"fleet","fleet_url":"https://fleet.example","fleet_username":"123","fleet_attributes":"foo"},"secrets":{}}' \
+    http://127.0.0.1:8099/api/config)"
+test "${attributes_status}" = 400
+docker exec "${CONTAINER}" grep -qF 'key=value' /tmp/save-attributes.json
+
+arguments_status="$(docker exec "${CONTAINER}" curl -sS -o /tmp/save-arguments.json -w '%{http_code}' \
+    -H 'Content-Type: application/json' \
+    --data '{"options":{"manual_config_enabled":true,"manual_config":"logging {}","alloy_additional_args":"--bogus"},"secrets":{}}' \
+    http://127.0.0.1:8099/api/config)"
+test "${arguments_status}" = 400
+docker exec "${CONTAINER}" grep -qF 'unknown flag' /tmp/save-arguments.json
+
 docker exec "${CONTAINER}" sh -c 'kill "$(cat /tmp/alloy.pid)"'
 for _ in {1..10}; do
     if docker exec "${CONTAINER}" curl -fsS http://127.0.0.1:8099/healthz >/dev/null; then

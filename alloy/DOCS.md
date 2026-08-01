@@ -114,7 +114,7 @@ Home Assistant Core profiling.
 | Fleet poll frequency | `1m` | Frequency for remote-configuration checks. |
 | Disable Alloy usage reporting | on | Passes `--disable-reporting`; no anonymous usage report is sent. |
 | Stability level | generally available | Allows preview components when deliberately raised. |
-| Additional startup arguments | empty | Extra Alloy CLI flags; an invalid flag prevents startup. |
+| Additional startup arguments | empty | Extra `--flag` or `--flag=value` Alloy CLI arguments, checked before saving. |
 | Additional Alloy configuration | empty | River blocks appended to generated local configuration. |
 | Full manual configuration override | off | Replaces every generated pipeline with the supplied complete Alloy configuration. |
 
