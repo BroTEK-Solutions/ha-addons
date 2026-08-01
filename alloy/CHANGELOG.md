@@ -1,5 +1,34 @@
 # Changelog
 
+## [2.0.0](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v1.8.0...alloy-v2.0.0) (2026-08-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **alloy:** Alloy operational configuration is now managed exclusively through the ingress Web UI. Native App options are reduced to safe_mode and ui_log_level, and the filesystem config.alloy override is replaced by the ingress manual override.
+
+### Features
+
+* **alloy:** generate Fleet starter pipelines ([17cecda](https://github.com/BroTEK-Solutions/ha-addons/commit/17cecda19b1cb1cb38abb0615cc7d34b0f5581c7))
+* **alloy:** generate Fleet starter pipelines ([9605eba](https://github.com/BroTEK-Solutions/ha-addons/commit/9605eba4584c8c0b006fc59b520abdf288310dc0)), closes [#17](https://github.com/BroTEK-Solutions/ha-addons/issues/17)
+* **alloy:** make ingress the configuration source ([b46ee07](https://github.com/BroTEK-Solutions/ha-addons/commit/b46ee079d0f879a959d619a52e6dc5a35acdd1f0))
+
+
+### Bug Fixes
+
+* **alloy:** align Fleet reference validation ([e075a88](https://github.com/BroTEK-Solutions/ha-addons/commit/e075a8838a3757ed91555fd15c779c1e3b1b1b93))
+* **alloy:** align recovery form and endpoint validation ([e1add0d](https://github.com/BroTEK-Solutions/ha-addons/commit/e1add0d24cb6d6d00e88f8857f56377fb0496d5d))
+* **alloy:** block Fleet starter in safe mode ([53ac135](https://github.com/BroTEK-Solutions/ha-addons/commit/53ac135e10a897078e5696f3349b10e8a4a7b779))
+* **alloy:** harden Fleet command generation ([f3d18a6](https://github.com/BroTEK-Solutions/ha-addons/commit/f3d18a69bc11d4b042a878bb75a719a1a5623ecf))
+* **alloy:** harden Fleet instance identity ([51b2a8d](https://github.com/BroTEK-Solutions/ha-addons/commit/51b2a8d7772ccb5eea967eb80152f5ff73de6080))
+* **alloy:** migrate reserved Fleet attribute ([64c855f](https://github.com/BroTEK-Solutions/ha-addons/commit/64c855f2183018e23e8c7e99e984b0193f27e64f))
+* **alloy:** persist applied Fleet state ([49eda2a](https://github.com/BroTEK-Solutions/ha-addons/commit/49eda2acf674c1eac11a14cc84250759d8e04a13))
+* **alloy:** preserve multiline startup flags ([fb2180b](https://github.com/BroTEK-Solutions/ha-addons/commit/fb2180bb3151faf4b662c5446a3fc628f4aeb579))
+* **alloy:** protect Fleet starter downloads ([6f84fcd](https://github.com/BroTEK-Solutions/ha-addons/commit/6f84fcd70186a3f0e9dd7c6a28482f4bb2c307b7))
+* **alloy:** require applied Fleet settings ([40ca38c](https://github.com/BroTEK-Solutions/ha-addons/commit/40ca38cafe6c7cbb2e508852caf2361e5efefa97))
+* **alloy:** serialize settings application ([b90fc8c](https://github.com/BroTEK-Solutions/ha-addons/commit/b90fc8c123b2b6d8f68f76aed7e2b1a0c35a9c5c))
+* **alloy:** validate startup-only settings before save ([f718ab3](https://github.com/BroTEK-Solutions/ha-addons/commit/f718ab36ed95a00187d3834248bfb9003287445c))
+
 ## [1.8.0](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v1.7.0...alloy-v1.8.0) (2026-08-01)
 
 
