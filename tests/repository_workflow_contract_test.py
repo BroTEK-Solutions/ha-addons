@@ -115,7 +115,7 @@ def main() -> None:
             fail("PDC service tests must derive the pinned HA base from the App Dockerfile")
     for required in (
         "alloy/Dockerfile",
-        r"ghcr.io\/home-assistant\/base-debian:",
+        r"ARG BUILD_FROM=ghcr.io\/home-assistant\/base-debian:",
         '"$alloy_base"',
     ):
         if required not in caller:
