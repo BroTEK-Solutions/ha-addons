@@ -287,9 +287,20 @@ expect_fatal "not key=value" \
 expect_fatal "empty key" \
   "{${FLEET},\"fleet_attributes\":\"=home\"}" \
   "has an empty key"
-expect_fatal "reserved App targeting key" \
-  "{${FLEET},\"fleet_attributes\":\"ha_addon_instance=other\"}" \
-  "key 'ha_addon_instance' is reserved"
+TESTS=$((TESTS + 1))
+run_init "{${FLEET},\"fleet_attributes\":\"env=home,ha_addon_instance=other,role=hass\"}"
+if [ "${RUN_RC}" -ne 0 ]; then
+  fail "reserved App targeting key is migrated: exited ${RUN_RC}"
+  indent "${RUN_OUT}"
+elif grep -qF '"ha_addon_instance" = "other"' <<<"${RUN_CONFIG}"; then
+  fail "reserved App targeting key is migrated: retained the old value"
+elif ! grep -qF '"ha_addon_instance" = "homeassistant"' <<<"${RUN_CONFIG}" \
+  || ! grep -qF '"env" = "home"' <<<"${RUN_CONFIG}" \
+  || ! grep -qF '"role" = "hass"' <<<"${RUN_CONFIG}"; then
+  fail "reserved App targeting key is migrated: lost the App value or adjacent attributes"
+else
+  pass "reserved App targeting key is migrated"
+fi
 expect_fatal "embedded quote breaks River syntax" \
   "{${FLEET},\"fleet_attributes\":\"env=ho\\\"me\"}" \
   "contains a quote or backslash"

@@ -376,6 +376,7 @@ validate_attributes() {
     [ -n "${FLEET_ATTRIBUTES}" ] || return 0
     local -a pairs
     IFS=',' read -r -a pairs <<<"${FLEET_ATTRIBUTES}"
+    local -a retained_pairs=()
     local pair
     for pair in "${pairs[@]}"; do
         case "${pair}" in
@@ -396,10 +397,14 @@ validate_attributes() {
             bashio::exit.nok
         fi
         if [ "${pair%%=*}" = ha_addon_instance ]; then
-            bashio::log.fatal "fleet_attributes key 'ha_addon_instance' is reserved for App targeting."
-            bashio::exit.nok
+            bashio::log.warning "Ignoring legacy fleet_attributes key 'ha_addon_instance';"
+            bashio::log.warning "the App now manages this targeting attribute from instance_name."
+            continue
         fi
+        retained_pairs+=("${pair}")
     done
+    local IFS=','
+    FLEET_ATTRIBUTES="${retained_pairs[*]}"
 }
 
 validate_attributes
