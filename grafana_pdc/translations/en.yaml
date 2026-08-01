@@ -100,8 +100,7 @@ configuration:
       second**; accepted range: 1–600. Increase only for a known slow or
       high-latency network path.
 network:
-  8090/tcp:
-    description: >-
-      Unauthenticated Prometheus metrics endpoint (`/metrics`). It is not
-      published to the Home Assistant host by default; map a host port only
-      when an external scraper needs access and restrict that access yourself.
+  8090/tcp: >-
+    Unauthenticated Prometheus metrics endpoint (`/metrics`). It is not
+    published to the Home Assistant host by default; map a host port only
+    when an external scraper needs access and restrict that access yourself.
