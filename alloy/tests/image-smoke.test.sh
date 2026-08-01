@@ -104,6 +104,13 @@ arguments_status="$(docker exec "${CONTAINER}" curl -sS -o /tmp/save-arguments.j
 test "${arguments_status}" = 400
 docker exec "${CONTAINER}" grep -qF 'unknown flag' /tmp/save-arguments.json
 
+endpoint_status="$(docker exec "${CONTAINER}" curl -sS -o /tmp/save-endpoint.json -w '%{http_code}' \
+    -H 'Content-Type: application/json' \
+    --data '{"options":{"manual_config_enabled":false,"operation_mode":"local","loki_url":"https://éxample.com/push"},"secrets":{}}' \
+    http://127.0.0.1:8099/api/config)"
+test "${endpoint_status}" = 400
+docker exec "${CONTAINER}" grep -qF 'valid HTTP(S) URL' /tmp/save-endpoint.json
+
 docker exec "${CONTAINER}" sh -c 'kill "$(cat /tmp/alloy.pid)"'
 for _ in {1..10}; do
     if docker exec "${CONTAINER}" curl -fsS http://127.0.0.1:8099/healthz >/dev/null; then

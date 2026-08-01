@@ -93,6 +93,13 @@ func TestAlloyValidatorRejectsStartupOnlyInputs(t *testing.T) {
 			},
 			want: "valid HTTP(S) URL",
 		},
+		{
+			name: "Unicode endpoint authority rejected like startup",
+			settings: map[string]any{
+				"operation_mode": "local", "loki_url": "https://éxample.com/push",
+			},
+			want: "valid HTTP(S) URL",
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

@@ -8,7 +8,7 @@ const secretField = {
   disabled: false,
 };
 const clearSecret = { checked: true };
-const modeSelect = { value: "local", addEventListener() {} };
+const modeSelect = { value: "local", required: true, disabled: false, addEventListener() {} };
 const manualToggle = { name: "manual_config_enabled", type: "checkbox", checked: false, dataset: {}, addEventListener() {} };
 const manualField = { name: "manual_config", disabled: true, required: false, value: "", dataset: {} };
 const manualPanel = {
@@ -68,6 +68,8 @@ assert.equal(clearSecret.checked, false, "reload must reset the clear-secret con
 assert.equal(manualToggle.checked, true, "reload must restore manual override state");
 assert.equal(manualPanel.hidden, false, "enabled manual override must expose its editor");
 assert.equal(manualField.disabled, false, "enabled manual override must submit its editor");
+assert.equal(modeSelect.required, false, "manual override must not require an operation mode");
+assert.equal(modeSelect.disabled, true, "manual override must exclude generated mode settings");
 assert.equal(runtimeStatus.hidden, false, "recovery state must be visible");
 assert.match(runtimeStatus.textContent, /Safe mode is active/);
 assert.match(runtimeStatus.textContent, /Alloy is not ready/);

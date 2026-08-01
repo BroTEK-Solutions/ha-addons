@@ -4,14 +4,18 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
 )
+
+var startupHostnamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
 type candidateValidator interface {
 	Validate(context.Context, map[string]any) error
@@ -129,6 +133,17 @@ func validateEndpointSetting(name, value string) error {
 	}
 	parsed, err := url.ParseRequestURI(value)
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil {
+		return fmt.Errorf("%s is not a valid HTTP(S) URL", name)
+	}
+	hostname := parsed.Hostname()
+	if strings.Contains(hostname, ":") {
+		if zone := strings.LastIndex(hostname, "%"); zone >= 0 {
+			hostname = hostname[:zone]
+		}
+		if net.ParseIP(hostname) == nil {
+			return fmt.Errorf("%s is not a valid HTTP(S) URL", name)
+		}
+	} else if !startupHostnamePattern.MatchString(hostname) {
 		return fmt.Errorf("%s is not a valid HTTP(S) URL", name)
 	}
 	if port := parsed.Port(); port != "" {

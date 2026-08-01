@@ -48,6 +48,9 @@ function setField(name, value) {
 }
 
 function setManualOverride(enabled) {
+  modeSelect.required = !enabled;
+  modeSelect.disabled = enabled;
+  setMode(enabled ? "" : modeSelect.value);
   manualPanel.hidden = !enabled;
   manualPanel.querySelectorAll("input,select,textarea").forEach((field) => {
     field.disabled = !enabled;
