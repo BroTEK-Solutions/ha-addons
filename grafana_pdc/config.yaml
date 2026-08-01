@@ -1,5 +1,5 @@
 name: Grafana Private Data Source Connect
-version: 1.0.2
+version: 1.0.3
 slug: grafana_pdc
 description: >-
   Connect a private network data source to Grafana Cloud without exposing it to
