@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,15 @@ type staticFleetRenderer struct {
 
 func (r staticFleetRenderer) Render(context.Context, map[string]any) ([]byte, error) {
 	return r.contents, r.err
+}
+
+type rejectAdditionalConfigValidator struct{}
+
+func (rejectAdditionalConfigValidator) Validate(_ context.Context, settings map[string]any) error {
+	if optionHasValue(settings, "additional_config") {
+		return errors.New("additional_config reached Fleet reference validation")
+	}
+	return nil
 }
 
 func TestFleetManifestTargetsOnlyTheSelectedCollectorWithoutEmbeddingSecrets(t *testing.T) {
@@ -97,7 +107,7 @@ printf '%s\n' 'loki.write "loki" {' '  endpoint {' '    password = sys.env("GCLO
 	if err := os.WriteFile(generator, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	renderer := newCommandFleetReferenceRenderer(generator, fakeValidator{})
+	renderer := newCommandFleetReferenceRenderer(generator, rejectAdditionalConfigValidator{})
 	settings := map[string]any{
 		"operation_mode":        "fleet",
 		"instance_name":         "homeassistant",
@@ -107,6 +117,7 @@ printf '%s\n' 'loki.write "loki" {' '  endpoint {' '    password = sys.env("GCLO
 		"loki_url":              "https://logs.example/loki/api/v1/push",
 		"loki_username":         "123",
 		"logs_homeassistant":    true,
+		"additional_config":     `prometheus.remote_write "retained" {}`,
 		"manual_config_enabled": false,
 	}
 

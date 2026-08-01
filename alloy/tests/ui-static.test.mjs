@@ -106,4 +106,14 @@ assert.equal(
   "the browser link must stay relative to the Home Assistant ingress prefix",
 );
 assert.equal(fleetReference.hidden, false);
+
+location.hostname = "[2001:db8::1]";
+generateFleetReference();
+await new Promise((resolve) => setTimeout(resolve, 0));
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+  fleetReferenceCommand.textContent,
+  "curl -fsSL http://[2001:db8::1]:8099/fleet-pipeline/reference-token | gcx fleet pipelines create -f -",
+  "an already bracketed IPv6 hostname must not be bracketed again",
+);
 console.log("PASS: configuration reload resets secret controls");

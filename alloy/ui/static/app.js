@@ -134,7 +134,9 @@ async function generateFleetReference() {
     const response = await fetch("api/fleet-reference", { method: "POST", headers: { Accept: "application/json" } });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || "Could not generate Fleet starter pipeline");
-    const hostname = location.hostname.includes(":") ? `[${location.hostname}]` : location.hostname;
+    const hostname = location.hostname.startsWith("[")
+      ? location.hostname
+      : location.hostname.includes(":") ? `[${location.hostname}]` : location.hostname;
     fleetReferenceCommand.textContent = `curl -fsSL http://${hostname}:8099${data.path} | gcx fleet pipelines create -f -`;
     fleetReferenceExpiry.textContent = `This download expires at ${new Date(data.expires_at).toLocaleTimeString()}.`;
     fleetReferenceDownload.href = data.path.replace(/^\/+/, "");
