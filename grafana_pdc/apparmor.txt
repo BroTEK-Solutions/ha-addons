@@ -46,6 +46,11 @@ profile grafana_pdc flags=(attach_disconnected,mediate_deleted) {
     # Go maps executable segments from its own binary during startup.
     /usr/bin/pdc mr,
     /usr/bin/ssh ix,
+    # Prometheus process metrics and OpenSSH close-from discovery.
+    /proc/[0-9]*/{stat,limits,cgroup} r,
+    /proc/[0-9]*/net/netstat r,
+    /proc/[0-9]*/fd/ r,
+    /proc/sys/net/core/somaxconn r,
     /etc/ssh/** r,
     /etc/ssl/certs/** r,
     /etc/ssl/openssl.cnf r,
