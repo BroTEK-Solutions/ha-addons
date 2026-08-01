@@ -84,8 +84,7 @@ def main() -> None:
 
     renovate = json.loads((REPOSITORY_ROOT / "renovate.json").read_text())
     if not any(
-        "home-assistant/builder/actions/build-image"
-        in rule.get("matchPackageNames", [])
+        "home-assistant/builder" in rule.get("matchPackageNames", [])
         for rule in renovate.get("packageRules", [])
     ):
         fail("Renovate must track the Home Assistant builder composite actions")
