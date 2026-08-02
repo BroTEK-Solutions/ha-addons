@@ -29,6 +29,7 @@ const defaults = {
   alloy_metrics: true, logs_system: true, logs_homeassistant: true, logs_addons: true,
   traces_enabled: false, traces_network_access: false, alloy_profiling: false,
   alloy_disable_telemetry: true,
+  fleet_default_attributes: true,
   manual_config_enabled: false,
 };
 

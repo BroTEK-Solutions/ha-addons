@@ -123,6 +123,7 @@ FLEET_URL=$(config_or fleet_url)
 FLEET_USERNAME=$(config_or fleet_username)
 FLEET_COLLECTOR_NAME=$(config_or fleet_collector_name)
 FLEET_ATTRIBUTES=$(config_or fleet_attributes)
+FLEET_DEFAULT_ATTRIBUTES=$(config_or fleet_default_attributes true)
 FLEET_POLL_FREQUENCY=$(config_or fleet_poll_frequency 1m)
 OPERATION_MODE=$(config_or operation_mode)
 OPERATION_MODE_EXPLICIT=false
@@ -147,7 +148,7 @@ export HOST_METRICS HOMEASSISTANT_METRICS ALLOY_METRICS
 export LOGS_SYSTEM LOGS_HOMEASSISTANT LOGS_ADDONS LOGS_EXCLUDE_ADDONS LOGS_MAX_AGE
 export TEMPO_URL TEMPO_USERNAME TRACES_ENABLED TRACES_NETWORK_ACCESS
 export PYROSCOPE_URL PYROSCOPE_USERNAME ALLOY_PROFILING
-export FLEET_URL FLEET_USERNAME FLEET_COLLECTOR_NAME FLEET_ATTRIBUTES FLEET_POLL_FREQUENCY
+export FLEET_URL FLEET_USERNAME FLEET_COLLECTOR_NAME FLEET_ATTRIBUTES FLEET_DEFAULT_ATTRIBUTES FLEET_POLL_FREQUENCY
 export OPERATION_MODE
 
 # Require a destination appropriate to the selected mode.
@@ -413,11 +414,13 @@ validate_attributes() {
             bashio::log.fatal "fleet_attributes entry '${pair}' has an empty key."
             bashio::exit.nok
         fi
-        if [ "${pair%%=*}" = ha_addon_instance ]; then
-            bashio::log.warning "Ignoring legacy fleet_attributes key 'ha_addon_instance';"
-            bashio::log.warning "the App now manages this targeting attribute from instance_name."
-            continue
-        fi
+        case "${pair%%=*}" in
+            ha_addon_instance|haos|journal_path|alloy_container_name|ha_addon_slug)
+                bashio::log.warning "Ignoring reserved fleet_attributes key '${pair%%=*}';"
+                bashio::log.warning "the App manages this Fleet targeting attribute."
+                continue
+                ;;
+        esac
         retained_pairs+=("${pair}")
     done
     local IFS=','
@@ -435,6 +438,17 @@ auth_note() {
 export JOURNAL_PATH="/var/log/journal"
 if [ ! -d "${JOURNAL_PATH}" ] || [ -z "$(ls -A "${JOURNAL_PATH}" 2>/dev/null)" ]; then
     export JOURNAL_PATH="/run/log/journal"
+fi
+
+if [ "${FLEET_DEFAULT_ATTRIBUTES}" = true ] && [ "${OPERATION_MODE}" != local ]; then
+    ADDON_SLUG=$(bashio::addons self)
+    case "${ADDON_SLUG}" in
+        ''|*[!A-Za-z0-9_-]*)
+            bashio::log.fatal "Could not determine a safe Supervisor App slug for Fleet attributes."
+            bashio::exit.nok
+            ;;
+    esac
+    export ADDON_SLUG ALLOY_CONTAINER_NAME="app_${ADDON_SLUG}"
 fi
 
 bashio::log.info "Grafana Alloy for Home Assistant"

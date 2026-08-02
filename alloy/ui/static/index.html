@@ -52,6 +52,7 @@
             <summary>Advanced &amp; optional configuration options</summary>
             <div class="grid advanced">
               <div class="field"><label for="fleet_collector_name">Collector display name</label><p class="help">Optional friendly name shown in Grafana Cloud.</p><input id="fleet_collector_name" name="fleet_collector_name"></div>
+              <div><label class="switch"><input name="fleet_default_attributes" type="checkbox" checked> Expose Home Assistant Fleet attributes</label><p class="help">Adds <code>haos</code>, journal path, this App's container name, and App slug for portable Fleet targeting. You can disable these attributes.</p></div>
               <div class="field"><label for="fleet_attributes">Collector attributes</label><p class="help">Comma-separated <code>key=value</code> selectors, for example <code>env=home,role=hass</code>.</p><input id="fleet_attributes" name="fleet_attributes"></div>
               <div class="field"><label for="fleet_poll_frequency">Fleet poll frequency</label><p class="help">How often Alloy checks for changed pipelines. Default: <strong>1m</strong>.</p><input id="fleet_poll_frequency" name="fleet_poll_frequency" value="1m"></div>
             </div>

@@ -35,8 +35,13 @@ key for Loki, Prometheus/Mimir, Tempo or Pyroscope without embedding another
 token in its configuration. Grant only the scopes those pipelines need.
 
 The optional collector name and `key=value` attributes control how the collector
-appears and which pipelines target it. Alloy checks for updates every **1m** by
-default; the minimum supported poll interval is 10 seconds.
+appears and which pipelines target it. By default, the App also publishes
+`haos=true`, `journal_path`, `alloy_container_name`, and `ha_addon_slug`, so one
+Fleet pipeline can target portable HAOS settings rather than hard-coding an
+installation. Disable **Expose Home Assistant Fleet attributes** in the Fleet
+wizard if those built-in attributes are not wanted; the App always retains its
+own `ha_addon_instance` targeting attribute. Alloy checks for updates every
+**1m** by default; the minimum supported poll interval is 10 seconds.
 
 #### Optional Fleet starter pipeline
 

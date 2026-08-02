@@ -39,6 +39,7 @@ run_init() {
   mkdir -p "${tmp}/cache" "${tmp}/etc" "${tmp}/data"
   chmod 0700 "${tmp}/cache"
   printf '%s' '{"safe_mode":false,"ui_log_level":"info"}' >"${tmp}/cache/addons.self.options.config.cache"
+  printf '%s' '{"slug":"a141124a_alloy"}' >"${tmp}/cache/addons.self.info.cache"
   printf '%s' "$1" >"${tmp}/data/settings.json"
 
   RUN_OUT="$(
@@ -117,7 +118,16 @@ expect_ok "metrics only" "{${PROM},\"instance_name\":\"hass\"}" \
   "prometheus.remote_write" "prometheus.exporter.unix"
 # The regression that started all this: a Fleet-only install must be possible.
 expect_ok "fleet only" "{${FLEET},\"instance_name\":\"hass\"}" \
-  "remotecfg" 'url            = "https://fleet.example.net"'
+  "remotecfg" 'url            = "https://fleet.example.net"' \
+  '"haos" = "true"' '"journal_path" = "/run/log/journal"' \
+  '"alloy_container_name" = "app_a141124a_alloy"' '"ha_addon_slug" = "a141124a_alloy"'
+TESTS=$((TESTS + 1))
+run_init "{${FLEET},\"fleet_default_attributes\":false}"
+if [ "${RUN_RC}" -ne 0 ] || grep -qF '"haos" = "true"' <<<"${RUN_CONFIG}"; then
+  fail "Fleet default attributes can be disabled"
+else
+  pass "Fleet default attributes can be disabled"
+fi
 TESTS=$((TESTS + 1))
 run_init "{${FLEET},\"instance_name\":\"hass\",\"restart_required\":true}"
 if [ "${RUN_RC}" -ne 0 ] || ! jq -e '.restart_required == false' <<<"${RUN_SETTINGS}" >/dev/null; then
@@ -296,11 +306,15 @@ expect_fatal "empty key" \
   "{${FLEET},\"fleet_attributes\":\"=home\"}" \
   "has an empty key"
 TESTS=$((TESTS + 1))
-run_init "{${FLEET},\"fleet_attributes\":\"env=home,ha_addon_instance=other,role=hass\"}"
+run_init "{${FLEET},\"fleet_attributes\":\"env=home,ha_addon_instance=other,haos=false,journal_path=/old,alloy_container_name=old,ha_addon_slug=old,role=hass\"}"
 if [ "${RUN_RC}" -ne 0 ]; then
   fail "reserved App targeting key is migrated: exited ${RUN_RC}"
   indent "${RUN_OUT}"
-elif grep -qF '"ha_addon_instance" = "other"' <<<"${RUN_CONFIG}"; then
+elif grep -qF '"ha_addon_instance" = "other"' <<<"${RUN_CONFIG}" \
+  || grep -qF '"haos" = "false"' <<<"${RUN_CONFIG}" \
+  || grep -qF '"journal_path" = "/old"' <<<"${RUN_CONFIG}" \
+  || grep -qF '"alloy_container_name" = "old"' <<<"${RUN_CONFIG}" \
+  || grep -qF '"ha_addon_slug" = "old"' <<<"${RUN_CONFIG}"; then
   fail "reserved App targeting key is migrated: retained the old value"
 elif ! grep -qF '"ha_addon_instance" = "homeassistant"' <<<"${RUN_CONFIG}" \
   || ! grep -qF '"env" = "home"' <<<"${RUN_CONFIG}" \

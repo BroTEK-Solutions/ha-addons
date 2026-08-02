@@ -137,7 +137,8 @@ validate_alloy "$OUT" "both-auth"
 
 echo "== fleet-only =="
 # .invalid never resolves, so `alloy run` fails DNS instead of reaching a real endpoint.
-OUT="$(gen LOG_LEVEL=info FLEET_URL=https://fleet-management-prod-001.example.invalid)"
+OUT="$(gen LOG_LEVEL=info FLEET_URL=https://fleet-management-prod-001.example.invalid \
+  ADDON_SLUG=a141124a_alloy ALLOY_CONTAINER_NAME=app_a141124a_alloy)"
 check_contains "$OUT" 'remotecfg {'
 check_contains "$OUT" 'url            = "https://fleet-management-prod-001.example.invalid"'
 check_contains "$OUT" 'id             = "homeassistant"'
@@ -146,9 +147,20 @@ check_absent   "$OUT" 'loki.source.journal'
 check_absent   "$OUT" 'prometheus.exporter.unix'
 check_contains "$OUT" 'attributes     = {'
 check_contains "$OUT" '"ha_addon_instance" = "homeassistant",'
+check_contains "$OUT" '"haos" = "true",'
+check_contains "$OUT" '"journal_path" = "/var/log/journal",'
+check_contains "$OUT" '"alloy_container_name" = "app_a141124a_alloy",'
+check_contains "$OUT" '"ha_addon_slug" = "a141124a_alloy",'
 check_absent   "$OUT" 'name           ='
 check_absent   "$OUT" 'basic_auth {'
 validate_alloy "$OUT" "fleet-only"
+
+OUT="$(gen LOG_LEVEL=info FLEET_URL=https://fleet-management-prod-001.example.invalid FLEET_DEFAULT_ATTRIBUTES=false)"
+check_absent "$OUT" '"haos" = "true",'
+check_absent "$OUT" '"journal_path" = '
+check_absent "$OUT" '"alloy_container_name" = '
+check_absent "$OUT" '"ha_addon_slug" = '
+validate_alloy "$OUT" "fleet-with-default-attributes-disabled"
 
 echo "== fleet with auth, name and attributes =="
 OUT="$(gen LOG_LEVEL=info FLEET_URL=https://fleet-management-prod-001.example.invalid \
