@@ -45,29 +45,36 @@ help with initial setup, the Web UI exposes the same metrics, logs, traces and
 profiles controls as Local mode and can render those selections as one Fleet
 `Pipeline` manifest.
 
-Save and restart with the Fleet settings and selected telemetry. Enter a Home
-Assistant hostname or IP address that is reachable from the terminal where
-`gcx` will run, then choose **Generate 10-minute gcx command**. This explicit
-direct host is needed when the Web UI was opened through Home Assistant Cloud
-or another reverse proxy; it affects only the displayed command and is not
-saved. The command has this form:
+Select the telemetry you want and choose **Generate Fleet pipeline manifest**.
+Nothing has to be saved or restarted first, and no destination has to be
+configured: the manifest is rendered from what is on screen, and every endpoint
+or tenant ID left blank becomes a `REPLACE-ME` placeholder.
+
+The manifest appears in an editable box. Replace each placeholder with the
+endpoint and numeric tenant ID from your Grafana Cloud stack, then choose
+**Download manifest** - the download always carries what is in the box, not
+what the App rendered. Create the pipeline from a terminal:
 
 ```sh
-curl -fsSL http://homeassistant.local:8099/fleet-pipeline/SHORT_LIVED_TOKEN \
-  | gcx fleet pipelines create -f -
+gcx fleet pipelines create -f home-assistant-fleet-pipeline.yaml
 ```
 
-Before running it, install `gcx`, select the intended Grafana Cloud context and
-confirm it with `gcx config check`. The token in that local `gcx` context needs
-permission to create Fleet Management pipelines. It is separate from the App's
-stored shared key: the stored key authenticates Alloy's Fleet polling and the
-generated telemetry writes, while `gcx` performs the one-time Fleet mutation.
+Install `gcx` first, select the intended Grafana Cloud context and confirm it
+with `gcx config check`. The token in that local `gcx` context needs permission
+to create Fleet Management pipelines. It is separate from the App's stored
+shared key: the stored key authenticates Alloy's Fleet polling and the generated
+telemetry writes, while `gcx` performs the one-time Fleet mutation.
 
-The served manifest contains the configured backend URLs and numeric tenant
-IDs, but no credentials. Backend authentication remains a runtime
-`sys.env("GCLOUD_RW_API_KEY")` reference. The random download URL expires after
-10 minutes and is held only in memory. The configuration and restart APIs stay
-restricted to Home Assistant ingress.
+Placeholder hostnames sit under the reserved `.invalid` domain, so a manifest
+published unedited fails to resolve rather than shipping telemetry somewhere
+unintended. Edits in that box are not saved and do not change this App's own
+configuration.
+
+The manifest contains backend URLs and numeric tenant IDs, but no credentials.
+Backend authentication remains a runtime `sys.env("GCLOUD_RW_API_KEY")`
+reference. It is returned through the same ingress-restricted API as every other
+configuration call; nothing about the starter pipeline is reachable without
+Home Assistant ingress.
 
 The generated pipeline name starts with `home-assistant-<instance-name>` and
 ends with a deterministic hash suffix so distinct installation names cannot
@@ -220,11 +227,9 @@ be repaired. Disable safe mode and restart after the candidate saves cleanly.
 Alloy's component graph is proxied through Home Assistant ingress at **Open Web
 UI > Alloy status**. The internal Alloy server listens only on loopback port
 **12345** for health checks and self-monitoring and is not exposed directly.
-The configuration control plane accepts only Supervisor ingress traffic. Its
-separate health endpoint contains no configuration or restart capability. Fleet
-starter manifests are the sole exception: a random URL on port **8099** serves
-one secret-free manifest for 10 minutes so a terminal can pipe it to `gcx`.
-App health follows this recovery UI rather than Alloy readiness. If Alloy exits,
+The configuration control plane accepts only Supervisor ingress traffic, with no
+exceptions. Its separate health endpoint contains no configuration or restart
+capability. App health follows this recovery UI rather than Alloy readiness. If Alloy exits,
 S6 can restart it and the Web UI remains available; **Alloy status & component
 graph** reports an upstream error until Alloy is ready again.
 

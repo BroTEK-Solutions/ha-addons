@@ -3,25 +3,16 @@ package main
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 )
 
 type fleetReferenceRenderer interface {
 	Render(context.Context, map[string]any) ([]byte, error)
-}
-
-type fleetReferenceManager interface {
-	Issue(context.Context, map[string]any) (fleetReferenceIssue, error)
-	Get(string) ([]byte, bool)
 }
 
 type commandFleetReferenceRenderer struct {
@@ -50,6 +41,7 @@ func (r *commandFleetReferenceRenderer) Render(ctx context.Context, settings map
 	if err := validateFleetReferenceSettings(settings); err != nil {
 		return nil, err
 	}
+	settings, placeholders := withFleetReferencePlaceholders(settings)
 
 	// Validate the selected components as a Local candidate. The generated Fleet
 	// pipeline uses the shared key, so supply it as each selected backend's
@@ -61,6 +53,11 @@ func (r *commandFleetReferenceRenderer) Render(ctx context.Context, settings map
 	candidate["operation_mode"] = "local"
 	delete(candidate, "additional_config")
 	sharedKey, _ := settings["gcloud_rw_api_key"].(string)
+	if sharedKey == "" {
+		// Nothing is stored yet. The rendered pipeline only ever references the
+		// key by name, so a stand-in satisfies the paired-credential rule.
+		sharedKey = fleetPlaceholderMarker
+	}
 	for _, prefix := range []string{"loki", "prometheus", "tempo", "pyroscope"} {
 		delete(candidate, prefix+"_password")
 		if optionHasValue(candidate, prefix+"_username") {
@@ -82,7 +79,7 @@ func (r *commandFleetReferenceRenderer) Render(ctx context.Context, settings map
 	if err != nil {
 		return nil, fmt.Errorf("render Fleet starter pipeline: %s", limitedMessage(stderr.String()))
 	}
-	return buildFleetManifest(settings, contents)
+	return buildFleetManifest(settings, contents, placeholders)
 }
 
 func validateFleetReferenceSettings(settings map[string]any) error {
@@ -92,82 +89,103 @@ func validateFleetReferenceSettings(settings map[string]any) error {
 	if optionEnabled(settings, "manual_config_enabled") {
 		return errors.New("disable the full manual configuration override before generating a Fleet starter pipeline")
 	}
-	for _, endpoint := range []string{"loki_url", "prometheus_url", "tempo_url", "pyroscope_url"} {
-		if optionHasValue(settings, endpoint) {
+	for _, destination := range fleetReferenceDestinations {
+		if destination.selected(settings) {
 			return nil
 		}
 	}
-	return errors.New("configure at least one telemetry destination before generating a Fleet starter pipeline")
+	return errors.New("select at least one metrics, logs, traces or profiles option before generating a Fleet starter pipeline")
 }
 
-type fleetReferenceIssue struct {
-	Token     string
-	ExpiresAt time.Time
+// fleetPlaceholderMarker is the literal an operator has to search for and replace.
+// It is deliberately loud and, in a hostname, sits under the reserved .invalid TLD
+// so a manifest published unedited fails to resolve instead of shipping telemetry
+// somewhere unintended.
+const fleetPlaceholderMarker = "REPLACE-ME"
+
+// A destination belongs in the starter pipeline when its signal is selected, not
+// when its endpoint happens to be filled in. Anything the operator left blank is
+// rendered as a placeholder for them to edit before creating the pipeline.
+var fleetReferenceDestinations = []struct {
+	prefix   string
+	label    string
+	url      string
+	selected func(map[string]any) bool
+}{
+	{
+		prefix: "prometheus",
+		label:  "metrics",
+		url:    "https://" + fleetPlaceholderMarker + ".invalid/api/prom/push",
+		selected: func(settings map[string]any) bool {
+			return optionEnabled(settings, "host_metrics") ||
+				optionEnabled(settings, "homeassistant_metrics") ||
+				optionEnabled(settings, "alloy_metrics")
+		},
+	},
+	{
+		prefix: "loki",
+		label:  "logs",
+		url:    "https://" + fleetPlaceholderMarker + ".invalid/loki/api/v1/push",
+		selected: func(settings map[string]any) bool {
+			return optionEnabled(settings, "logs_system") ||
+				optionEnabled(settings, "logs_homeassistant") ||
+				optionEnabled(settings, "logs_addons")
+		},
+	},
+	{
+		prefix:   "tempo",
+		label:    "traces",
+		url:      "https://" + fleetPlaceholderMarker + ".invalid/otlp",
+		selected: func(settings map[string]any) bool { return optionEnabled(settings, "traces_enabled") },
+	},
+	{
+		prefix:   "pyroscope",
+		label:    "profiles",
+		url:      "https://" + fleetPlaceholderMarker + ".invalid",
+		selected: func(settings map[string]any) bool { return optionEnabled(settings, "alloy_profiling") },
+	},
 }
 
-type storedFleetReference struct {
-	manifest  []byte
-	expiresAt time.Time
-}
-
-type fleetReferenceBroker struct {
-	renderer fleetReferenceRenderer
-	random   io.Reader
-	now      func() time.Time
-	ttl      time.Duration
-
-	mu         sync.Mutex
-	references map[string]storedFleetReference
-}
-
-func newFleetReferenceBroker(renderer fleetReferenceRenderer, random io.Reader, now func() time.Time, ttl time.Duration) *fleetReferenceBroker {
-	return &fleetReferenceBroker{
-		renderer:   renderer,
-		random:     random,
-		now:        now,
-		ttl:        ttl,
-		references: make(map[string]storedFleetReference),
+// withFleetReferencePlaceholders fills the endpoint and tenant of every selected
+// signal that has no configured value, and reports which ones were substituted.
+// Configured values are never overwritten.
+func withFleetReferencePlaceholders(settings map[string]any) (map[string]any, []string) {
+	filled := make(map[string]any, len(settings)+len(fleetReferenceDestinations)*2)
+	for key, value := range settings {
+		filled[key] = value
 	}
-}
-
-func (b *fleetReferenceBroker) Issue(ctx context.Context, settings map[string]any) (fleetReferenceIssue, error) {
-	manifest, err := b.renderer.Render(ctx, settings)
-	if err != nil {
-		return fleetReferenceIssue{}, err
-	}
-	tokenBytes := make([]byte, 24)
-	if _, err := io.ReadFull(b.random, tokenBytes); err != nil {
-		return fleetReferenceIssue{}, fmt.Errorf("create download token: %w", err)
-	}
-	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
-	expiresAt := b.now().Add(b.ttl)
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for key, reference := range b.references {
-		if !reference.expiresAt.After(b.now()) {
-			delete(b.references, key)
+	var placeholders []string
+	for _, destination := range fleetReferenceDestinations {
+		if !destination.selected(settings) {
+			continue
+		}
+		substituted := false
+		if !optionHasValue(filled, destination.prefix+"_url") {
+			filled[destination.prefix+"_url"] = destination.url
+			substituted = true
+		}
+		if !optionHasValue(filled, destination.prefix+"_username") {
+			filled[destination.prefix+"_username"] = fleetPlaceholderMarker + "-" + destination.label + "-tenant-id"
+			substituted = true
+		}
+		if substituted {
+			placeholders = append(placeholders, destination.label)
 		}
 	}
-	b.references[token] = storedFleetReference{manifest: append([]byte(nil), manifest...), expiresAt: expiresAt}
-	return fleetReferenceIssue{Token: token, ExpiresAt: expiresAt}, nil
+	return filled, placeholders
 }
 
-func (b *fleetReferenceBroker) Get(token string) ([]byte, bool) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	reference, ok := b.references[token]
-	if !ok || !reference.expiresAt.After(b.now()) {
-		delete(b.references, token)
-		return nil, false
-	}
-	return append([]byte(nil), reference.manifest...), true
-}
-
-func buildFleetManifest(settings map[string]any, contents []byte) ([]byte, error) {
+func buildFleetManifest(settings map[string]any, contents []byte, placeholders []string) ([]byte, error) {
 	contents = []byte(strings.TrimSuffix(string(contents), "\n"))
 	if len(strings.TrimSpace(string(contents))) == 0 {
 		return nil, errors.New("Fleet starter pipeline has no enabled telemetry components")
+	}
+	if len(placeholders) > 0 {
+		contents = append([]byte(fmt.Sprintf(
+			"// Replace every %s value below with the endpoint and numeric tenant ID for\n"+
+				"// %s from your Grafana Cloud stack before you create this pipeline.\n"+
+				"// The stack details are on the Grafana Cloud portal under each service.\n",
+			fleetPlaceholderMarker, strings.Join(placeholders, ", "))), contents...)
 	}
 	instanceName := stringSetting(settings, "instance_name", "homeassistant")
 	pipelineName := "home-assistant-" + fleetNameSlug(instanceName)

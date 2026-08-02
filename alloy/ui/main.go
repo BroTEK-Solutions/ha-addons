@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -41,15 +40,15 @@ type statusResponse struct {
 }
 
 type fleetReferenceResponse struct {
-	Path      string    `json:"path"`
-	ExpiresAt time.Time `json:"expires_at"`
+	Manifest string `json:"manifest"`
+	Filename string `json:"filename"`
 }
 
 func newAppHandler(store settingsStore, validator candidateValidator, supervisor supervisorAPI, alloyURL string) (http.Handler, error) {
 	return newAppHandlerWithReferences(store, validator, supervisor, nil, alloyURL)
 }
 
-func newAppHandlerWithReferences(store settingsStore, validator candidateValidator, supervisor supervisorAPI, references fleetReferenceManager, alloyURL string) (http.Handler, error) {
+func newAppHandlerWithReferences(store settingsStore, validator candidateValidator, supervisor supervisorAPI, references fleetReferenceRenderer, alloyURL string) (http.Handler, error) {
 	proxy, err := newAlloyProxy(alloyURL)
 	if err != nil {
 		return nil, err
@@ -152,50 +151,35 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 			writeError(w, http.StatusServiceUnavailable, errors.New("Fleet starter pipeline generation is unavailable"))
 			return
 		}
-		if envBool("SAFE_MODE") {
-			writeError(w, http.StatusConflict, errors.New("disable Safe mode and restart Alloy before generating a Fleet starter pipeline"))
+		if r.Header.Get("Content-Type") != "application/json" {
+			writeError(w, http.StatusUnsupportedMediaType, errors.New("Content-Type must be application/json"))
 			return
 		}
-		settings, err := store.Load()
+		// The starter pipeline is rendered from what is on screen, not from what
+		// was last saved, so it needs no prior save, restart or stored endpoint.
+		// Only the selections are read; stored secrets are merged in but the
+		// manifest references them by environment-variable name alone.
+		var input saveRequest
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request: %w", err))
+			return
+		}
+		current, err := store.Load()
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err)
 			return
 		}
-		if optionEnabled(settings, "restart_required") {
-			writeError(w, http.StatusConflict, errors.New("restart Alloy to apply saved settings before generating a Fleet starter pipeline"))
-			return
-		}
-		issued, err := references.Issue(r.Context(), settings)
+		manifest, err := references.Render(r.Context(), mergeOptions(current, input.Options, nil))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		writeJSON(w, http.StatusCreated, fleetReferenceResponse{
-			Path:      "/fleet-pipeline/" + issued.Token,
-			ExpiresAt: issued.ExpiresAt,
+		writeJSON(w, http.StatusOK, fleetReferenceResponse{
+			Manifest: string(manifest),
+			Filename: "home-assistant-fleet-pipeline.yaml",
 		})
-	})
-	mux.HandleFunc("/fleet-pipeline/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			w.Header().Set("Allow", "GET")
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		token := strings.TrimPrefix(r.URL.Path, "/fleet-pipeline/")
-		if references == nil || token == "" || strings.Contains(token, "/") {
-			http.NotFound(w, r)
-			return
-		}
-		manifest, ok := references.Get(token)
-		if !ok {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Content-Disposition", `attachment; filename="home-assistant-fleet-pipeline.yaml"`)
-		w.Header().Set("Content-Type", "application/yaml")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(manifest)
 	})
 	mux.Handle("/", http.FileServer(http.FS(assets)))
 	return securityHeaders(mux), nil
@@ -224,10 +208,6 @@ func envBool(key string) bool {
 func ingressOnly(sourceIP string, next http.Handler) http.Handler {
 	expected := net.ParseIP(sourceIP)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/fleet-pipeline/") {
-			next.ServeHTTP(w, r)
-			return
-		}
 		if r.URL.Path == "/healthz" {
 			if r.Method != http.MethodGet {
 				w.Header().Set("Allow", "GET")
@@ -285,8 +265,7 @@ func main() {
 	store := newFileStore(envOr("SETTINGS_FILE", "/data/settings.json"), envOr("LEGACY_OPTIONS_FILE", "/data/options.json"))
 	validator := newAlloyValidator(envOr("GENERATOR", "/usr/share/alloy/generate-config.sh"), envOr("ALLOY_BIN", "/usr/bin/alloy"))
 	referenceRenderer := newCommandFleetReferenceRenderer(envOr("GENERATOR", "/usr/share/alloy/generate-config.sh"), validator)
-	references := newFleetReferenceBroker(referenceRenderer, rand.Reader, time.Now, 10*time.Minute)
-	handler, err := newAppHandlerWithReferences(store, validator, supervisor, references, envOr("ALLOY_URL", "http://127.0.0.1:12345"))
+	handler, err := newAppHandlerWithReferences(store, validator, supervisor, referenceRenderer, envOr("ALLOY_URL", "http://127.0.0.1:12345"))
 	if err != nil {
 		log.Fatal(err)
 	}
