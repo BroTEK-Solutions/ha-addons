@@ -136,6 +136,39 @@ func TestStatusAPIReportsRecoveryStateWhenAlloyIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestStatusAPIReportsComponentHealthSeparatelyFromReadiness(t *testing.T) {
+	alloy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/-/ready":
+			w.WriteHeader(http.StatusOK)
+		case "/-/healthy":
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer alloy.Close()
+	handler, err := newAppHandler(&fakeStore{settings: map[string]any{}}, fakeValidator{}, &fakeSupervisor{}, alloy.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/status", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /api/status = %d %s", response.Code, response.Body.String())
+	}
+	var status struct {
+		AlloyReady   bool `json:"alloy_ready"`
+		AlloyHealthy bool `json:"alloy_healthy"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if !status.AlloyReady || !status.AlloyHealthy {
+		t.Fatalf("status = %#v, want ready and healthy", status)
+	}
+}
+
 func TestConfigAPIRejectsCandidateBeforePersistence(t *testing.T) {
 	store := &fakeStore{settings: map[string]any{"operation_mode": "local", "loki_url": "https://old.example"}}
 	handler, err := newAppHandler(store, fakeValidator{err: errors.New("Alloy rejected candidate")}, &fakeSupervisor{}, "http://127.0.0.1:12345")
@@ -240,14 +273,19 @@ func postFleetReference(body string) *http.Request {
 }
 
 func TestFleetReferenceAPIReturnsAnEditableManifestWithoutExposingItPublicly(t *testing.T) {
-	store := &fakeStore{settings: map[string]any{"operation_mode": "fleet"}}
+	store := &fakeStore{settings: map[string]any{
+		"operation_mode":    "fleet",
+		"fleet_url":         "https://fleet.example",
+		"fleet_username":    "123",
+		"gcloud_rw_api_key": "stored-secret",
+	}}
 	handler, err := newAppHandlerWithReferences(store, fakeValidator{}, &fakeSupervisor{}, &echoFleetRenderer{}, "http://127.0.0.1:12345")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, postFleetReference(`{"options":{"operation_mode":"fleet"},"secrets":{}}`))
+	handler.ServeHTTP(response, postFleetReference(`{"selection":{"logs_system":true,"loki_url":"https://logs.example/loki/api/v1/push"}}`))
 	if response.Code != http.StatusOK {
 		t.Fatalf("POST /api/fleet-reference = %d %s", response.Code, response.Body.String())
 	}
@@ -276,13 +314,16 @@ func TestFleetReferenceAPIReturnsAnEditableManifestWithoutExposingItPublicly(t *
 	}
 }
 
-func TestFleetReferenceAPIRendersUnsavedSelectionsInSafeMode(t *testing.T) {
+// Generating a manifest has no side effects, so neither an unapplied save nor
+// safe mode has any reason to block it. Both used to.
+func TestFleetReferenceAPIRendersWithoutAppliedSettingsOrHealthySafeMode(t *testing.T) {
 	t.Setenv("SAFE_MODE", "true")
 	renderer := &echoFleetRenderer{}
 	store := &fakeStore{settings: map[string]any{
 		"operation_mode":    "fleet",
 		"restart_required":  true,
-		"host_metrics":      false,
+		"fleet_url":         "https://fleet.example",
+		"fleet_username":    "123",
 		"gcloud_rw_api_key": "stored-secret",
 	}}
 	handler, err := newAppHandlerWithReferences(store, fakeValidator{}, &fakeSupervisor{}, renderer, "http://127.0.0.1:12345")
@@ -291,7 +332,8 @@ func TestFleetReferenceAPIRendersUnsavedSelectionsInSafeMode(t *testing.T) {
 	}
 
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, postFleetReference(`{"options":{"operation_mode":"fleet","host_metrics":true},"secrets":{}}`))
+	// No destination at all: only a selected signal.
+	handler.ServeHTTP(response, postFleetReference(`{"selection":{"host_metrics":true}}`))
 	if response.Code != http.StatusOK {
 		t.Fatalf("POST /api/fleet-reference = %d %s", response.Code, response.Body.String())
 	}
@@ -300,6 +342,25 @@ func TestFleetReferenceAPIRendersUnsavedSelectionsInSafeMode(t *testing.T) {
 	}
 	if renderer.settings["gcloud_rw_api_key"] != "stored-secret" {
 		t.Errorf("stored shared key was not merged in: %#v", renderer.settings)
+	}
+	if store.saves != 0 {
+		t.Errorf("generating a manifest persisted settings: saves=%d", store.saves)
+	}
+}
+
+func TestFleetReferenceAPIRejectsSecretBearingStarterSelections(t *testing.T) {
+	store := &fakeStore{settings: map[string]any{"operation_mode": "fleet", "gcloud_rw_api_key": "stored-secret"}}
+	handler, err := newAppHandlerWithReferences(store, fakeValidator{}, &fakeSupervisor{}, &echoFleetRenderer{}, "http://127.0.0.1:12345")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, postFleetReference(`{"selection":{"loki_url":"https://logs.example/push","loki_password":"browser-secret"}}`))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("POST /api/fleet-reference = %d %s, want 400", response.Code, response.Body.String())
+	}
+	if store.saves != 0 {
+		t.Fatalf("fleet starter request persisted settings: saves=%d", store.saves)
 	}
 }
 
@@ -316,9 +377,9 @@ func TestStaticUIContainsConditionalAccessibleConfiguration(t *testing.T) {
 		"Fleet Management",
 		"Fleet starter pipeline",
 		"Generate Fleet pipeline manifest",
-		"Fleet pipeline manifest",
 		"Download manifest",
 		"<code>REPLACE-ME</code> placeholder",
+		"gcx config check",
 		"creates this pipeline once",
 		"Local configuration",
 		"Grafana Cloud read/write API key",
@@ -343,6 +404,15 @@ func TestStaticUIContainsConditionalAccessibleConfiguration(t *testing.T) {
 	}
 	if bytes.Contains([]byte(body), []byte("href=\"/alloy/\"")) {
 		t.Fatal("UI uses an ingress-breaking absolute Alloy URL")
+	}
+	if !bytes.Contains([]byte(body), []byte("app.css?v=")) || !bytes.Contains([]byte(body), []byte("app.js?v=")) {
+		t.Fatal("UI assets are not versioned for upgrades")
+	}
+
+	asset := httptest.NewRecorder()
+	handler.ServeHTTP(asset, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if asset.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("app.js Cache-Control = %q, want no-store", asset.Header().Get("Cache-Control"))
 	}
 }
 

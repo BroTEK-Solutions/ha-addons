@@ -35,46 +35,61 @@ key for Loki, Prometheus/Mimir, Tempo or Pyroscope without embedding another
 token in its configuration. Grant only the scopes those pipelines need.
 
 The optional collector name and `key=value` attributes control how the collector
-appears and which pipelines target it. Alloy checks for updates every **1m** by
-default; the minimum supported poll interval is 10 seconds.
+appears and which pipelines target it. By default, the App also publishes
+`haos=true`, `journal_path`, `alloy_container_name`,
+`alloy_legacy_container_name`, and `ha_addon_slug`, so one Fleet pipeline can
+target portable HAOS settings rather than hard-coding an installation. The
+current and legacy container-name attributes cover the `app_` and `addon_`
+Supervisor naming schemes respectively. Disable **Expose Home Assistant Fleet
+attributes** in the Fleet wizard if those built-in attributes are not wanted;
+the App always retains its own `ha_addon_instance` targeting attribute. Alloy
+checks for updates every **1m** by default; the minimum supported poll interval
+is 10 seconds.
 
 #### Optional Fleet starter pipeline
 
-Fleet mode remains consume-only: the App never calls the Fleet write API. To
-help with initial setup, the Web UI exposes the same metrics, logs, traces and
-profiles controls as Local mode and can render those selections as one Fleet
-`Pipeline` manifest.
+Fleet mode remains consume-only: the App never calls the Fleet write API. Once
+Alloy is ready and healthy, the Web UI offers a separate starter-pipeline step.
+Its telemetry destinations are used only to render one Fleet `Pipeline`
+manifest; they do not configure local Alloy pipelines or persist as local
+settings.
 
-Select the telemetry you want and choose **Generate Fleet pipeline manifest**.
-Nothing has to be saved or restarted first, and no destination has to be
-configured: the manifest is rendered from what is on screen, and every endpoint
-or tenant ID left blank becomes a `REPLACE-ME` placeholder.
+Save and restart with the Fleet settings. The UI waits until the saved
+configuration is applied and Alloy is ready and healthy before offering the
+starter step.
+
+**No telemetry destination has to be configured.** Select the signals you want
+and choose **Generate Fleet pipeline manifest**. Every endpoint or tenant ID
+left blank is written as a `REPLACE-ME` placeholder. Those placeholder hostnames
+sit under the reserved `.invalid` domain, so a manifest published unedited fails
+to resolve rather than shipping telemetry somewhere unintended.
 
 The manifest appears in an editable box. Replace each placeholder with the
 endpoint and numeric tenant ID from your Grafana Cloud stack, then choose
 **Download manifest** - the download always carries what is in the box, not
-what the App rendered. Create the pipeline from a terminal:
+what the App rendered. Edits there are not saved and do not change this App's
+own configuration.
+
+Install and authenticate `gcx`, then create the pipeline from the downloaded
+file:
 
 ```sh
+brew install grafana/grafana/gcx
+gcx login home-assistant --server https://YOUR-STACK.grafana.net --oauth
+gcx config check
 gcx fleet pipelines create -f home-assistant-fleet-pipeline.yaml
 ```
 
-Install `gcx` first, select the intended Grafana Cloud context and confirm it
-with `gcx config check`. The token in that local `gcx` context needs permission
-to create Fleet Management pipelines. It is separate from the App's stored
-shared key: the stored key authenticates Alloy's Fleet polling and the generated
-telemetry writes, while `gcx` performs the one-time Fleet mutation.
-
-Placeholder hostnames sit under the reserved `.invalid` domain, so a manifest
-published unedited fails to resolve rather than shipping telemetry somewhere
-unintended. Edits in that box are not saved and do not change this App's own
-configuration.
+The token in that local `gcx` context needs
+permission to create Fleet Management pipelines. It is separate from the App's
+stored shared key: the stored key authenticates Alloy's Fleet polling and the
+generated telemetry writes, while `gcx` performs the one-time Fleet mutation.
 
 The manifest contains backend URLs and numeric tenant IDs, but no credentials.
 Backend authentication remains a runtime `sys.env("GCLOUD_RW_API_KEY")`
 reference. It is returned through the same ingress-restricted API as every other
-configuration call; nothing about the starter pipeline is reachable without
-Home Assistant ingress.
+configuration call; nothing about the starter pipeline is reachable without Home
+Assistant ingress.
 
 The generated pipeline name starts with `home-assistant-<instance-name>` and
 ends with a deterministic hash suffix so distinct installation names cannot

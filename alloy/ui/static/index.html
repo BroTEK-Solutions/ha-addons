@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Grafana Alloy configuration</title>
-  <link rel="stylesheet" href="app.css">
-  <script src="app.js" defer></script>
+  <link rel="stylesheet" href="app.css?v=20260802-wizard">
+  <script src="app.js?v=20260802-wizard" defer></script>
 </head>
 <body>
   <header>
@@ -24,20 +24,31 @@
     <div id="notice" role="status" aria-live="polite"></div>
     <aside id="runtime-status" role="status" aria-live="polite" hidden></aside>
     <form id="config-form">
-      <section class="card">
-        <label for="operation_mode">Operation mode</label>
+      <section class="card wizard-choice" data-wizard-step="mode">
+        <p class="eyebrow">Step 1 of 3</p>
+        <h2>Choose an operation mode</h2>
         <p class="help">Fleet runs configuration delivered by Grafana Cloud. Local configuration builds pipelines from the options on this page.</p>
-        <select id="operation_mode" name="operation_mode" required>
-          <option value="fleet">Fleet Management</option>
-          <option value="local">Local configuration</option>
-        </select>
+        <fieldset class="mode-cards" aria-label="Operation mode">
+          <input id="operation_mode" name="operation_mode" value="fleet" type="radio" required>
+          <label for="operation_mode"><span class="mode-icon" aria-hidden="true">☁</span><strong>Fleet Management</strong><span>Use pipelines managed in Grafana Cloud.</span></label>
+          <input id="operation_mode_local" name="operation_mode" value="local" type="radio">
+          <label for="operation_mode_local"><span class="mode-icon" aria-hidden="true">⌂</span><strong>Local configuration</strong><span>Configure telemetry pipelines in this App.</span></label>
+        </fieldset>
         <aside id="legacy-warning" hidden>
           This installation currently runs legacy Fleet and local pipelines together. Choose a supported mode before saving; existing behavior remains unchanged until then.
         </aside>
+        <div class="wizard-actions"><button type="button" id="wizard-mode-next" class="primary">Continue</button></div>
+      </section>
+
+      <section class="card wizard-heading" data-wizard-step="config" hidden>
+        <p class="eyebrow">Step 2 of 3</p>
+        <h2>Configure and validate Alloy</h2>
+        <p class="help">Enter the settings for the selected mode. Save &amp; restart validates the configuration before applying it.</p>
+        <button type="button" id="wizard-mode-back">Change operation mode</button>
       </section>
 
       <div data-mode="fleet" hidden>
-        <section class="card">
+        <section class="card" data-wizard-step="config" hidden>
           <h2>Fleet Management</h2>
           <p>Copy the URL and numeric username from the Fleet Management API page. The shared key is also available to remotely supplied pipelines as <code>GCLOUD_RW_API_KEY</code>. This App remains a Fleet consumer and never writes, reconciles or removes Fleet resources itself.</p>
           <div class="grid">
@@ -49,18 +60,32 @@
             <summary>Advanced &amp; optional configuration options</summary>
             <div class="grid advanced">
               <div class="field"><label for="fleet_collector_name">Collector display name</label><p class="help">Optional friendly name shown in Grafana Cloud.</p><input id="fleet_collector_name" name="fleet_collector_name"></div>
+              <div><label class="switch"><input name="fleet_default_attributes" type="checkbox" checked> Expose Home Assistant Fleet attributes</label><p class="help">Adds <code>haos</code>, journal path, current and legacy App container names, and App slug for portable Fleet targeting. You can disable these attributes.</p></div>
               <div class="field"><label for="fleet_attributes">Collector attributes</label><p class="help">Comma-separated <code>key=value</code> selectors, for example <code>env=home,role=hass</code>.</p><input id="fleet_attributes" name="fleet_attributes"></div>
               <div class="field"><label for="fleet_poll_frequency">Fleet poll frequency</label><p class="help">How often Alloy checks for changed pipelines. Default: <strong>1m</strong>.</p><input id="fleet_poll_frequency" name="fleet_poll_frequency" value="1m"></div>
             </div>
           </details>
         </section>
 
-        <section class="card">
+        <section class="card" id="fleet-starter-form" data-wizard-step="starter" hidden>
+          <p class="eyebrow">Step 3 of 3</p>
           <h2>Fleet starter pipeline</h2>
-          <p>Select the metrics, logs, traces and profiles below and generate a Fleet <code>Pipeline</code> manifest from them. Nothing needs to be saved first, and no destination has to be configured: any endpoint or tenant ID you have not filled in is written as a <code>REPLACE-ME</code> placeholder that you edit here before downloading.</p>
-          <p>The manifest never contains a credential. Backend authentication stays a runtime <code>sys.env("GCLOUD_RW_API_KEY")</code> reference to the shared key stored above.</p>
+          <p>Alloy is healthy. Optionally choose the telemetry for one starter pipeline. These details are used only to render that Fleet manifest; they do not enable local configuration.</p>
+          <p>No endpoint has to be filled in: any endpoint or tenant you leave blank is written as a <code>REPLACE-ME</code> placeholder that you edit in the generated manifest before downloading it.</p>
           <p><code>gcx</code> creates this pipeline once. The App does not reconcile later changes, disable it, or remove it on uninstall. Continue managing it in Fleet Management after creation.</p>
+          <div class="grid">
+            <div class="field"><label for="starter_loki_url">Loki endpoint</label><input id="starter_loki_url" data-starter="loki_url" type="url"></div>
+            <div class="field"><label for="starter_loki_username">Loki tenant</label><input id="starter_loki_username" data-starter="loki_username"></div>
+            <div class="field"><label for="starter_prometheus_url">Prometheus endpoint</label><input id="starter_prometheus_url" data-starter="prometheus_url" type="url"></div>
+            <div class="field"><label for="starter_prometheus_username">Prometheus tenant</label><input id="starter_prometheus_username" data-starter="prometheus_username"></div>
+            <div class="field"><label for="starter_tempo_url">Tempo endpoint</label><input id="starter_tempo_url" data-starter="tempo_url" type="url"></div>
+            <div class="field"><label for="starter_tempo_username">Tempo tenant</label><input id="starter_tempo_username" data-starter="tempo_username"></div>
+            <div class="field"><label for="starter_pyroscope_url">Pyroscope endpoint</label><input id="starter_pyroscope_url" data-starter="pyroscope_url" type="url"></div>
+            <div class="field"><label for="starter_pyroscope_username">Pyroscope tenant</label><input id="starter_pyroscope_username" data-starter="pyroscope_username"></div>
+          </div>
+          <div class="toggles"><label class="switch"><input data-starter="host_metrics" type="checkbox" checked> Host metrics</label><label class="switch"><input data-starter="logs_homeassistant" type="checkbox" checked> Home Assistant logs</label><label class="switch"><input data-starter="traces_enabled" type="checkbox"> Receive traces</label><label class="switch"><input data-starter="alloy_profiling" type="checkbox"> Profile Alloy</label></div>
           <button type="button" id="generate-fleet-reference">Generate Fleet pipeline manifest</button>
+          <button type="button" id="wizard-starter-back">Back to Fleet settings</button>
           <div id="fleet-reference" hidden>
             <div class="field wide">
               <label for="fleet-reference-manifest">Fleet pipeline manifest</label>
@@ -68,16 +93,25 @@
               <textarea id="fleet-reference-manifest" rows="20" spellcheck="false" autocomplete="off" data-transient></textarea>
             </div>
             <button type="button" id="download-fleet-reference">Download manifest</button>
-            <p class="help">Create it from a terminal whose <code>gcx</code> context targets the intended Grafana Cloud stack, and whose token may create Fleet Management pipelines:</p>
-            <pre><code>gcx fleet pipelines create -f home-assistant-fleet-pipeline.yaml</code></pre>
+            <p class="help">Then create the pipeline from a machine with <code>gcx</code> installed:</p>
+            <pre><code>brew install grafana/grafana/gcx
+gcx login home-assistant --server https://YOUR-STACK.grafana.net --oauth
+gcx config check
+gcx fleet pipelines create -f home-assistant-fleet-pipeline.yaml</code></pre>
           </div>
         </section>
       </div>
 
-      <div data-mode="local fleet" hidden>
-        <aside data-mode="fleet" hidden>
-          These controls build the one-time Fleet starter manifest; they do not create local pipelines while Fleet mode is selected. Destination passwords use the shared Grafana Cloud key above.
-        </aside>
+      <section class="card" data-mode="local fleet" data-wizard-step="config" hidden>
+        <h2>Collector identity</h2>
+        <div class="field">
+          <label for="instance_name">Instance name</label>
+          <p class="help">Used for metric labels, the Fleet collector identity, and this installation's starter-pipeline target. Default: <strong>homeassistant</strong>.</p>
+          <input id="instance_name" name="instance_name" value="homeassistant">
+        </div>
+      </section>
+
+      <div data-mode="local" data-wizard-step="config" hidden>
         <section class="card">
           <h2>Metrics</h2>
           <p>Collect host, Home Assistant, and Alloy metrics and send them to a Prometheus or Mimir remote-write endpoint.</p>
@@ -138,30 +172,30 @@
         </section>
       </div>
 
-      <section class="card">
+      <section class="card" data-mode="local" data-wizard-step="config" hidden>
         <details>
           <summary>Advanced &amp; optional configuration options</summary>
           <div class="grid advanced">
-            <div class="field"><label for="instance_name">Instance name</label><p class="help">Used for metric labels and Fleet collector identity. Default: <strong>homeassistant</strong>.</p><input id="instance_name" name="instance_name" value="homeassistant"></div>
             <div class="field"><label for="log_level">Alloy log level</label><p class="help">Changes Alloy's own App log verbosity, not the logs sent to Loki.</p><select id="log_level" name="log_level"><option>debug</option><option selected>info</option><option>warn</option><option>error</option></select></div>
             <div class="field"><label for="alloy_stability_level">Minimum component stability</label><p class="help">Keep generally available unless additional configuration needs a preview component.</p><select id="alloy_stability_level" name="alloy_stability_level"><option selected>generally-available</option><option>public-preview</option><option>experimental</option></select></div>
             <div><label class="switch"><input name="alloy_disable_telemetry" type="checkbox" checked> Disable anonymous Alloy usage reporting</label><p class="help">Pass <code>--disable-reporting</code> so Alloy sends no anonymous feature-usage report to Grafana.</p></div>
             <div class="field wide"><label for="alloy_additional_args">Additional Alloy startup flags</label><p class="help">Whitespace-separated <code>--flag</code> or <code>--flag=value</code> arguments. Invalid flags are rejected before saving.</p><textarea id="alloy_additional_args" name="alloy_additional_args" rows="3"></textarea></div>
             <div class="field wide" data-mode="local"><label for="additional_config">Additional Alloy configuration</label><p class="help">River blocks appended verbatim after the generated configuration.</p><textarea id="additional_config" name="additional_config" rows="8" spellcheck="false"></textarea></div>
-            <div class="field wide break-glass">
-              <label class="switch"><input id="manual_config_enabled" name="manual_config_enabled" type="checkbox"> Full manual Alloy configuration override</label>
-              <p class="help">Break-glass mode replaces every generated pipeline with the complete Alloy configuration below. The candidate must pass Alloy validation before it can be saved.</p>
-              <div id="manual-config-panel" hidden>
-                <aside>Generated Fleet and Local settings are ignored while this override is enabled. Stored credentials remain available through their documented environment variables.</aside>
-                <label for="manual_config">Complete config.alloy contents</label>
-                <textarea id="manual_config" name="manual_config" rows="18" spellcheck="false" disabled></textarea>
-              </div>
-            </div>
           </div>
         </details>
       </section>
 
-      <footer class="actions">
+      <section class="card break-glass" data-mode="local" data-manual-control data-wizard-step="config" hidden>
+        <label class="switch"><input id="manual_config_enabled" name="manual_config_enabled" type="checkbox"> Full manual Alloy configuration override</label>
+        <p class="help">Break-glass mode replaces every generated pipeline with the complete Alloy configuration below. The candidate must pass Alloy validation before it can be saved.</p>
+        <div id="manual-config-panel" hidden>
+          <aside>Generated Fleet and Local settings are ignored while this override is enabled. Stored credentials remain available through their documented environment variables.</aside>
+          <label for="manual_config">Complete config.alloy contents</label>
+          <textarea id="manual_config" name="manual_config" rows="18" spellcheck="false" disabled></textarea>
+        </div>
+      </section>
+
+      <footer class="actions" data-wizard-step="config" hidden>
         <button type="submit">Save</button>
         <button type="button" id="save-restart" class="primary">Save &amp; restart</button>
       </footer>

@@ -17,12 +17,13 @@ func TestProjectConfigInfersModesWithoutExposingSecrets(t *testing.T) {
 		{"local", map[string]any{"loki_url": "https://logs.example", "loki_password": "logs-secret"}, "local", false},
 		{"legacy hybrid", map[string]any{"fleet_url": "https://fleet.example", "prometheus_url": "https://metrics.example"}, "legacy-hybrid", true},
 		{"explicit selection wins", map[string]any{"operation_mode": "local", "fleet_url": "https://fleet.example"}, "local", false},
+		{"invalid explicit selection is inferred but not configured", map[string]any{"operation_mode": "hybrid", "fleet_url": "https://fleet.example"}, "fleet", false},
 		{"legacy Fleet password is shown as shared key configured", map[string]any{"fleet_url": "https://fleet.example", "fleet_password": "old-secret"}, "fleet", false},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := projectConfig(test.options)
+		got := projectConfig(test.options)
 			if got.Mode != test.wantMode || got.LegacyHybrid != test.wantLegacy {
 				t.Fatalf("mode = %q legacy=%v, want %q legacy=%v", got.Mode, got.LegacyHybrid, test.wantMode, test.wantLegacy)
 			}
@@ -36,6 +37,10 @@ func TestProjectConfigInfersModesWithoutExposingSecrets(t *testing.T) {
 			}
 			if test.name == "legacy Fleet password is shown as shared key configured" && !got.Secrets["gcloud_rw_api_key"] {
 				t.Fatal("legacy Fleet password was not projected as a configured shared key")
+			}
+			wantConfigured := test.name == "explicit selection wins"
+			if got.ModeConfigured != wantConfigured {
+				t.Fatalf("mode_configured = %v, want %v", got.ModeConfigured, wantConfigured)
 			}
 		})
 	}

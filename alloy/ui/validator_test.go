@@ -81,6 +81,14 @@ func TestAlloyValidatorRejectsStartupOnlyInputs(t *testing.T) {
 			want: "reserved",
 		},
 		{
+			name: "reserved built-in Fleet attribute",
+			settings: map[string]any{
+				"operation_mode": "fleet", "fleet_url": "https://fleet.example",
+				"fleet_username": "123", "gcloud_rw_api_key": "secret", "fleet_attributes": "alloy_legacy_container_name=old",
+			},
+			want: "reserved",
+		},
+		{
 			name: "invalid additional flag",
 			settings: map[string]any{
 				"manual_config_enabled": true, "manual_config": "logging {}", "alloy_additional_args": "--bogus",

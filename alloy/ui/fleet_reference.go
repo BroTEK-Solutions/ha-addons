@@ -15,6 +15,80 @@ type fleetReferenceRenderer interface {
 	Render(context.Context, map[string]any) ([]byte, error)
 }
 
+// fleetStarterSelection is deliberately separate from stored add-on settings.
+// It contains the non-secret inputs needed to render one Fleet starter
+// pipeline, and is never persisted.
+type fleetStarterSelection struct {
+	LokiURL               string `json:"loki_url"`
+	LokiUsername          string `json:"loki_username"`
+	PrometheusURL         string `json:"prometheus_url"`
+	PrometheusUsername    string `json:"prometheus_username"`
+	TempoURL              string `json:"tempo_url"`
+	TempoUsername         string `json:"tempo_username"`
+	PyroscopeURL          string `json:"pyroscope_url"`
+	PyroscopeUsername     string `json:"pyroscope_username"`
+	HostMetrics           bool   `json:"host_metrics"`
+	HomeAssistantMetrics  bool   `json:"homeassistant_metrics"`
+	AlloyMetrics          bool   `json:"alloy_metrics"`
+	LogsSystem            bool   `json:"logs_system"`
+	LogsHomeAssistant     bool   `json:"logs_homeassistant"`
+	LogsAddons            bool   `json:"logs_addons"`
+	LogsExcludeAddons     string `json:"logs_exclude_addons"`
+	LogsMaxAge            string `json:"logs_max_age"`
+	MetricsScrapeInterval string `json:"metrics_scrape_interval"`
+	TracesEnabled         bool   `json:"traces_enabled"`
+	TracesNetworkAccess   bool   `json:"traces_network_access"`
+	AlloyProfiling        bool   `json:"alloy_profiling"`
+}
+
+func fleetStarterSettings(stored map[string]any, selection fleetStarterSelection) (map[string]any, error) {
+	if optionEnabled(stored, "manual_config_enabled") {
+		return nil, errors.New("disable the full manual configuration override before generating a Fleet starter pipeline")
+	}
+	if mode, _ := stored["operation_mode"].(string); mode != "fleet" {
+		return nil, errors.New("Fleet Management must be the active operation mode before generating a Fleet starter pipeline")
+	}
+
+	settings := make(map[string]any, 32)
+	for _, key := range []string{
+		"operation_mode", "instance_name", "fleet_url", "fleet_username",
+		"fleet_collector_name", "fleet_attributes", "fleet_poll_frequency",
+		"gcloud_rw_api_key", "fleet_password",
+	} {
+		if value, ok := stored[key]; ok {
+			settings[key] = value
+		}
+	}
+	for key, value := range map[string]any{
+		"loki_url":                selection.LokiURL,
+		"loki_username":           selection.LokiUsername,
+		"prometheus_url":          selection.PrometheusURL,
+		"prometheus_username":     selection.PrometheusUsername,
+		"tempo_url":               selection.TempoURL,
+		"tempo_username":          selection.TempoUsername,
+		"pyroscope_url":           selection.PyroscopeURL,
+		"pyroscope_username":      selection.PyroscopeUsername,
+		"host_metrics":            selection.HostMetrics,
+		"homeassistant_metrics":   selection.HomeAssistantMetrics,
+		"alloy_metrics":           selection.AlloyMetrics,
+		"logs_system":             selection.LogsSystem,
+		"logs_homeassistant":      selection.LogsHomeAssistant,
+		"logs_addons":             selection.LogsAddons,
+		"logs_exclude_addons":     selection.LogsExcludeAddons,
+		"logs_max_age":            selection.LogsMaxAge,
+		"metrics_scrape_interval": selection.MetricsScrapeInterval,
+		"traces_enabled":          selection.TracesEnabled,
+		"traces_network_access":   selection.TracesNetworkAccess,
+		"alloy_profiling":         selection.AlloyProfiling,
+	} {
+		settings[key] = value
+	}
+	if err := validateFleetReferenceSettings(settings); err != nil {
+		return nil, err
+	}
+	return settings, nil
+}
+
 type commandFleetReferenceRenderer struct {
 	generatorPath string
 	validator     candidateValidator

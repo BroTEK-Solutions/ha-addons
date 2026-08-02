@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -35,6 +36,7 @@ type saveRequest struct {
 
 type statusResponse struct {
 	AlloyReady     bool `json:"alloy_ready"`
+	AlloyHealthy   bool `json:"alloy_healthy"`
 	SafeMode       bool `json:"safe_mode"`
 	ManualOverride bool `json:"manual_override"`
 }
@@ -42,6 +44,10 @@ type statusResponse struct {
 type fleetReferenceResponse struct {
 	Manifest string `json:"manifest"`
 	Filename string `json:"filename"`
+}
+
+type fleetReferenceRequest struct {
+	Selection *fleetStarterSelection `json:"selection"`
 }
 
 func newAppHandler(store settingsStore, validator candidateValidator, supervisor supervisorAPI, alloyURL string) (http.Handler, error) {
@@ -73,6 +79,7 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 		manualOverride, _ := settings["manual_config_enabled"].(bool)
 		writeJSON(w, http.StatusOK, statusResponse{
 			AlloyReady:     alloyReady(r.Context(), alloyURL),
+			AlloyHealthy:   alloyHealthy(r.Context(), alloyURL),
 			SafeMode:       envBool("SAFE_MODE"),
 			ManualOverride: manualOverride,
 		})
@@ -155,23 +162,36 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 			writeError(w, http.StatusUnsupportedMediaType, errors.New("Content-Type must be application/json"))
 			return
 		}
-		// The starter pipeline is rendered from what is on screen, not from what
-		// was last saved, so it needs no prior save, restart or stored endpoint.
-		// Only the selections are read; stored secrets are merged in but the
-		// manifest references them by environment-variable name alone.
-		var input saveRequest
+		var input fleetReferenceRequest
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&input); err != nil {
 			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request: %w", err))
 			return
 		}
-		current, err := store.Load()
+		if err := decoder.Decode(&struct{}{}); err != io.EOF {
+			writeError(w, http.StatusBadRequest, errors.New("invalid request: only one JSON value is allowed"))
+			return
+		}
+		if input.Selection == nil {
+			writeError(w, http.StatusBadRequest, errors.New("select starter pipeline telemetry before generating it"))
+			return
+		}
+		// Rendering has no side effects, needs no applied configuration, and no
+		// longer requires a configured destination: anything the operator left
+		// blank comes back as a placeholder for them to edit. So there is nothing
+		// left to gate on beyond the mode and override checks in the renderer.
+		settings, err := store.Load()
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err)
 			return
 		}
-		manifest, err := references.Render(r.Context(), mergeOptions(current, input.Options, nil))
+		starterSettings, err := fleetStarterSettings(settings, *input.Selection)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		manifest, err := references.Render(r.Context(), starterSettings)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
@@ -181,14 +201,26 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 			Filename: "home-assistant-fleet-pipeline.yaml",
 		})
 	})
-	mux.Handle("/", http.FileServer(http.FS(assets)))
+	staticFiles := http.FileServer(http.FS(assets))
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		staticFiles.ServeHTTP(w, r)
+	}))
 	return securityHeaders(mux), nil
 }
 
 func alloyReady(ctx context.Context, alloyURL string) bool {
+	return alloyEndpointOK(ctx, alloyURL, "/-/ready")
+}
+
+func alloyHealthy(ctx context.Context, alloyURL string) bool {
+	return alloyEndpointOK(ctx, alloyURL, "/-/healthy")
+}
+
+func alloyEndpointOK(ctx context.Context, alloyURL, path string) bool {
 	probeContext, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	request, err := http.NewRequestWithContext(probeContext, http.MethodGet, strings.TrimRight(alloyURL, "/")+"/-/ready", nil)
+	request, err := http.NewRequestWithContext(probeContext, http.MethodGet, strings.TrimRight(alloyURL, "/")+path, nil)
 	if err != nil {
 		return false
 	}
