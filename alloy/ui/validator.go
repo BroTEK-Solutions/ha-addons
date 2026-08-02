@@ -182,11 +182,12 @@ func validateFleetAttributes(value string) error {
 }
 
 var reservedFleetAttributeNames = map[string]bool{
-	"ha_addon_instance":    true,
-	"haos":                 true,
-	"journal_path":         true,
-	"alloy_container_name": true,
-	"ha_addon_slug":        true,
+	"ha_addon_instance":           true,
+	"haos":                        true,
+	"journal_path":                true,
+	"alloy_container_name":        true,
+	"alloy_legacy_container_name": true,
+	"ha_addon_slug":               true,
 }
 
 func candidateEnvironment(settings map[string]any) []string {

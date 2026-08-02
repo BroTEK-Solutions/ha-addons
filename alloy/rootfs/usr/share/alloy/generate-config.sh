@@ -41,6 +41,7 @@ FLEET_DEFAULT_ATTRIBUTES="${FLEET_DEFAULT_ATTRIBUTES:-true}"
 FLEET_POLL_FREQUENCY="${FLEET_POLL_FREQUENCY:-1m}"
 ADDON_SLUG="${ADDON_SLUG:-alloy}"
 ALLOY_CONTAINER_NAME="${ALLOY_CONTAINER_NAME:-app_${ADDON_SLUG}}"
+ALLOY_LEGACY_CONTAINER_NAME="${ALLOY_LEGACY_CONTAINER_NAME:-addon_${ADDON_SLUG}}"
 ADDITIONAL_CONFIG="${ADDITIONAL_CONFIG:-}"
 FLEET_REFERENCE_PIPELINE="${FLEET_REFERENCE_PIPELINE:-false}"
 
@@ -78,6 +79,7 @@ emit_attributes() {
     printf '%s  "haos" = "true",\n' "$2"
     printf '%s  "journal_path" = "%s",\n' "$2" "${JOURNAL_PATH}"
     printf '%s  "alloy_container_name" = "%s",\n' "$2" "${ALLOY_CONTAINER_NAME}"
+    printf '%s  "alloy_legacy_container_name" = "%s",\n' "$2" "${ALLOY_LEGACY_CONTAINER_NAME}"
     printf '%s  "ha_addon_slug" = "%s",\n' "$2" "${ADDON_SLUG}"
   fi
   if [ -n "$1" ]; then

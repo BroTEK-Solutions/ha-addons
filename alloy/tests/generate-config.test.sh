@@ -150,6 +150,7 @@ check_contains "$OUT" '"ha_addon_instance" = "homeassistant",'
 check_contains "$OUT" '"haos" = "true",'
 check_contains "$OUT" '"journal_path" = "/var/log/journal",'
 check_contains "$OUT" '"alloy_container_name" = "app_a141124a_alloy",'
+check_contains "$OUT" '"alloy_legacy_container_name" = "addon_a141124a_alloy",'
 check_contains "$OUT" '"ha_addon_slug" = "a141124a_alloy",'
 check_absent   "$OUT" 'name           ='
 check_absent   "$OUT" 'basic_auth {'
@@ -159,6 +160,7 @@ OUT="$(gen LOG_LEVEL=info FLEET_URL=https://fleet-management-prod-001.example.in
 check_absent "$OUT" '"haos" = "true",'
 check_absent "$OUT" '"journal_path" = '
 check_absent "$OUT" '"alloy_container_name" = '
+check_absent "$OUT" '"alloy_legacy_container_name" = '
 check_absent "$OUT" '"ha_addon_slug" = '
 validate_alloy "$OUT" "fleet-with-default-attributes-disabled"
 

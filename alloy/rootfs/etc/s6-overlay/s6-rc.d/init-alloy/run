@@ -415,7 +415,7 @@ validate_attributes() {
             bashio::exit.nok
         fi
         case "${pair%%=*}" in
-            ha_addon_instance|haos|journal_path|alloy_container_name|ha_addon_slug)
+            ha_addon_instance|haos|journal_path|alloy_container_name|alloy_legacy_container_name|ha_addon_slug)
                 bashio::log.warning "Ignoring reserved fleet_attributes key '${pair%%=*}';"
                 bashio::log.warning "the App manages this Fleet targeting attribute."
                 continue
@@ -448,7 +448,7 @@ if [ "${FLEET_DEFAULT_ATTRIBUTES}" = true ] && [ "${OPERATION_MODE}" != local ];
             bashio::exit.nok
             ;;
     esac
-    export ADDON_SLUG ALLOY_CONTAINER_NAME="app_${ADDON_SLUG}"
+    export ADDON_SLUG ALLOY_CONTAINER_NAME="app_${ADDON_SLUG}" ALLOY_LEGACY_CONTAINER_NAME="addon_${ADDON_SLUG}"
 fi
 
 bashio::log.info "Grafana Alloy for Home Assistant"
