@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.1.0](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.0.0...alloy-v2.1.0) (2026-08-02)
+
+
+### Features
+
+* **alloy:** guide Fleet onboarding ([edf6c0a](https://github.com/BroTEK-Solutions/ha-addons/commit/edf6c0ae78aa6a2c1afb7cff3dbd97e7f75de559))
+* **alloy:** guide Fleet onboarding ([c10d27e](https://github.com/BroTEK-Solutions/ha-addons/commit/c10d27e595cfbc04f276cd3d092488ebc95021bb))
+* **alloy:** isolate Fleet starter selections ([acff816](https://github.com/BroTEK-Solutions/ha-addons/commit/acff816c735491010ef6c3eb7d675330a3f4579d))
+* **alloy:** publish HAOS Fleet attributes ([0f42abd](https://github.com/BroTEK-Solutions/ha-addons/commit/0f42abd424b7a7f688efe183ad761e98c74aa48c))
+* **alloy:** publish HAOS Fleet attributes ([ac2ec07](https://github.com/BroTEK-Solutions/ha-addons/commit/ac2ec077db2c7b3249da53e4dd8c61cc67bb261a)), closes [#29](https://github.com/BroTEK-Solutions/ha-addons/issues/29)
+* **alloy:** report component health to ingress ([f528833](https://github.com/BroTEK-Solutions/ha-addons/commit/f5288335ad318d91391b4a945745797c3bc01e1e))
+
+
+### Bug Fixes
+
+* **alloy:** address Fleet onboarding review ([6c1c550](https://github.com/BroTEK-Solutions/ha-addons/commit/6c1c550eefa6a180428a1444b3a579739c302410))
+* **alloy:** block starters during manual override ([2817980](https://github.com/BroTEK-Solutions/ha-addons/commit/28179804856c8c67e5788ec43bac0e78e64d5324))
+* **alloy:** guard Fleet starter controls ([34cb7b1](https://github.com/BroTEK-Solutions/ha-addons/commit/34cb7b1c79d119f0b4f6bf6f5551152056f2a0f9))
+* **alloy:** match HA Supervisor journal containers ([05ede94](https://github.com/BroTEK-Solutions/ha-addons/commit/05ede94c02a0f9d213de3b1ef12ae5b77d6e537e))
+* **alloy:** match HA Supervisor journal containers ([84c2096](https://github.com/BroTEK-Solutions/ha-addons/commit/84c20966ebbeb99e440293c3a0cf8161b210144d)), closes [#28](https://github.com/BroTEK-Solutions/ha-addons/issues/28)
+* **alloy:** preserve Fleet wizard state ([a076510](https://github.com/BroTEK-Solutions/ha-addons/commit/a0765104d2f875ef9c883a62bcab848c7add5e68))
+* **alloy:** reject starter generation outside Fleet mode ([08d75be](https://github.com/BroTEK-Solutions/ha-addons/commit/08d75bea3e040140a68a2c2e4b6e1b8dacbb81df))
+* **alloy:** retain both Supervisor container names ([415b62a](https://github.com/BroTEK-Solutions/ha-addons/commit/415b62a1dee2315b2fae9ff00d74e9a0d7ae3d79))
+* **alloy:** retain legacy journal exclusions ([5be0cdf](https://github.com/BroTEK-Solutions/ha-addons/commit/5be0cdfcb565e901807873f5659c3143911f7e9e))
+
 ## [2.0.0](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v1.8.0...alloy-v2.0.0) (2026-08-01)
 
 
