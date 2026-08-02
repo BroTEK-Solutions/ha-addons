@@ -36,6 +36,7 @@ type saveRequest struct {
 
 type statusResponse struct {
 	AlloyReady     bool `json:"alloy_ready"`
+	AlloyHealthy   bool `json:"alloy_healthy"`
 	SafeMode       bool `json:"safe_mode"`
 	ManualOverride bool `json:"manual_override"`
 }
@@ -74,6 +75,7 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 		manualOverride, _ := settings["manual_config_enabled"].(bool)
 		writeJSON(w, http.StatusOK, statusResponse{
 			AlloyReady:     alloyReady(r.Context(), alloyURL),
+			AlloyHealthy:   alloyHealthy(r.Context(), alloyURL),
 			SafeMode:       envBool("SAFE_MODE"),
 			ManualOverride: manualOverride,
 		})
@@ -202,9 +204,17 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 }
 
 func alloyReady(ctx context.Context, alloyURL string) bool {
+	return alloyEndpointOK(ctx, alloyURL, "/-/ready")
+}
+
+func alloyHealthy(ctx context.Context, alloyURL string) bool {
+	return alloyEndpointOK(ctx, alloyURL, "/-/healthy")
+}
+
+func alloyEndpointOK(ctx context.Context, alloyURL, path string) bool {
 	probeContext, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	request, err := http.NewRequestWithContext(probeContext, http.MethodGet, strings.TrimRight(alloyURL, "/")+"/-/ready", nil)
+	request, err := http.NewRequestWithContext(probeContext, http.MethodGet, strings.TrimRight(alloyURL, "/")+path, nil)
 	if err != nil {
 		return false
 	}

@@ -137,6 +137,39 @@ func TestStatusAPIReportsRecoveryStateWhenAlloyIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestStatusAPIReportsComponentHealthSeparatelyFromReadiness(t *testing.T) {
+	alloy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/-/ready":
+			w.WriteHeader(http.StatusOK)
+		case "/-/healthy":
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer alloy.Close()
+	handler, err := newAppHandler(&fakeStore{settings: map[string]any{}}, fakeValidator{}, &fakeSupervisor{}, alloy.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/status", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /api/status = %d %s", response.Code, response.Body.String())
+	}
+	var status struct {
+		AlloyReady   bool `json:"alloy_ready"`
+		AlloyHealthy bool `json:"alloy_healthy"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if !status.AlloyReady || !status.AlloyHealthy {
+		t.Fatalf("status = %#v, want ready and healthy", status)
+	}
+}
+
 func TestConfigAPIRejectsCandidateBeforePersistence(t *testing.T) {
 	store := &fakeStore{settings: map[string]any{"operation_mode": "local", "loki_url": "https://old.example"}}
 	handler, err := newAppHandler(store, fakeValidator{err: errors.New("Alloy rejected candidate")}, &fakeSupervisor{}, "http://127.0.0.1:12345")
