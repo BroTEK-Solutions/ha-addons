@@ -115,7 +115,7 @@ func (r *commandFleetReferenceRenderer) Render(ctx context.Context, settings map
 	if err := validateFleetReferenceSettings(settings); err != nil {
 		return nil, err
 	}
-	settings, placeholders := withFleetReferencePlaceholders(settings)
+	settings, placeholders := resolveFleetReferenceDestinations(settings)
 
 	// Validate the selected components as a Local candidate. The generated Fleet
 	// pipeline uses the shared key, so supply it as each selected backend's
@@ -220,10 +220,16 @@ var fleetReferenceDestinations = []struct {
 	},
 }
 
-// withFleetReferencePlaceholders fills the endpoint and tenant of every selected
-// signal that has no configured value, and reports which ones were substituted.
-// Configured values are never overwritten.
-func withFleetReferencePlaceholders(settings map[string]any) (map[string]any, []string) {
+// resolveFleetReferenceDestinations makes the rendered pipeline follow the
+// selected signals exactly. For a selected signal it fills a blank endpoint or
+// tenant with a placeholder, never overwriting a configured value; for an
+// unselected one it drops the endpoint and tenant entirely.
+//
+// Dropping matters because the generator keys some pipelines off the URL alone
+// -- the whole journal-to-Loki path is emitted whenever LOKI_URL is set, and the
+// remote-write block whenever PROMETHEUS_URL is. Leaving a typed-in endpoint in
+// place for a deselected signal would ship that signal anyway.
+func resolveFleetReferenceDestinations(settings map[string]any) (map[string]any, []string) {
 	filled := make(map[string]any, len(settings)+len(fleetReferenceDestinations)*2)
 	for key, value := range settings {
 		filled[key] = value
@@ -231,6 +237,8 @@ func withFleetReferencePlaceholders(settings map[string]any) (map[string]any, []
 	var placeholders []string
 	for _, destination := range fleetReferenceDestinations {
 		if !destination.selected(settings) {
+			delete(filled, destination.prefix+"_url")
+			delete(filled, destination.prefix+"_username")
 			continue
 		}
 		substituted := false

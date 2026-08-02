@@ -79,7 +79,7 @@ func TestFleetNameSlugUsesManifestSafeASCII(t *testing.T) {
 	}
 }
 
-func TestFleetReferencePlaceholdersFillOnlyBlankSelectedDestinations(t *testing.T) {
+func TestFleetReferenceDestinationsFollowTheSelectedSignals(t *testing.T) {
 	settings := map[string]any{
 		"operation_mode":      "fleet",
 		"host_metrics":        true,
@@ -89,10 +89,11 @@ func TestFleetReferencePlaceholdersFillOnlyBlankSelectedDestinations(t *testing.
 		"tempo_username":      "789",
 		"alloy_profiling":     false,
 		"pyroscope_url":       "https://profiles.example",
+		"pyroscope_username":  "321",
 		"prometheus_username": "",
 	}
 
-	filled, placeholders := withFleetReferencePlaceholders(settings)
+	filled, placeholders := resolveFleetReferenceDestinations(settings)
 
 	if got := filled["prometheus_url"]; got != "https://prom.example/api/prom/push" {
 		t.Errorf("configured endpoint was overwritten: %v", got)
@@ -110,16 +111,55 @@ func TestFleetReferencePlaceholdersFillOnlyBlankSelectedDestinations(t *testing.
 			t.Errorf("%s = %v, want %q", key, got, want)
 		}
 	}
-	// Profiles are not selected, so its blank tenant stays blank and no profiles
-	// pipeline is rendered at all.
-	if optionHasValue(filled, "pyroscope_username") {
-		t.Errorf("unselected signal gained a placeholder tenant: %v", filled["pyroscope_username"])
+	// Profiles are not selected, so its endpoint and tenant are dropped even
+	// though both were supplied. The generator keys some pipelines off the URL
+	// alone, so leaving them in would ship a deselected signal.
+	for _, key := range []string{"pyroscope_url", "pyroscope_username"} {
+		if optionHasValue(filled, key) {
+			t.Errorf("unselected signal kept %s = %v", key, filled[key])
+		}
 	}
 	if got, want := strings.Join(placeholders, ","), "metrics,logs,traces"; got != want {
 		t.Errorf("placeholders = %q, want %q", got, want)
 	}
-	if optionHasValue(settings, "loki_url") {
-		t.Error("withFleetReferencePlaceholders mutated the caller's settings")
+	if optionHasValue(settings, "loki_url") || settings["pyroscope_url"] != "https://profiles.example" {
+		t.Error("resolveFleetReferenceDestinations mutated the caller's settings")
+	}
+}
+
+// The generator gates the journal pipeline on LOKI_URL alone, so a deselected
+// signal whose endpoint is still filled in must not reach it.
+func TestCommandFleetRendererOmitsDeselectedDestinations(t *testing.T) {
+	generator := filepath.Join(t.TempDir(), "generate.sh")
+	script := `#!/bin/sh
+set -eu
+printf '%s\n' "loki=\"${LOKI_URL:-}\"" "prometheus=\"${PROMETHEUS_URL:-}\""
+`
+	if err := os.WriteFile(generator, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	renderer := newCommandFleetReferenceRenderer(generator, &recordingValidator{})
+	manifest, err := renderer.Render(context.Background(), map[string]any{
+		"operation_mode": "fleet",
+		"host_metrics":   true,
+		// Logs are deselected, but an endpoint and tenant were typed in.
+		"logs_system":        false,
+		"logs_homeassistant": false,
+		"logs_addons":        false,
+		"loki_url":           "https://logs.example/loki/api/v1/push",
+		"loki_username":      "123",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(manifest, []byte(`loki=""`)) {
+		t.Errorf("deselected Loki destination reached the generator:\n%s", manifest)
+	}
+	if bytes.Contains(manifest, []byte("logs.example")) {
+		t.Errorf("deselected Loki endpoint reached the manifest:\n%s", manifest)
+	}
+	if !bytes.Contains(manifest, []byte(`prometheus="https://REPLACE-ME.invalid/api/prom/push"`)) {
+		t.Errorf("selected metrics destination missing:\n%s", manifest)
 	}
 }
 
