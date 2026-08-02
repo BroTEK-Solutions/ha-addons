@@ -139,6 +139,19 @@ func TestFleetStarterSettingsUsesOnlyTransientSelection(t *testing.T) {
 	}
 }
 
+func TestFleetStarterSettingsRejectsNonFleetStoredMode(t *testing.T) {
+	stored := map[string]any{
+		"operation_mode":    "local",
+		"fleet_url":         "https://fleet.example",
+		"fleet_username":    "123",
+		"gcloud_rw_api_key": "SENTINEL-SECRET",
+	}
+
+	if _, err := fleetStarterSettings(stored, fleetStarterSelection{LokiURL: "https://logs.example/loki/api/v1/push"}); err == nil || !strings.Contains(err.Error(), "Fleet Management") {
+		t.Fatalf("fleetStarterSettings() error = %v, want active Fleet mode", err)
+	}
+}
+
 func TestCommandFleetRendererBuildsAValidatedManifestFromFleetSelections(t *testing.T) {
 	generator := filepath.Join(t.TempDir(), "generate.sh")
 	script := `#!/bin/sh

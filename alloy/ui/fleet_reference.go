@@ -51,6 +51,10 @@ type fleetStarterSelection struct {
 }
 
 func fleetStarterSettings(stored map[string]any, selection fleetStarterSelection) (map[string]any, error) {
+	if mode, _ := stored["operation_mode"].(string); mode != "fleet" {
+		return nil, errors.New("Fleet Management must be the active operation mode before generating a Fleet starter pipeline")
+	}
+
 	settings := make(map[string]any, 32)
 	for _, key := range []string{
 		"operation_mode", "instance_name", "fleet_url", "fleet_username",
@@ -61,7 +65,6 @@ func fleetStarterSettings(stored map[string]any, selection fleetStarterSelection
 			settings[key] = value
 		}
 	}
-	settings["operation_mode"] = "fleet"
 	for key, value := range map[string]any{
 		"loki_url":                selection.LokiURL,
 		"loki_username":           selection.LokiUsername,
