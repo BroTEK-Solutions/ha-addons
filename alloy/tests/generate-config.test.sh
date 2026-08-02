@@ -135,6 +135,27 @@ check_contains "$PROM_BLOCK" 'sys.env("PROMETHEUS_PASSWORD")'
 check_absent   "$PROM_BLOCK" 'LOKI_PASSWORD'
 validate_alloy "$OUT" "both-auth"
 
+echo "== identity labels are forced to the instance name on metrics and logs =="
+# Grafana's stock dashboards key off instance/hostname/nodename. Inside the App
+# those default to the container's hostname (a141124a-alloy), so the generated
+# config overwrites them with the operator-chosen instance name at write time.
+OUT="$(gen LOG_LEVEL=info LOKI_URL=https://logs-prod.example.net/loki/api/v1/push \
+  PROMETHEUS_URL=https://prom-prod.example.net/api/prom/push INSTANCE_NAME=hass-test)"
+PROM_BLOCK="$(block "$OUT" 'prometheus.remote_write "metrics" {')"
+check_contains "$PROM_BLOCK" 'write_relabel_config {'
+check_contains "$PROM_BLOCK" 'target_label = "instance"'
+check_contains "$PROM_BLOCK" 'source_labels = ["nodename"]'
+check_contains "$PROM_BLOCK" 'target_label  = "nodename"'
+check_contains "$PROM_BLOCK" 'source_labels = ["hostname"]'
+check_contains "$PROM_BLOCK" 'target_label  = "hostname"'
+check_contains "$PROM_BLOCK" 'replacement  = "hass-test"'
+JOURNAL_BLOCK="$(block "$OUT" 'loki.relabel "journal" {')"
+check_contains "$JOURNAL_BLOCK" 'target_label = "hostname"'
+check_contains "$JOURNAL_BLOCK" 'target_label = "instance"'
+check_contains "$JOURNAL_BLOCK" 'replacement  = "hass-test"'
+check_absent   "$JOURNAL_BLOCK" '"__journal__hostname"'
+validate_alloy "$OUT" "forced-identity-labels"
+
 echo "== fleet-only =="
 # .invalid never resolves, so `alloy run` fails DNS instead of reaching a real endpoint.
 OUT="$(gen LOG_LEVEL=info FLEET_URL=https://fleet-management-prod-001.example.invalid)"

@@ -192,9 +192,17 @@ cat <<ALLOYCONFIG
     source_labels = ["__journal__systemd_unit"]
     target_label  = "unit"
   }
+  // Identity labels are pinned to the operator-chosen instance name rather than
+  // the journal's own hostname. Inside the App that resolves to the container
+  // hostname (for example a141124a-alloy), which reads as a stranger in Grafana's
+  // stock dashboards. Both labels are set, so a dashboard keyed on either agrees.
   rule {
-    source_labels = ["__journal__hostname"]
-    target_label  = "hostname"
+    target_label = "hostname"
+    replacement  = "${INSTANCE_NAME}"
+  }
+  rule {
+    target_label = "instance"
+    replacement  = "${INSTANCE_NAME}"
   }
   rule {
     source_labels = ["__journal_syslog_identifier"]
@@ -336,6 +344,32 @@ cat <<ALLOYCONFIG
 prometheus.remote_write "metrics" {
   endpoint {
     url = "${PROMETHEUS_URL}"
+
+    // Pin identity to the operator-chosen instance name at write time, so it
+    // also covers series from additional user configuration. Without this the
+    // labels carry the App's container hostname (for example a141124a-alloy),
+    // which is what Grafana's stock dashboards would show as the machine.
+    write_relabel_config {
+      target_label = "instance"
+      replacement  = "${INSTANCE_NAME}"
+    }
+
+    // nodename and hostname are only rewritten where they already exist, so no
+    // series gains a label it did not carry. node_uname_info.nodename is the one
+    // the Linux node dashboard renders as "Hostname".
+    write_relabel_config {
+      source_labels = ["nodename"]
+      regex         = ".+"
+      target_label  = "nodename"
+      replacement   = "${INSTANCE_NAME}"
+    }
+
+    write_relabel_config {
+      source_labels = ["hostname"]
+      regex         = ".+"
+      target_label  = "hostname"
+      replacement   = "${INSTANCE_NAME}"
+    }
 ALLOYCONFIG
 
 emit_basic_auth "${PROMETHEUS_USERNAME}" "$(pipeline_secret PROMETHEUS_PASSWORD)" "    "

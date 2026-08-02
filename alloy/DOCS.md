@@ -109,9 +109,11 @@ slugs such as `alloy,mqtt`; Alloy excludes its own container by default to avoid
 feeding its logs back into itself. **Journal replay age** defaults to **24h** and
 limits how far Alloy reads backwards when no saved journal position exists.
 
-Logs retain useful journal labels including unit, hostname, transport and
-container name. Home Assistant-formatted messages also receive a parsed `level`
-label. An empty Loki URL disables log shipping.
+Logs retain useful journal labels including unit, transport and container name.
+Home Assistant-formatted messages also receive a parsed `level` label. The
+`hostname` and `instance` labels are overwritten - see
+[Instance identity labels](#instance-identity-labels). An empty Loki URL disables
+log shipping.
 
 ## Local metrics
 
@@ -133,6 +135,30 @@ options** because their defaults suit most installations.
 HAOS does not expose its host root filesystem to Apps. Filesystem usage therefore
 covers the mapped `share`, `media` and `backup` paths rather than a host-wide
 `df`. Host CPU, memory, disk-I/O and network counters remain available.
+
+## Instance identity labels
+
+Alloy runs as a container, so anything it reports about itself carries a
+container hostname such as `a141124a-alloy`. Grafana's stock dashboards key their
+**Instance** and **Hostname** controls off those labels, which makes one Home
+Assistant install show up under a name nobody chose.
+
+The generated configuration therefore pins identity to the **Instance name**
+(default `homeassistant`) rather than to whatever the container is called:
+
+- Metrics get `instance` set on every series as it is written, so the rule also
+  covers series produced by additional user configuration.
+- `nodename` and `hostname` are rewritten only where they already exist, so no
+  series gains a label it did not carry. `node_uname_info`'s `nodename` is the
+  one the Linux node dashboard renders as "Hostname".
+- Logs get both `instance` and `hostname` set from the same value, replacing the
+  journal's own hostname field.
+
+The real kernel nodename is not preserved under another label. Give each install
+a distinct **Instance name** when more than one reports to the same stack.
+
+This applies to metrics and logs. Traces carry OTLP resource attributes set by
+the sending application, which the App does not rewrite.
 
 ## Local traces
 
