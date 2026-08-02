@@ -56,22 +56,28 @@ settings.
 
 Save and restart with the Fleet settings. The UI waits until the saved
 configuration is applied and Alloy is ready and healthy before offering the
-starter step. Enter a Home Assistant hostname or IP address that is reachable
-from the terminal where `gcx` will run. This explicit direct host is needed
-when the Web UI was opened through Home Assistant Cloud or another reverse
-proxy; it affects only the displayed command and is not saved. Run:
+starter step.
 
-```sh
-curl -fsSL http://homeassistant.local:8099/fleet-pipeline/SHORT_LIVED_TOKEN \
-  | gcx fleet pipelines create -f -
-```
+**No telemetry destination has to be configured.** Select the signals you want
+and choose **Generate Fleet pipeline manifest**. Every endpoint or tenant ID
+left blank is written as a `REPLACE-ME` placeholder. Those placeholder hostnames
+sit under the reserved `.invalid` domain, so a manifest published unedited fails
+to resolve rather than shipping telemetry somewhere unintended.
 
-Before creating the manifest, install and authenticate `gcx`:
+The manifest appears in an editable box. Replace each placeholder with the
+endpoint and numeric tenant ID from your Grafana Cloud stack, then choose
+**Download manifest** - the download always carries what is in the box, not
+what the App rendered. Edits there are not saved and do not change this App's
+own configuration.
+
+Install and authenticate `gcx`, then create the pipeline from the downloaded
+file:
 
 ```sh
 brew install grafana/grafana/gcx
 gcx login home-assistant --server https://YOUR-STACK.grafana.net --oauth
 gcx config check
+gcx fleet pipelines create -f home-assistant-fleet-pipeline.yaml
 ```
 
 The token in that local `gcx` context needs
@@ -79,11 +85,11 @@ permission to create Fleet Management pipelines. It is separate from the App's
 stored shared key: the stored key authenticates Alloy's Fleet polling and the
 generated telemetry writes, while `gcx` performs the one-time Fleet mutation.
 
-The served manifest contains the configured backend URLs and numeric tenant
-IDs, but no credentials. Backend authentication remains a runtime
-`sys.env("GCLOUD_RW_API_KEY")` reference. The random download URL is held only
-in memory. The configuration and restart APIs stay
-restricted to Home Assistant ingress.
+The manifest contains backend URLs and numeric tenant IDs, but no credentials.
+Backend authentication remains a runtime `sys.env("GCLOUD_RW_API_KEY")`
+reference. It is returned through the same ingress-restricted API as every other
+configuration call; nothing about the starter pipeline is reachable without Home
+Assistant ingress.
 
 The generated pipeline name starts with `home-assistant-<instance-name>` and
 ends with a deterministic hash suffix so distinct installation names cannot
@@ -125,9 +131,11 @@ slugs such as `alloy,mqtt`; Alloy excludes its own container by default to avoid
 feeding its logs back into itself. **Journal replay age** defaults to **24h** and
 limits how far Alloy reads backwards when no saved journal position exists.
 
-Logs retain useful journal labels including unit, hostname, transport and
-container name. Home Assistant-formatted messages also receive a parsed `level`
-label. An empty Loki URL disables log shipping.
+Logs retain useful journal labels including unit, transport and container name.
+Home Assistant-formatted messages also receive a parsed `level` label. The
+`hostname` and `instance` labels are overwritten - see
+[Instance identity labels](#instance-identity-labels). An empty Loki URL disables
+log shipping.
 
 ## Local metrics
 
@@ -149,6 +157,30 @@ options** because their defaults suit most installations.
 HAOS does not expose its host root filesystem to Apps. Filesystem usage therefore
 covers the mapped `share`, `media` and `backup` paths rather than a host-wide
 `df`. Host CPU, memory, disk-I/O and network counters remain available.
+
+## Instance identity labels
+
+Alloy runs as a container, so anything it reports about itself carries a
+container hostname such as `a141124a-alloy`. Grafana's stock dashboards key their
+**Instance** and **Hostname** controls off those labels, which makes one Home
+Assistant install show up under a name nobody chose.
+
+The generated configuration therefore pins identity to the **Instance name**
+(default `homeassistant`) rather than to whatever the container is called:
+
+- Metrics get `instance` set on every series as it is written, so the rule also
+  covers series produced by additional user configuration.
+- `nodename` and `hostname` are rewritten only where they already exist, so no
+  series gains a label it did not carry. `node_uname_info`'s `nodename` is the
+  one the Linux node dashboard renders as "Hostname".
+- Logs get both `instance` and `hostname` set from the same value, replacing the
+  journal's own hostname field.
+
+The real kernel nodename is not preserved under another label. Give each install
+a distinct **Instance name** when more than one reports to the same stack.
+
+This applies to metrics and logs. Traces carry OTLP resource attributes set by
+the sending application, which the App does not rewrite.
 
 ## Local traces
 
@@ -210,11 +242,9 @@ be repaired. Disable safe mode and restart after the candidate saves cleanly.
 Alloy's component graph is proxied through Home Assistant ingress at **Open Web
 UI > Alloy status**. The internal Alloy server listens only on loopback port
 **12345** for health checks and self-monitoring and is not exposed directly.
-The configuration control plane accepts only Supervisor ingress traffic. Its
-separate health endpoint contains no configuration or restart capability. Fleet
-starter manifests are the sole exception: a random URL on port **8099** serves
-one secret-free manifest for 10 minutes so a terminal can pipe it to `gcx`.
-App health follows this recovery UI rather than Alloy readiness. If Alloy exits,
+The configuration control plane accepts only Supervisor ingress traffic, with no
+exceptions. Its separate health endpoint contains no configuration or restart
+capability. App health follows this recovery UI rather than Alloy readiness. If Alloy exits,
 S6 can restart it and the Web UI remains available; **Alloy status & component
 graph** reports an upstream error until Alloy is ready again.
 

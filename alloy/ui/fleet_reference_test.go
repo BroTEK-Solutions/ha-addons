@@ -8,17 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
-
-type staticFleetRenderer struct {
-	contents []byte
-	err      error
-}
-
-func (r staticFleetRenderer) Render(context.Context, map[string]any) ([]byte, error) {
-	return r.contents, r.err
-}
 
 type rejectAdditionalConfigValidator struct{}
 
@@ -29,6 +19,16 @@ func (rejectAdditionalConfigValidator) Validate(_ context.Context, settings map[
 	return validateModeRequirements(settings)
 }
 
+// recordingValidator keeps the real mode requirements - including the rule that a
+// username and password are set together - so a placeholder render still has to
+// produce a candidate Local configuration that would validate.
+type recordingValidator struct{ settings map[string]any }
+
+func (v *recordingValidator) Validate(_ context.Context, settings map[string]any) error {
+	v.settings = settings
+	return validateModeRequirements(settings)
+}
+
 func TestFleetManifestTargetsOnlyTheSelectedCollectorWithoutEmbeddingSecrets(t *testing.T) {
 	settings := map[string]any{
 		"instance_name":     "Kitchen HA",
@@ -36,7 +36,7 @@ func TestFleetManifestTargetsOnlyTheSelectedCollectorWithoutEmbeddingSecrets(t *
 	}
 	contents := []byte("prometheus.remote_write \"metrics\" {\n  endpoint {\n    password = sys.env(\"GCLOUD_RW_API_KEY\")\n  }\n}\n")
 
-	manifest, err := buildFleetManifest(settings, contents)
+	manifest, err := buildFleetManifest(settings, contents, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,29 +79,107 @@ func TestFleetNameSlugUsesManifestSafeASCII(t *testing.T) {
 	}
 }
 
-func TestFleetReferenceBrokerExpiresIssuedManifests(t *testing.T) {
-	now := time.Date(2026, 8, 1, 18, 0, 0, 0, time.UTC)
-	broker := newFleetReferenceBroker(
-		staticFleetRenderer{contents: []byte("manifest")},
-		strings.NewReader("01234567890123456789012345678901"),
-		func() time.Time { return now },
-		10*time.Minute,
-	)
+func TestFleetReferenceDestinationsFollowTheSelectedSignals(t *testing.T) {
+	settings := map[string]any{
+		"operation_mode":      "fleet",
+		"host_metrics":        true,
+		"prometheus_url":      "https://prom.example/api/prom/push",
+		"logs_system":         true,
+		"traces_enabled":      true,
+		"tempo_username":      "789",
+		"alloy_profiling":     false,
+		"pyroscope_url":       "https://profiles.example",
+		"pyroscope_username":  "321",
+		"prometheus_username": "",
+	}
 
-	issued, err := broker.Issue(context.Background(), map[string]any{"operation_mode": "fleet"})
+	filled, placeholders := resolveFleetReferenceDestinations(settings)
+
+	if got := filled["prometheus_url"]; got != "https://prom.example/api/prom/push" {
+		t.Errorf("configured endpoint was overwritten: %v", got)
+	}
+	if got := filled["tempo_username"]; got != "789" {
+		t.Errorf("configured tenant was overwritten: %v", got)
+	}
+	for key, want := range map[string]string{
+		"prometheus_username": "REPLACE-ME-metrics-tenant-id",
+		"loki_url":            "https://REPLACE-ME.invalid/loki/api/v1/push",
+		"loki_username":       "REPLACE-ME-logs-tenant-id",
+		"tempo_url":           "https://REPLACE-ME.invalid/otlp",
+	} {
+		if got := filled[key]; got != want {
+			t.Errorf("%s = %v, want %q", key, got, want)
+		}
+	}
+	// Profiles are not selected, so its endpoint and tenant are dropped even
+	// though both were supplied. The generator keys some pipelines off the URL
+	// alone, so leaving them in would ship a deselected signal.
+	for _, key := range []string{"pyroscope_url", "pyroscope_username"} {
+		if optionHasValue(filled, key) {
+			t.Errorf("unselected signal kept %s = %v", key, filled[key])
+		}
+	}
+	if got, want := strings.Join(placeholders, ","), "metrics,logs,traces"; got != want {
+		t.Errorf("placeholders = %q, want %q", got, want)
+	}
+	if optionHasValue(settings, "loki_url") || settings["pyroscope_url"] != "https://profiles.example" {
+		t.Error("resolveFleetReferenceDestinations mutated the caller's settings")
+	}
+}
+
+// The generator gates the journal pipeline on LOKI_URL alone, so a deselected
+// signal whose endpoint is still filled in must not reach it.
+func TestCommandFleetRendererOmitsDeselectedDestinations(t *testing.T) {
+	generator := filepath.Join(t.TempDir(), "generate.sh")
+	script := `#!/bin/sh
+set -eu
+printf '%s\n' "loki=\"${LOKI_URL:-}\"" "prometheus=\"${PROMETHEUS_URL:-}\""
+`
+	if err := os.WriteFile(generator, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	renderer := newCommandFleetReferenceRenderer(generator, &recordingValidator{})
+	manifest, err := renderer.Render(context.Background(), map[string]any{
+		"operation_mode": "fleet",
+		"host_metrics":   true,
+		// Logs are deselected, but an endpoint and tenant were typed in.
+		"logs_system":        false,
+		"logs_homeassistant": false,
+		"logs_addons":        false,
+		"loki_url":           "https://logs.example/loki/api/v1/push",
+		"loki_username":      "123",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if issued.Token == "" || !issued.ExpiresAt.Equal(now.Add(10*time.Minute)) {
-		t.Fatalf("issued = %#v", issued)
+	if !bytes.Contains(manifest, []byte(`loki=""`)) {
+		t.Errorf("deselected Loki destination reached the generator:\n%s", manifest)
 	}
-	if manifest, ok := broker.Get(issued.Token); !ok || string(manifest) != "manifest" {
-		t.Fatalf("Get before expiry = %q, %v", manifest, ok)
+	if bytes.Contains(manifest, []byte("logs.example")) {
+		t.Errorf("deselected Loki endpoint reached the manifest:\n%s", manifest)
 	}
+	if !bytes.Contains(manifest, []byte(`prometheus="https://REPLACE-ME.invalid/api/prom/push"`)) {
+		t.Errorf("selected metrics destination missing:\n%s", manifest)
+	}
+}
 
-	now = now.Add(10*time.Minute + time.Second)
-	if manifest, ok := broker.Get(issued.Token); ok || manifest != nil {
-		t.Fatalf("Get after expiry = %q, %v", manifest, ok)
+func TestFleetManifestBannerNamesThePlaceholdersToReplace(t *testing.T) {
+	manifest, err := buildFleetManifest(
+		map[string]any{"instance_name": "homeassistant"},
+		[]byte(`loki.write "loki" {}`),
+		[]string{"metrics", "logs"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		"    // Replace every REPLACE-ME value below",
+		"    // metrics, logs from your Grafana Cloud stack",
+		`    loki.write "loki" {}`,
+	} {
+		if !bytes.Contains(manifest, []byte(expected)) {
+			t.Errorf("manifest missing %q:\n%s", expected, manifest)
+		}
 	}
 }
 
@@ -221,7 +299,37 @@ func TestCommandFleetRendererRejectsAnEmptyStarterPipeline(t *testing.T) {
 		"fleet_username":    "123",
 		"gcloud_rw_api_key": "secret",
 	})
-	if err == nil || !strings.Contains(err.Error(), "destination") {
-		t.Fatalf("Render() error = %v, want missing destination", err)
+	if err == nil || !strings.Contains(err.Error(), "select at least one") {
+		t.Fatalf("Render() error = %v, want no selected signal", err)
+	}
+}
+
+func TestCommandFleetRendererRendersPlaceholdersWithNoConfiguredDestination(t *testing.T) {
+	generator := filepath.Join(t.TempDir(), "generate.sh")
+	script := `#!/bin/sh
+set -eu
+printf '%s\n' "url = \"${PROMETHEUS_URL}\"" "username = \"${PROMETHEUS_USERNAME}\""
+`
+	if err := os.WriteFile(generator, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	renderer := newCommandFleetReferenceRenderer(generator, &recordingValidator{})
+	// Nothing is stored beyond the mode and the selected signal: no endpoint, no
+	// tenant, no shared key. Generation must still succeed.
+	manifest, err := renderer.Render(context.Background(), map[string]any{
+		"operation_mode": "fleet",
+		"host_metrics":   true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{
+		`url = "https://REPLACE-ME.invalid/api/prom/push"`,
+		`username = "REPLACE-ME-metrics-tenant-id"`,
+		"// Replace every REPLACE-ME value below",
+	} {
+		if !bytes.Contains(manifest, []byte(expected)) {
+			t.Errorf("manifest missing %q:\n%s", expected, manifest)
+		}
 	}
 }

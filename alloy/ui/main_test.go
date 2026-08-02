@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 )
 
 type fakeSupervisor struct {
@@ -258,128 +257,110 @@ func TestRestartAPIRequestsSelfRestart(t *testing.T) {
 	}
 }
 
-func TestFleetReferenceAPIIssuesABriefPublicDownloadWithoutExposingControlPlane(t *testing.T) {
-	now := time.Date(2026, 8, 1, 18, 0, 0, 0, time.UTC)
-	broker := newFleetReferenceBroker(
-		staticFleetRenderer{contents: []byte("kind: Pipeline\n")},
-		strings.NewReader("01234567890123456789012345678901"),
-		func() time.Time { return now },
-		10*time.Minute,
-	)
+// echoFleetRenderer returns the settings it was asked to render, so a test can
+// assert which values reached the renderer.
+type echoFleetRenderer struct{ settings map[string]any }
+
+func (r *echoFleetRenderer) Render(_ context.Context, settings map[string]any) ([]byte, error) {
+	r.settings = settings
+	return []byte("kind: Pipeline\n"), nil
+}
+
+func postFleetReference(body string) *http.Request {
+	request := httptest.NewRequest(http.MethodPost, "/api/fleet-reference", strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	return request
+}
+
+func TestFleetReferenceAPIReturnsAnEditableManifestWithoutExposingItPublicly(t *testing.T) {
 	store := &fakeStore{settings: map[string]any{
 		"operation_mode":    "fleet",
 		"fleet_url":         "https://fleet.example",
 		"fleet_username":    "123",
 		"gcloud_rw_api_key": "stored-secret",
 	}}
-	handler, err := newAppHandlerWithReferences(store, fakeValidator{}, &fakeSupervisor{}, broker, "http://127.0.0.1:12345")
+	handler, err := newAppHandlerWithReferences(store, fakeValidator{}, &fakeSupervisor{}, &echoFleetRenderer{}, "http://127.0.0.1:12345")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	issueResponse := httptest.NewRecorder()
-	issueRequest := httptest.NewRequest(http.MethodPost, "/api/fleet-reference", strings.NewReader(`{"selection":{"loki_url":"https://logs.example/loki/api/v1/push"}}`))
-	issueRequest.Header.Set("Content-Type", "application/json")
-	handler.ServeHTTP(issueResponse, issueRequest)
-	if issueResponse.Code != http.StatusCreated {
-		t.Fatalf("POST /api/fleet-reference = %d %s", issueResponse.Code, issueResponse.Body.String())
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, postFleetReference(`{"selection":{"logs_system":true,"loki_url":"https://logs.example/loki/api/v1/push"}}`))
+	if response.Code != http.StatusOK {
+		t.Fatalf("POST /api/fleet-reference = %d %s", response.Code, response.Body.String())
 	}
-	var issued struct {
-		Path      string    `json:"path"`
-		ExpiresAt time.Time `json:"expires_at"`
+	var rendered struct {
+		Manifest string `json:"manifest"`
+		Filename string `json:"filename"`
 	}
-	if err := json.Unmarshal(issueResponse.Body.Bytes(), &issued); err != nil {
+	if err := json.Unmarshal(response.Body.Bytes(), &rendered); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(issued.Path, "/fleet-pipeline/") || !issued.ExpiresAt.Equal(now.Add(10*time.Minute)) {
-		t.Fatalf("issued = %#v", issued)
+	if rendered.Manifest != "kind: Pipeline\n" || rendered.Filename == "" {
+		t.Fatalf("rendered = %#v", rendered)
 	}
 
+	// The manifest is delivered inside the ingress-only API. Nothing serves it to
+	// an unauthenticated caller any more.
 	publicHandler := ingressOnly("172.30.32.2", handler)
-	download := httptest.NewRequest(http.MethodGet, issued.Path, nil)
-	download.RemoteAddr = "192.168.1.20:43210"
-	downloadResponse := httptest.NewRecorder()
-	publicHandler.ServeHTTP(downloadResponse, download)
-	if downloadResponse.Code != http.StatusOK || downloadResponse.Body.String() != "kind: Pipeline\n" {
-		t.Fatalf("public download = %d %q", downloadResponse.Code, downloadResponse.Body.String())
-	}
-	if downloadResponse.Header().Get("Content-Type") != "application/yaml" {
-		t.Fatalf("download Content-Type = %q", downloadResponse.Header().Get("Content-Type"))
-	}
-
-	controlRequest := httptest.NewRequest(http.MethodGet, "/api/config", nil)
-	controlRequest.RemoteAddr = "192.168.1.20:43210"
-	controlResponse := httptest.NewRecorder()
-	publicHandler.ServeHTTP(controlResponse, controlRequest)
-	if controlResponse.Code != http.StatusForbidden {
-		t.Fatalf("public control-plane request = %d, want 403", controlResponse.Code)
+	for _, path := range []string{"/api/fleet-reference", "/fleet-pipeline/anything"} {
+		publicRequest := httptest.NewRequest(http.MethodGet, path, nil)
+		publicRequest.RemoteAddr = "192.168.1.20:43210"
+		publicResponse := httptest.NewRecorder()
+		publicHandler.ServeHTTP(publicResponse, publicRequest)
+		if publicResponse.Code != http.StatusForbidden {
+			t.Fatalf("public GET %s = %d, want 403", path, publicResponse.Code)
+		}
 	}
 }
 
-func TestFleetReferenceAPIRequiresAppliedSettings(t *testing.T) {
-	broker := newFleetReferenceBroker(
-		staticFleetRenderer{contents: []byte("kind: Pipeline\n")},
-		strings.NewReader("01234567890123456789012345678901"),
-		time.Now,
-		10*time.Minute,
-	)
-	store := &fakeStore{settings: map[string]any{"operation_mode": "fleet", "restart_required": true}}
-	handler, err := newAppHandlerWithReferences(store, fakeValidator{}, &fakeSupervisor{}, broker, "http://127.0.0.1:12345")
+// Generating a manifest has no side effects, so neither an unapplied save nor
+// safe mode has any reason to block it. Both used to.
+func TestFleetReferenceAPIRendersWithoutAppliedSettingsOrHealthySafeMode(t *testing.T) {
+	t.Setenv("SAFE_MODE", "true")
+	renderer := &echoFleetRenderer{}
+	store := &fakeStore{settings: map[string]any{
+		"operation_mode":    "fleet",
+		"restart_required":  true,
+		"fleet_url":         "https://fleet.example",
+		"fleet_username":    "123",
+		"gcloud_rw_api_key": "stored-secret",
+	}}
+	handler, err := newAppHandlerWithReferences(store, fakeValidator{}, &fakeSupervisor{}, renderer, "http://127.0.0.1:12345")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/api/fleet-reference", strings.NewReader(`{"selection":{"loki_url":"https://logs.example/loki/api/v1/push"}}`))
-	request.Header.Set("Content-Type", "application/json")
-	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "restart") {
+	// No destination at all: only a selected signal.
+	handler.ServeHTTP(response, postFleetReference(`{"selection":{"host_metrics":true}}`))
+	if response.Code != http.StatusOK {
 		t.Fatalf("POST /api/fleet-reference = %d %s", response.Code, response.Body.String())
+	}
+	if renderer.settings["host_metrics"] != true {
+		t.Errorf("submitted selection did not reach the renderer: %#v", renderer.settings)
+	}
+	if renderer.settings["gcloud_rw_api_key"] != "stored-secret" {
+		t.Errorf("stored shared key was not merged in: %#v", renderer.settings)
+	}
+	if store.saves != 0 {
+		t.Errorf("generating a manifest persisted settings: saves=%d", store.saves)
 	}
 }
 
 func TestFleetReferenceAPIRejectsSecretBearingStarterSelections(t *testing.T) {
-	broker := newFleetReferenceBroker(
-		staticFleetRenderer{contents: []byte("kind: Pipeline\n")},
-		strings.NewReader("01234567890123456789012345678901"),
-		time.Now,
-		10*time.Minute,
-	)
 	store := &fakeStore{settings: map[string]any{"operation_mode": "fleet", "gcloud_rw_api_key": "stored-secret"}}
-	handler, err := newAppHandlerWithReferences(store, fakeValidator{}, &fakeSupervisor{}, broker, "http://127.0.0.1:12345")
+	handler, err := newAppHandlerWithReferences(store, fakeValidator{}, &fakeSupervisor{}, &echoFleetRenderer{}, "http://127.0.0.1:12345")
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := httptest.NewRequest(http.MethodPost, "/api/fleet-reference", strings.NewReader(`{"selection":{"loki_url":"https://logs.example/push","loki_password":"browser-secret"}}`))
-	request.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, request)
+	handler.ServeHTTP(response, postFleetReference(`{"selection":{"loki_url":"https://logs.example/push","loki_password":"browser-secret"}}`))
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("POST /api/fleet-reference = %d %s, want 400", response.Code, response.Body.String())
 	}
 	if store.saves != 0 {
 		t.Fatalf("fleet starter request persisted settings: saves=%d", store.saves)
-	}
-}
-
-func TestFleetReferenceAPIRejectsSafeMode(t *testing.T) {
-	t.Setenv("SAFE_MODE", "true")
-	broker := newFleetReferenceBroker(
-		staticFleetRenderer{contents: []byte("kind: Pipeline\n")},
-		strings.NewReader("01234567890123456789012345678901"),
-		time.Now,
-		10*time.Minute,
-	)
-	store := &fakeStore{settings: map[string]any{"operation_mode": "fleet"}}
-	handler, err := newAppHandlerWithReferences(store, fakeValidator{}, &fakeSupervisor{}, broker, "http://127.0.0.1:12345")
-	if err != nil {
-		t.Fatal(err)
-	}
-	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/api/fleet-reference", strings.NewReader(`{"selection":{"loki_url":"https://logs.example/loki/api/v1/push"}}`))
-	request.Header.Set("Content-Type", "application/json")
-	handler.ServeHTTP(response, request)
-	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "Safe mode") {
-		t.Fatalf("POST /api/fleet-reference = %d %s", response.Code, response.Body.String())
 	}
 }
 
@@ -395,9 +376,10 @@ func TestStaticUIContainsConditionalAccessibleConfiguration(t *testing.T) {
 		"Operation mode",
 		"Fleet Management",
 		"Fleet starter pipeline",
-		"Create gcx command",
+		"Generate Fleet pipeline manifest",
+		"Download manifest",
+		"<code>REPLACE-ME</code> placeholder",
 		"gcx config check",
-		"Home Assistant host for the terminal command",
 		"creates this pipeline once",
 		"Local configuration",
 		"Grafana Cloud read/write API key",

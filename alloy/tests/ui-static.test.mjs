@@ -20,7 +20,8 @@ assert.match(appSource, /if \(manualToggle\.checked\) \{\s+manualToggle\.checked
 assert.match(appSource, /let alloyReady = false;/, "Fleet starter availability must track readiness separately from health");
 assert.match(appSource, /!alloyReady \|\| !alloyHealthy/, "Fleet starter must require both readiness and health");
 assert.match(appSource, /setTimeout\(\(\) => \{\s+healthPollTimer = null;\s+void loadStatus\(\)\.catch/, "the UI must keep checking health while Fleet starts");
-assert.match(html, /id="fleet-reference-expiry"/, "the generated command must show its expiry");
+assert.match(html, /id="fleet-reference-manifest"/, "the generated manifest must be editable in place");
+assert.match(html, /id="download-fleet-reference"/, "the edited manifest must be downloadable");
 assert.match(html, /data-wizard-step="mode"/, "mode selection must be a distinct wizard step");
 assert.match(html, /data-wizard-step="config"/, "configuration must be a distinct wizard step");
 assert.match(html, /data-wizard-step="starter"/, "the Fleet starter must be a distinct wizard step");
@@ -64,12 +65,13 @@ const notice = { textContent: "", className: "" };
 const runtimeStatus = { textContent: "", hidden: true };
 const legacyWarning = { hidden: false };
 const fleetReference = { hidden: true };
-const fleetReferenceCommand = { textContent: "" };
-const fleetReferenceExpiry = { textContent: "", hidden: true };
-const fleetReferenceDownload = { href: "" };
-const directHost = { value: "homeassistant.local", dataset: { transient: "" } };
+const fleetReferenceManifest = { value: "", dataset: { transient: "" } };
 let generateFleetReference;
+let downloadFleetReference;
 const fleetReferenceButton = { addEventListener(_event, listener) { generateFleetReference = listener; } };
+const downloadButton = { addEventListener(_event, listener) { downloadFleetReference = listener; } };
+const downloadLink = { href: "", download: "", clicked: 0, click() { this.clicked += 1; } };
+const revoked = [];
 const wizardListeners = {};
 const wizardModeNext = { addEventListener(event, listener) { wizardListeners[`next:${event}`] = listener; } };
 const wizardModeBack = { addEventListener(event, listener) { wizardListeners[`back:${event}`] = listener; } };
@@ -89,11 +91,9 @@ globalThis.document = {
     if (selector === "#manual_config_enabled") return manualToggle;
     if (selector === "#manual-config-panel") return manualPanel;
     if (selector === "#fleet-reference") return fleetReference;
-    if (selector === "#fleet-reference-command") return fleetReferenceCommand;
-    if (selector === "#fleet-reference-expiry") return fleetReferenceExpiry;
-    if (selector === "#fleet-reference-download") return fleetReferenceDownload;
-    if (selector === "#fleet-reference-direct-host") return directHost;
+    if (selector === "#fleet-reference-manifest") return fleetReferenceManifest;
     if (selector === "#generate-fleet-reference") return fleetReferenceButton;
+    if (selector === "#download-fleet-reference") return downloadButton;
     if (selector === "#save-restart") return { addEventListener() {} };
     if (selector === "#wizard-mode-next") return wizardModeNext;
     if (selector === "#wizard-mode-back") return wizardModeBack;
@@ -106,7 +106,18 @@ globalThis.document = {
     if (selector === "[data-wizard-step]") return [modeStep, configHeading, manualSection];
     return [];
   },
+  createElement() { return downloadLink; },
+  body: {
+    attached: [],
+    appendChild(node) { this.attached.push(node); },
+    removeChild(node) { this.attached = this.attached.filter((each) => each !== node); },
+  },
 };
+globalThis.Blob = class { constructor(parts) { this.parts = parts; } };
+globalThis.URL = Object.assign(globalThis.URL, {
+  createObjectURL(blob) { return `blob:${blob.parts.join("")}`; },
+  revokeObjectURL(href) { revoked.push(href); },
+});
 globalThis.location = { hostname: "example.ui.nabu.casa", reload() {} };
 globalThis.window = { scrollTo() {} };
 globalThis.fetch = async (url, options = {}) => {
@@ -118,7 +129,10 @@ globalThis.fetch = async (url, options = {}) => {
         return { alloy_ready: false, safe_mode: true, manual_override: true };
       }
       if (url === "api/fleet-reference" && options.method === "POST") {
-        return { path: "/fleet-pipeline/reference-token", expires_at: "2026-08-01T18:10:00Z" };
+        return {
+          manifest: "kind: Pipeline\nspec:\n  contents: |-\n    url = \"https://REPLACE-ME.invalid/api/prom/push\"\n",
+          filename: "home-assistant-fleet-pipeline.yaml",
+        };
       }
       if (url === "api/config" && options.method === "POST") {
         return { ok: true, message: "saved" };
@@ -160,22 +174,17 @@ wizardListeners["next:click"]();
 assert.equal(manualToggle.checked, false, "confirming a preselected mode must leave manual override without a change event");
 assert.equal(configHeading.hidden, false, "the recovered mode choice must advance to configuration");
 
+// No destination endpoint is configured; generation must work anyway.
 generateFleetReference();
 await new Promise((resolve) => setTimeout(resolve, 0));
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(
-  fleetReferenceCommand.textContent,
-  "curl -fsSL http://homeassistant.local:8099/fleet-pipeline/reference-token | gcx fleet pipelines create -f -",
-  "the command must pipe the short-lived manifest to gcx",
+assert.equal(fleetReference.hidden, false, "a generated manifest must be shown");
+assert.match(
+  fleetReferenceManifest.value,
+  /REPLACE-ME/,
+  "the editor must hold the rendered manifest including its placeholders",
 );
-assert.equal(
-  fleetReferenceDownload.href,
-  "fleet-pipeline/reference-token",
-  "the browser link must stay relative to the Home Assistant ingress prefix",
-);
-assert.equal(fleetReference.hidden, false);
-assert.equal(fleetReferenceExpiry.hidden, false, "the generated command must reveal its expiry");
-assert.match(fleetReferenceExpiry.textContent, /expires at/, "the expiry message must tell the user when to regenerate the command");
+assert.match(notice.textContent, /Replace every REPLACE-ME/, "the UI must ask for the placeholders to be replaced");
 
 manualToggle.checked = false;
 manualListeners.change();
@@ -184,45 +193,35 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 const saveRequest = requests.find(({ url, method }) => url === "api/config" && method === "POST");
 assert.equal(JSON.parse(saveRequest.body).options.manual_config_enabled, false, "turning off manual override must persist even after its panel is hidden");
 
-directHost.value = "2001:db8::1";
-formListeners.input({ target: directHost });
-generateFleetReference();
-await new Promise((resolve) => setTimeout(resolve, 0));
-await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(
-  fleetReferenceCommand.textContent,
-  "curl -fsSL http://[2001:db8::1]:8099/fleet-pipeline/reference-token | gcx fleet pipelines create -f -",
-  "the explicit direct host must support an unbracketed IPv6 address without requiring a restart",
+// The operator edits the placeholders in the editor. That must neither withdraw
+// the panel nor be discarded by the download.
+fleetReferenceManifest.value = fleetReferenceManifest.value.replace(
+  "https://REPLACE-ME.invalid/api/prom/push",
+  "https://prom-prod.grafana.net/api/prom/push",
 );
+formListeners.input({ target: fleetReferenceManifest });
+assert.equal(fleetReference.hidden, false, "editing the manifest must not withdraw it");
 
-directHost.value = "[2001:db8::1]";
-formListeners.input({ target: directHost });
-generateFleetReference();
-await new Promise((resolve) => setTimeout(resolve, 0));
-await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(
-  fleetReferenceCommand.textContent,
-  "curl -fsSL http://[2001:db8::1]:8099/fleet-pipeline/reference-token | gcx fleet pipelines create -f -",
-  "an already bracketed IPv6 direct host must not be bracketed again",
+downloadFleetReference();
+assert.equal(downloadLink.clicked, 1, "the download button must trigger a download");
+assert.equal(downloadLink.download, "home-assistant-fleet-pipeline.yaml");
+assert.match(
+  downloadLink.href,
+  /prom-prod\.grafana\.net/,
+  "the download must carry the edited manifest, not the rendered one",
 );
+assert.ok(!downloadLink.href.includes("REPLACE-ME"), "the replaced placeholder must not survive in the download");
+assert.deepEqual(revoked, [downloadLink.href], "the object URL must be released");
+assert.deepEqual(document.body.attached, [], "the download anchor must not be left in the document");
 
-const issuedBeforeInvalidHost = requests.filter(({ url, method }) => url === "api/fleet-reference" && method === "POST").length;
-directHost.value = "https://homeassistant.local";
-formListeners.input({ target: directHost });
-generateFleetReference();
-await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(
-  requests.filter(({ url, method }) => url === "api/fleet-reference" && method === "POST").length,
-  issuedBeforeInvalidHost,
-  "a scheme must be rejected before issuing a short-lived manifest",
-);
-assert.match(notice.textContent, /without a scheme/, "the direct-host error must explain the accepted form");
-
+// A settings change invalidates the rendered manifest and blocks regeneration
+// until it is applied, because the manifest is rendered from stored settings.
 const referencePosts = () => requests.filter(({ url, method }) => url === "api/fleet-reference" && method === "POST").length;
 const issuedBeforeEdit = referencePosts();
-formListeners.input();
+formListeners.input({ target: { dataset: {} } });
+assert.equal(fleetReference.hidden, true, "changing a setting must withdraw the stale manifest");
 generateFleetReference();
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(referencePosts(), issuedBeforeEdit, "edited settings must not issue a manifest before restart");
+assert.equal(referencePosts(), issuedBeforeEdit, "edited settings must not render a manifest before restart");
 assert.match(notice.textContent, /Save & restart/, "the UI must explain how to apply edited settings");
 console.log("PASS: configuration reload resets secret controls");

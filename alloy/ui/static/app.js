@@ -15,11 +15,9 @@ const legacyWarning = document.querySelector("#legacy-warning");
 const manualToggle = document.querySelector("#manual_config_enabled");
 const manualPanel = document.querySelector("#manual-config-panel");
 const fleetReference = document.querySelector("#fleet-reference");
-const fleetReferenceCommand = document.querySelector("#fleet-reference-command");
-const fleetReferenceExpiry = document.querySelector("#fleet-reference-expiry");
+const fleetReferenceManifest = document.querySelector("#fleet-reference-manifest");
 const fleetStarterForm = document.querySelector("#fleet-starter-form");
-const fleetReferenceDownload = document.querySelector("#fleet-reference-download");
-const fleetReferenceDirectHost = document.querySelector("#fleet-reference-direct-host");
+let fleetReferenceFilename = "home-assistant-fleet-pipeline.yaml";
 const wizardModeNext = document.querySelector("#wizard-mode-next");
 const wizardModeBack = document.querySelector("#wizard-mode-back");
 const wizardStarterBack = document.querySelector("#wizard-starter-back");
@@ -234,14 +232,7 @@ async function generateFleetReference() {
     setNotice("Save & restart to apply these settings before generating the Fleet starter pipeline.", "error");
     return;
   }
-  let hostname;
-  try {
-    hostname = formatDirectHost(fleetReferenceDirectHost.value);
-  } catch (error) {
-    setNotice(error.message, "error");
-    return;
-  }
-  setNotice("Generating Fleet starter pipeline…");
+  setNotice("Generating Fleet starter pipeline\u2026");
   try {
     const selection = {};
     document.querySelectorAll("[data-starter]").forEach((field) => {
@@ -253,34 +244,33 @@ async function generateFleetReference() {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || "Could not generate Fleet starter pipeline");
-    fleetReferenceCommand.textContent = `curl -fsSL http://${hostname}:8099${data.path} | gcx fleet pipelines create -f -`;
-    const expiry = new Date(data.expires_at);
-    if (Number.isNaN(expiry.getTime())) {
-      fleetReferenceExpiry.hidden = true;
-    } else {
-      fleetReferenceExpiry.textContent = `This command expires at ${expiry.toLocaleString()}. Generate another command if it expires.`;
-      fleetReferenceExpiry.hidden = false;
-    }
-    fleetReferenceDownload.href = data.path.replace(/^\/+/, "");
+    fleetReferenceManifest.value = data.manifest;
+    fleetReferenceFilename = data.filename || fleetReferenceFilename;
     fleetReference.hidden = false;
-    setNotice("Fleet starter pipeline is ready. gcx will create it once; later changes belong in Fleet Management.", "success");
+    setNotice(
+      data.manifest.includes("REPLACE-ME")
+        ? "Replace every REPLACE-ME value in the manifest, then download it and create the pipeline with gcx."
+        : "Fleet starter pipeline is ready. gcx will create it once; later changes belong in Fleet Management.",
+      "success",
+    );
   } catch (error) {
     setNotice(error.message, "error");
   }
 }
 
-function formatDirectHost(value) {
-  const entered = value.trim();
-  if (!entered) throw new Error("Enter the Home Assistant hostname or IP address reachable from your terminal.");
-  const bracketed = entered.startsWith("[") && entered.endsWith("]");
-  const host = bracketed ? entered.slice(1, -1) : entered;
-  if (!host || !/^[a-zA-Z0-9._:%-]+$/.test(host) || entered.includes("/") || entered.includes("@")) {
-    throw new Error("Enter a hostname or IP address without a scheme, port, or path.");
-  }
-  const colonCount = (host.match(/:/g) || []).length;
-  if (colonCount === 1) throw new Error("Enter a hostname or IP address without a scheme, port, or path.");
-  if (bracketed && colonCount < 2) throw new Error("Square brackets are only needed for an IPv6 address.");
-  return colonCount >= 2 ? `[${host}]` : host;
+// The download carries whatever is in the editor, so an operator's placeholder
+// edits are never silently dropped in favour of what the server rendered.
+function downloadFleetReference() {
+  const manifest = new Blob([fleetReferenceManifest.value], { type: "application/yaml" });
+  const href = URL.createObjectURL(manifest);
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = fleetReferenceFilename;
+  // Safari ignores a download click on a detached anchor.
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(href);
 }
 
 modeChoices.forEach((choice) => choice.addEventListener("change", () => {
@@ -307,9 +297,11 @@ wizardModeNext.addEventListener("click", () => {
 wizardModeBack.addEventListener("click", () => showWizardStep("mode"));
 wizardStarterBack.addEventListener("click", () => { starterDismissed = true; showWizardStep("config"); });
 manualToggle.addEventListener("change", () => setManualOverride(manualToggle.checked));
+// A settings edit makes an already generated manifest stale, so it is withdrawn.
+// Editing the manifest itself is transient and must not discard that work.
 function noteFormEdit(event) {
-  fleetReference.hidden = true;
   if (event?.target?.dataset?.transient !== undefined) return;
+  fleetReference.hidden = true;
   if (event?.target?.dataset?.starter !== undefined) return;
   configDirty = true;
 }
@@ -318,5 +310,6 @@ form.addEventListener("change", noteFormEdit);
 form.addEventListener("submit", (event) => { event.preventDefault(); void save(false); });
 document.querySelector("#save-restart").addEventListener("click", () => { void save(true); });
 document.querySelector("#generate-fleet-reference").addEventListener("click", () => { void generateFleetReference(); });
+document.querySelector("#download-fleet-reference").addEventListener("click", downloadFleetReference);
 loadConfig().catch((error) => setNotice(error.message, "error"));
 loadStatus().catch(() => scheduleFleetHealthPoll());
