@@ -228,7 +228,11 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(manifest)
 	})
-	mux.Handle("/", http.FileServer(http.FS(assets)))
+	staticFiles := http.FileServer(http.FS(assets))
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		staticFiles.ServeHTTP(w, r)
+	}))
 	return securityHeaders(mux), nil
 }
 

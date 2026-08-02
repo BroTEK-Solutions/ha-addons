@@ -423,6 +423,15 @@ func TestStaticUIContainsConditionalAccessibleConfiguration(t *testing.T) {
 	if bytes.Contains([]byte(body), []byte("href=\"/alloy/\"")) {
 		t.Fatal("UI uses an ingress-breaking absolute Alloy URL")
 	}
+	if !bytes.Contains([]byte(body), []byte("app.css?v=")) || !bytes.Contains([]byte(body), []byte("app.js?v=")) {
+		t.Fatal("UI assets are not versioned for upgrades")
+	}
+
+	asset := httptest.NewRecorder()
+	handler.ServeHTTP(asset, httptest.NewRequest(http.MethodGet, "/app.js", nil))
+	if asset.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("app.js Cache-Control = %q, want no-store", asset.Header().Get("Cache-Control"))
+	}
 }
 
 func TestJSONResponseShapeIsStable(t *testing.T) {

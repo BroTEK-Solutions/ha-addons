@@ -15,6 +15,7 @@ type browserConfig struct {
 	Options         map[string]any  `json:"options"`
 	Secrets         map[string]bool `json:"secrets"`
 	Mode            string          `json:"mode"`
+	ModeConfigured  bool            `json:"mode_configured"`
 	LegacyHybrid    bool            `json:"legacy_hybrid"`
 	RestartRequired bool            `json:"restart_required"`
 }
@@ -39,13 +40,15 @@ func projectConfig(options map[string]any) browserConfig {
 	}
 
 	mode, explicit := options["operation_mode"].(string)
-	if !explicit || (mode != "fleet" && mode != "local") {
+	validExplicitMode := explicit && (mode == "fleet" || mode == "local")
+	if !validExplicitMode {
 		mode = inferMode(options)
 	}
 	return browserConfig{
 		Options:         projected,
 		Secrets:         configured,
 		Mode:            mode,
+		ModeConfigured:  validExplicitMode,
 		LegacyHybrid:    mode == "legacy-hybrid",
 		RestartRequired: optionEnabled(options, "restart_required"),
 	}

@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Grafana Alloy configuration</title>
-  <link rel="stylesheet" href="app.css">
-  <script src="app.js" defer></script>
+  <link rel="stylesheet" href="app.css?v=20260802-wizard">
+  <script src="app.js?v=20260802-wizard" defer></script>
 </head>
 <body>
   <header>
@@ -24,23 +24,31 @@
     <div id="notice" role="status" aria-live="polite"></div>
     <aside id="runtime-status" role="status" aria-live="polite" hidden></aside>
     <form id="config-form">
-      <section class="card wizard-choice">
+      <section class="card wizard-choice" data-wizard-step="mode">
         <p class="eyebrow">Step 1 of 3</p>
         <h2>Choose an operation mode</h2>
         <p class="help">Fleet runs configuration delivered by Grafana Cloud. Local configuration builds pipelines from the options on this page.</p>
         <fieldset class="mode-cards" aria-label="Operation mode">
           <input id="operation_mode" name="operation_mode" value="fleet" type="radio" required>
-          <label for="operation_mode"><strong>Fleet Management</strong><span>Use pipelines managed in Grafana Cloud.</span></label>
+          <label for="operation_mode"><span class="mode-icon" aria-hidden="true">☁</span><strong>Fleet Management</strong><span>Use pipelines managed in Grafana Cloud.</span></label>
           <input id="operation_mode_local" name="operation_mode" value="local" type="radio">
-          <label for="operation_mode_local"><strong>Local configuration</strong><span>Configure telemetry pipelines in this App.</span></label>
+          <label for="operation_mode_local"><span class="mode-icon" aria-hidden="true">⌂</span><strong>Local configuration</strong><span>Configure telemetry pipelines in this App.</span></label>
         </fieldset>
         <aside id="legacy-warning" hidden>
           This installation currently runs legacy Fleet and local pipelines together. Choose a supported mode before saving; existing behavior remains unchanged until then.
         </aside>
+        <div class="wizard-actions"><button type="button" id="wizard-mode-next" class="primary">Continue</button></div>
+      </section>
+
+      <section class="card wizard-heading" data-wizard-step="config" hidden>
+        <p class="eyebrow">Step 2 of 3</p>
+        <h2>Configure and validate Alloy</h2>
+        <p class="help">Enter the settings for the selected mode. Save &amp; restart validates the configuration before applying it.</p>
+        <button type="button" id="wizard-mode-back">Change operation mode</button>
       </section>
 
       <div data-mode="fleet" hidden>
-        <section class="card">
+        <section class="card" data-wizard-step="config" hidden>
           <h2>Fleet Management</h2>
           <p>Copy the URL and numeric username from the Fleet Management API page. The shared key is also available to remotely supplied pipelines as <code>GCLOUD_RW_API_KEY</code>. This App remains a Fleet consumer and never writes, reconciles or removes Fleet resources itself.</p>
           <div class="grid">
@@ -59,7 +67,8 @@
           </details>
         </section>
 
-        <section class="card" id="fleet-starter-form" hidden>
+        <section class="card" id="fleet-starter-form" data-wizard-step="starter" hidden>
+          <p class="eyebrow">Step 3 of 3</p>
           <h2>Fleet starter pipeline</h2>
           <p>Alloy is healthy. Optionally choose the telemetry for one starter pipeline. These details are used only to render that Fleet manifest; they do not enable local configuration.</p>
           <p><code>gcx</code> creates this pipeline once. The App does not reconcile later changes, disable it, or remove it on uninstall. Continue managing it in Fleet Management after creation.</p>
@@ -80,6 +89,7 @@
           </div>
           <div class="toggles"><label class="switch"><input data-starter="host_metrics" type="checkbox" checked> Host metrics</label><label class="switch"><input data-starter="logs_homeassistant" type="checkbox" checked> Home Assistant logs</label><label class="switch"><input data-starter="traces_enabled" type="checkbox"> Receive traces</label><label class="switch"><input data-starter="alloy_profiling" type="checkbox"> Profile Alloy</label></div>
           <button type="button" id="generate-fleet-reference">Create gcx command</button>
+          <button type="button" id="wizard-starter-back">Back to Fleet settings</button>
           <div id="fleet-reference" hidden>
             <p class="help">Run these commands from a machine that can reach the Home Assistant host.</p>
             <pre><code>brew install grafana/grafana/gcx
@@ -92,7 +102,7 @@ gcx config check</code></pre>
         </section>
       </div>
 
-      <section class="card" data-mode="local fleet">
+      <section class="card" data-mode="local fleet" data-wizard-step="config" hidden>
         <h2>Collector identity</h2>
         <div class="field">
           <label for="instance_name">Instance name</label>
@@ -101,7 +111,7 @@ gcx config check</code></pre>
         </div>
       </section>
 
-      <div data-mode="local" hidden>
+      <div data-mode="local" data-wizard-step="config" hidden>
         <section class="card">
           <h2>Metrics</h2>
           <p>Collect host, Home Assistant, and Alloy metrics and send them to a Prometheus or Mimir remote-write endpoint.</p>
@@ -162,7 +172,7 @@ gcx config check</code></pre>
         </section>
       </div>
 
-      <section class="card" data-mode="local">
+      <section class="card" data-mode="local" data-wizard-step="config" hidden>
         <details>
           <summary>Advanced &amp; optional configuration options</summary>
           <div class="grid advanced">
@@ -175,7 +185,7 @@ gcx config check</code></pre>
         </details>
       </section>
 
-      <section class="card break-glass" data-mode="local" data-manual-control>
+      <section class="card break-glass" data-mode="local" data-manual-control data-wizard-step="config" hidden>
         <label class="switch"><input id="manual_config_enabled" name="manual_config_enabled" type="checkbox"> Full manual Alloy configuration override</label>
         <p class="help">Break-glass mode replaces every generated pipeline with the complete Alloy configuration below. The candidate must pass Alloy validation before it can be saved.</p>
         <div id="manual-config-panel" hidden>
@@ -185,7 +195,7 @@ gcx config check</code></pre>
         </div>
       </section>
 
-      <footer class="actions">
+      <footer class="actions" data-wizard-step="config" hidden>
         <button type="submit">Save</button>
         <button type="button" id="save-restart" class="primary">Save &amp; restart</button>
       </footer>
