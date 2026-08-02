@@ -24,13 +24,16 @@
     <div id="notice" role="status" aria-live="polite"></div>
     <aside id="runtime-status" role="status" aria-live="polite" hidden></aside>
     <form id="config-form">
-      <section class="card">
-        <label for="operation_mode">Operation mode</label>
+      <section class="card wizard-choice">
+        <p class="eyebrow">Step 1 of 3</p>
+        <h2>Choose an operation mode</h2>
         <p class="help">Fleet runs configuration delivered by Grafana Cloud. Local configuration builds pipelines from the options on this page.</p>
-        <select id="operation_mode" name="operation_mode" required>
-          <option value="fleet">Fleet Management</option>
-          <option value="local">Local configuration</option>
-        </select>
+        <fieldset class="mode-cards" aria-label="Operation mode">
+          <input id="operation_mode" name="operation_mode" value="fleet" type="radio" required>
+          <label for="operation_mode"><strong>Fleet Management</strong><span>Use pipelines managed in Grafana Cloud.</span></label>
+          <input id="operation_mode_local" name="operation_mode" value="local" type="radio">
+          <label for="operation_mode_local"><strong>Local configuration</strong><span>Configure telemetry pipelines in this App.</span></label>
+        </fieldset>
         <aside id="legacy-warning" hidden>
           This installation currently runs legacy Fleet and local pipelines together. Choose a supported mode before saving; existing behavior remains unchanged until then.
         </aside>
@@ -55,29 +58,39 @@
           </details>
         </section>
 
-        <section class="card">
+        <section class="card" id="fleet-starter-form" hidden>
           <h2>Fleet starter pipeline</h2>
-          <p>Select the metrics, logs, traces and profiles below, then use <strong>Save &amp; restart</strong> before generating a short-lived download command. The manifest contains endpoints and tenant IDs, but references the stored shared key through <code>GCLOUD_RW_API_KEY</code>; the key itself is never served.</p>
+          <p>Alloy is healthy. Optionally choose the telemetry for one starter pipeline. These details are used only to render that Fleet manifest; they do not enable local configuration.</p>
           <p><code>gcx</code> creates this pipeline once. The App does not reconcile later changes, disable it, or remove it on uninstall. Continue managing it in Fleet Management after creation.</p>
           <div class="field">
             <label for="fleet-reference-direct-host">Home Assistant host for the terminal command</label>
             <p class="help">A hostname or IP address reachable from the machine running <code>gcx</code>, without a scheme or port. This affects only the displayed command and is not saved.</p>
             <input id="fleet-reference-direct-host" value="homeassistant.local" autocomplete="off" data-transient>
           </div>
-          <button type="button" id="generate-fleet-reference">Generate 10-minute gcx command</button>
+          <div class="grid">
+            <div class="field"><label for="starter_loki_url">Loki endpoint</label><input id="starter_loki_url" data-starter="loki_url" type="url"></div>
+            <div class="field"><label for="starter_loki_username">Loki tenant</label><input id="starter_loki_username" data-starter="loki_username"></div>
+            <div class="field"><label for="starter_prometheus_url">Prometheus endpoint</label><input id="starter_prometheus_url" data-starter="prometheus_url" type="url"></div>
+            <div class="field"><label for="starter_prometheus_username">Prometheus tenant</label><input id="starter_prometheus_username" data-starter="prometheus_username"></div>
+            <div class="field"><label for="starter_tempo_url">Tempo endpoint</label><input id="starter_tempo_url" data-starter="tempo_url" type="url"></div>
+            <div class="field"><label for="starter_tempo_username">Tempo tenant</label><input id="starter_tempo_username" data-starter="tempo_username"></div>
+            <div class="field"><label for="starter_pyroscope_url">Pyroscope endpoint</label><input id="starter_pyroscope_url" data-starter="pyroscope_url" type="url"></div>
+            <div class="field"><label for="starter_pyroscope_username">Pyroscope tenant</label><input id="starter_pyroscope_username" data-starter="pyroscope_username"></div>
+          </div>
+          <div class="toggles"><label class="switch"><input data-starter="host_metrics" type="checkbox" checked> Host metrics</label><label class="switch"><input data-starter="logs_homeassistant" type="checkbox" checked> Home Assistant logs</label><label class="switch"><input data-starter="traces_enabled" type="checkbox"> Receive traces</label><label class="switch"><input data-starter="alloy_profiling" type="checkbox"> Profile Alloy</label></div>
+          <button type="button" id="generate-fleet-reference">Create gcx command</button>
           <div id="fleet-reference" hidden>
-            <p class="help">Run this from a machine that can reach the Home Assistant host and whose <code>gcx</code> context targets the intended Grafana Cloud stack.</p>
+            <p class="help">Run these commands from a machine that can reach the Home Assistant host.</p>
+            <pre><code>brew install grafana/grafana/gcx
+gcx login home-assistant --server https://YOUR-STACK.grafana.net --oauth
+gcx config check</code></pre>
             <pre><code id="fleet-reference-command"></code></pre>
-            <p id="fleet-reference-expiry" class="help"></p>
             <a id="fleet-reference-download" href="#" download="home-assistant-fleet-pipeline.yaml">Download the manifest instead</a>
           </div>
         </section>
       </div>
 
-      <div data-mode="local fleet" hidden>
-        <aside data-mode="fleet" hidden>
-          These controls build the one-time Fleet starter manifest; they do not create local pipelines while Fleet mode is selected. Destination passwords use the shared Grafana Cloud key above.
-        </aside>
+      <div data-mode="local" hidden>
         <section class="card">
           <h2>Metrics</h2>
           <p>Collect host, Home Assistant, and Alloy metrics and send them to a Prometheus or Mimir remote-write endpoint.</p>
@@ -138,7 +151,7 @@
         </section>
       </div>
 
-      <section class="card">
+      <section class="card" data-mode="local">
         <details>
           <summary>Advanced &amp; optional configuration options</summary>
           <div class="grid advanced">

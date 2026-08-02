@@ -1,4 +1,9 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const html = await readFile(new URL("../ui/static/index.html", import.meta.url), "utf8");
+assert.match(html, /<input[^>]+name="operation_mode"[^>]+type="radio"/, "mode choice must use accessible radio cards");
+assert.doesNotMatch(html, /<select id="operation_mode"/, "mode choice must not use a select");
 
 const secretField = {
   name: "loki_password",

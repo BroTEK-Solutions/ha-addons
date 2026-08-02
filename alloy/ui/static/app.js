@@ -1,17 +1,27 @@
 const form = document.querySelector("#config-form");
 const notice = document.querySelector("#notice");
 const runtimeStatus = document.querySelector("#runtime-status");
-const modeSelect = document.querySelector("#operation_mode");
+const discoveredModeChoices = Array.from(document.querySelectorAll('input[name="operation_mode"]'));
+const modeChoices = discoveredModeChoices.length > 0 ? discoveredModeChoices : [document.querySelector("#operation_mode")];
+const modeSelect = {
+  get value() { return modeChoices.find((choice) => choice.checked)?.value || ""; },
+  set value(value) { modeChoices.forEach((choice) => { choice.checked = choice.value === value; }); },
+  get required() { return modeChoices.some((choice) => choice.required); },
+  set required(value) { modeChoices.forEach((choice) => { choice.required = value; }); },
+  get disabled() { return modeChoices.every((choice) => choice.disabled); },
+  set disabled(value) { modeChoices.forEach((choice) => { choice.disabled = value; }); },
+};
 const legacyWarning = document.querySelector("#legacy-warning");
 const manualToggle = document.querySelector("#manual_config_enabled");
 const manualPanel = document.querySelector("#manual-config-panel");
 const fleetReference = document.querySelector("#fleet-reference");
 const fleetReferenceCommand = document.querySelector("#fleet-reference-command");
-const fleetReferenceExpiry = document.querySelector("#fleet-reference-expiry");
+const fleetStarterForm = document.querySelector("#fleet-starter-form");
 const fleetReferenceDownload = document.querySelector("#fleet-reference-download");
 const fleetReferenceDirectHost = document.querySelector("#fleet-reference-direct-host");
 let configDirty = false;
 let configApplied = false;
+let alloyHealthy = false;
 const defaults = {
   instance_name: "homeassistant", metrics_scrape_interval: "60s", fleet_poll_frequency: "1m",
   logs_exclude_addons: "alloy", logs_max_age: "24h", log_level: "info",
@@ -34,9 +44,16 @@ async function loadStatus() {
   const messages = [];
   if (status.safe_mode) messages.push("Safe mode is active; saved pipelines are not running.");
   if (!status.alloy_ready) messages.push("Alloy is not ready, but this recovery page remains available.");
+  alloyHealthy = Boolean(status.alloy_healthy);
+  if (status.alloy_ready && !alloyHealthy) messages.push("Alloy has started but one or more components are unhealthy.");
   if (status.manual_override) messages.push("The full manual configuration override is active.");
   runtimeStatus.textContent = messages.join(" ");
   runtimeStatus.hidden = messages.length === 0;
+  updateFleetStarterVisibility();
+}
+
+function updateFleetStarterVisibility() {
+  if (fleetStarterForm) fleetStarterForm.hidden = modeSelect.value !== "fleet" || !configApplied || !alloyHealthy;
 }
 
 function setMode(mode) {
@@ -84,6 +101,7 @@ async function loadConfig() {
   setMode(modeSelect.value);
   setManualOverride(manualToggle.checked);
   configApplied = !data.restart_required;
+  updateFleetStarterVisibility();
   configDirty = false;
   setNotice("");
 }
@@ -116,7 +134,16 @@ async function save(restart) {
     if (!response.ok) throw new Error(data.message || "Could not save configuration");
     if (restart) {
       setNotice("Configuration saved. Restarting Alloy; this page will briefly disconnect.", "success");
-      const restartResponse = await fetch("api/restart", { method: "POST", headers: { Accept: "application/json" } });
+      let restartResponse;
+      try {
+        restartResponse = await fetch("api/restart", { method: "POST", headers: { Accept: "application/json" } });
+      } catch {
+        // Supervisor can terminate this add-on before the browser receives the
+        // queued-restart response. Reconnect to establish the actual outcome.
+        setNotice("Configuration saved. Reconnecting while Alloy restarts…", "success");
+        setTimeout(() => location.reload(), 8000);
+        return true;
+      }
       if (!restartResponse.ok) throw new Error("Configuration was saved, but restart could not be requested");
       setTimeout(() => location.reload(), 8000);
     } else {
@@ -147,11 +174,17 @@ async function generateFleetReference() {
   }
   setNotice("Generating Fleet starter pipeline…");
   try {
-    const response = await fetch("api/fleet-reference", { method: "POST", headers: { Accept: "application/json" } });
+    const selection = {};
+    document.querySelectorAll("[data-starter]").forEach((field) => {
+      selection[field.dataset.starter] = field.type === "checkbox" ? field.checked : field.value;
+    });
+    const response = await fetch("api/fleet-reference", {
+      method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ selection }),
+    });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || "Could not generate Fleet starter pipeline");
     fleetReferenceCommand.textContent = `curl -fsSL http://${hostname}:8099${data.path} | gcx fleet pipelines create -f -`;
-    fleetReferenceExpiry.textContent = `This download expires at ${new Date(data.expires_at).toLocaleTimeString()}.`;
     fleetReferenceDownload.href = data.path.replace(/^\/+/, "");
     fleetReference.hidden = false;
     setNotice("Fleet starter pipeline is ready. gcx will create it once; later changes belong in Fleet Management.", "success");
@@ -174,7 +207,7 @@ function formatDirectHost(value) {
   return colonCount >= 2 ? `[${host}]` : host;
 }
 
-modeSelect.addEventListener("change", () => { legacyWarning.hidden = true; setMode(modeSelect.value); });
+modeChoices.forEach((choice) => choice.addEventListener("change", () => { legacyWarning.hidden = true; setMode(modeSelect.value); }));
 manualToggle.addEventListener("change", () => setManualOverride(manualToggle.checked));
 function noteFormEdit(event) {
   fleetReference.hidden = true;

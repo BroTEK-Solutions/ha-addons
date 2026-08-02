@@ -40,33 +40,41 @@ default; the minimum supported poll interval is 10 seconds.
 
 #### Optional Fleet starter pipeline
 
-Fleet mode remains consume-only: the App never calls the Fleet write API. To
-help with initial setup, the Web UI exposes the same metrics, logs, traces and
-profiles controls as Local mode and can render those selections as one Fleet
-`Pipeline` manifest.
+Fleet mode remains consume-only: the App never calls the Fleet write API. Once
+Alloy is ready and healthy, the Web UI offers a separate starter-pipeline step.
+Its telemetry destinations are used only to render one Fleet `Pipeline`
+manifest; they do not configure local Alloy pipelines or persist as local
+settings.
 
-Save and restart with the Fleet settings and selected telemetry. Enter a Home
-Assistant hostname or IP address that is reachable from the terminal where
-`gcx` will run, then choose **Generate 10-minute gcx command**. This explicit
-direct host is needed when the Web UI was opened through Home Assistant Cloud
-or another reverse proxy; it affects only the displayed command and is not
-saved. The command has this form:
+Save and restart with the Fleet settings. The UI waits until the saved
+configuration is applied and Alloy is ready and healthy before offering the
+starter step. Enter a Home Assistant hostname or IP address that is reachable
+from the terminal where `gcx` will run. This explicit direct host is needed
+when the Web UI was opened through Home Assistant Cloud or another reverse
+proxy; it affects only the displayed command and is not saved. Run:
 
 ```sh
 curl -fsSL http://homeassistant.local:8099/fleet-pipeline/SHORT_LIVED_TOKEN \
   | gcx fleet pipelines create -f -
 ```
 
-Before running it, install `gcx`, select the intended Grafana Cloud context and
-confirm it with `gcx config check`. The token in that local `gcx` context needs
+Before creating the manifest, install and authenticate `gcx`:
+
+```sh
+brew install grafana/grafana/gcx
+gcx login home-assistant --server https://YOUR-STACK.grafana.net --oauth
+gcx config check
+```
+
+The token in that local `gcx` context needs
 permission to create Fleet Management pipelines. It is separate from the App's
 stored shared key: the stored key authenticates Alloy's Fleet polling and the
 generated telemetry writes, while `gcx` performs the one-time Fleet mutation.
 
 The served manifest contains the configured backend URLs and numeric tenant
 IDs, but no credentials. Backend authentication remains a runtime
-`sys.env("GCLOUD_RW_API_KEY")` reference. The random download URL expires after
-10 minutes and is held only in memory. The configuration and restart APIs stay
+`sys.env("GCLOUD_RW_API_KEY")` reference. The random download URL is held only
+in memory. The configuration and restart APIs stay
 restricted to Home Assistant ingress.
 
 The generated pipeline name starts with `home-assistant-<instance-name>` and
