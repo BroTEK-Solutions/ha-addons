@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -44,6 +45,10 @@ type statusResponse struct {
 type fleetReferenceResponse struct {
 	Path      string    `json:"path"`
 	ExpiresAt time.Time `json:"expires_at"`
+}
+
+type fleetReferenceRequest struct {
+	Selection *fleetStarterSelection `json:"selection"`
 }
 
 func newAppHandler(store settingsStore, validator candidateValidator, supervisor supervisorAPI, alloyURL string) (http.Handler, error) {
@@ -154,6 +159,25 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 			writeError(w, http.StatusServiceUnavailable, errors.New("Fleet starter pipeline generation is unavailable"))
 			return
 		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			writeError(w, http.StatusUnsupportedMediaType, errors.New("Content-Type must be application/json"))
+			return
+		}
+		var input fleetReferenceRequest
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("invalid request: %w", err))
+			return
+		}
+		if err := decoder.Decode(&struct{}{}); err != io.EOF {
+			writeError(w, http.StatusBadRequest, errors.New("invalid request: only one JSON value is allowed"))
+			return
+		}
+		if input.Selection == nil {
+			writeError(w, http.StatusBadRequest, errors.New("select starter pipeline telemetry before generating it"))
+			return
+		}
 		if envBool("SAFE_MODE") {
 			writeError(w, http.StatusConflict, errors.New("disable Safe mode and restart Alloy before generating a Fleet starter pipeline"))
 			return
@@ -167,7 +191,12 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 			writeError(w, http.StatusConflict, errors.New("restart Alloy to apply saved settings before generating a Fleet starter pipeline"))
 			return
 		}
-		issued, err := references.Issue(r.Context(), settings)
+		starterSettings, err := fleetStarterSettings(settings, *input.Selection)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		issued, err := references.Issue(r.Context(), starterSettings)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
