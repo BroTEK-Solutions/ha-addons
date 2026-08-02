@@ -51,6 +51,9 @@ type fleetStarterSelection struct {
 }
 
 func fleetStarterSettings(stored map[string]any, selection fleetStarterSelection) (map[string]any, error) {
+	if optionEnabled(stored, "manual_config_enabled") {
+		return nil, errors.New("disable the full manual configuration override before generating a Fleet starter pipeline")
+	}
 	if mode, _ := stored["operation_mode"].(string); mode != "fleet" {
 		return nil, errors.New("Fleet Management must be the active operation mode before generating a Fleet starter pipeline")
 	}

@@ -114,7 +114,7 @@ func TestFleetStarterSettingsUsesOnlyTransientSelection(t *testing.T) {
 		"gcloud_rw_api_key":     "SENTINEL-SECRET",
 		"loki_url":              "https://stored-local.example/loki/api/v1/push",
 		"loki_password":         "stored-local-secret",
-		"manual_config_enabled": true,
+		"manual_config_enabled": false,
 	}
 	selection := fleetStarterSelection{
 		LokiURL:           "https://chosen.example/loki/api/v1/push",
@@ -149,6 +149,20 @@ func TestFleetStarterSettingsRejectsNonFleetStoredMode(t *testing.T) {
 
 	if _, err := fleetStarterSettings(stored, fleetStarterSelection{LokiURL: "https://logs.example/loki/api/v1/push"}); err == nil || !strings.Contains(err.Error(), "Fleet Management") {
 		t.Fatalf("fleetStarterSettings() error = %v, want active Fleet mode", err)
+	}
+}
+
+func TestFleetStarterSettingsRejectsManualOverride(t *testing.T) {
+	stored := map[string]any{
+		"operation_mode":        "fleet",
+		"manual_config_enabled": true,
+		"fleet_url":             "https://fleet.example",
+		"fleet_username":        "123",
+		"gcloud_rw_api_key":     "SENTINEL-SECRET",
+	}
+
+	if _, err := fleetStarterSettings(stored, fleetStarterSelection{LokiURL: "https://logs.example/loki/api/v1/push"}); err == nil || !strings.Contains(err.Error(), "manual configuration override") {
+		t.Fatalf("fleetStarterSettings() error = %v, want active manual override rejection", err)
 	}
 }
 
