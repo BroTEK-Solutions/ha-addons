@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.1.1](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.1.0...alloy-v2.1.1) (2026-08-02)
+
+
+### Bug Fixes
+
+* **alloy:** confirm preselected wizard mode ([9af9884](https://github.com/BroTEK-Solutions/ha-addons/commit/9af988421630d6e8dbcb642f026c190a40dd42c7))
+* **alloy:** harden and stage the v2.1.0 onboarding wizard ([5635409](https://github.com/BroTEK-Solutions/ha-addons/commit/563540965c5234a17280ef0ae880be7edaf0f9c2))
+* **alloy:** preserve unsaved wizard settings ([28f8340](https://github.com/BroTEK-Solutions/ha-addons/commit/28f8340ba8341c657b81082c345fdb21bb75c0e3))
+* **alloy:** repair onboarding UI upgrades ([93f4cc4](https://github.com/BroTEK-Solutions/ha-addons/commit/93f4cc4e1079a7362f6b89d34110b2a372eae5d7))
+
 ## [2.1.0](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.0.0...alloy-v2.1.0) (2026-08-02)
 
 
