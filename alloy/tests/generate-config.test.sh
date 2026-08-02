@@ -210,8 +210,12 @@ OUT="$(gen OPERATION_MODE=local LOKI_URL=https://logs.example.net/loki/api/v1/pu
   LOGS_EXCLUDE_ADDONS=alloy,example LOGS_MAX_AGE=24h)"
 check_contains "$OUT" 'max_age      = "24h"'
 check_contains "$OUT" 'action        = "drop"'
-check_contains "$OUT" 'app_(?:[^_]+_)?alloy|app_(?:[^_]+_)?example'
+check_contains "$OUT" '(?:app|addon)_(?:[^_]+_)?alloy|(?:app|addon)_(?:[^_]+_)?example'
 validate_alloy "$OUT" "filtered-journal"
+
+OUT="$(gen OPERATION_MODE=local LOKI_URL=https://logs.example.net/loki/api/v1/push LOGS_ADDONS=false)"
+check_contains "$OUT" 'regex         = "^(?:app|addon)_.*$"'
+validate_alloy "$OUT" "all-add-on-journals-disabled"
 
 OUT="$(gen OPERATION_MODE=local TRACES_ENABLED=true \
   TEMPO_URL=https://tempo.example.net/otlp TEMPO_USERNAME=123)"
