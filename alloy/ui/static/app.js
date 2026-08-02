@@ -72,7 +72,7 @@ async function loadStatus() {
 function updateFleetStarterVisibility() {
   const available = modeSelect.value === "fleet" && configApplied && !safeMode && alloyReady && alloyHealthy;
   if (!wizardInitialized) return;
-  if (available && wizardStep === "config" && !starterDismissed) showWizardStep("starter");
+  if (available && !configDirty && wizardStep === "config" && !starterDismissed) showWizardStep("starter");
   if (!available && wizardStep === "starter") showWizardStep("config");
 }
 

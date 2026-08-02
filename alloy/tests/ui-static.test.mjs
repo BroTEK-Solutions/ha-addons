@@ -31,6 +31,7 @@ assert.match(appSource, /function showWizardStep\(step\)/, "wizard navigation mu
 assert.match(appSource, /function reportSavedFormValidity\(\)/, "starter controls must be excluded from saved-form validation");
 assert.match(appSource, /let safeMode = false;/, "Fleet starter visibility must track Safe mode");
 assert.match(appSource, /configApplied && !safeMode && alloyReady && alloyHealthy/, "Fleet starter must stay hidden during Safe mode");
+assert.match(appSource, /available && !configDirty && wizardStep === "config"/, "health polling must not hide unsaved Fleet settings");
 
 const secretField = {
   name: "loki_password",
