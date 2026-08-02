@@ -22,6 +22,7 @@ const fleetReferenceDownload = document.querySelector("#fleet-reference-download
 const fleetReferenceDirectHost = document.querySelector("#fleet-reference-direct-host");
 let configDirty = false;
 let configApplied = false;
+let safeMode = false;
 let alloyReady = false;
 let alloyHealthy = false;
 let healthPollTimer = null;
@@ -49,6 +50,7 @@ async function loadStatus() {
     return;
   }
   const messages = [];
+  safeMode = Boolean(status.safe_mode);
   if (status.safe_mode) messages.push("Safe mode is active; saved pipelines are not running.");
   if (!status.alloy_ready) messages.push("Alloy is not ready, but this recovery page remains available.");
   alloyReady = Boolean(status.alloy_ready);
@@ -62,11 +64,11 @@ async function loadStatus() {
 }
 
 function updateFleetStarterVisibility() {
-  if (fleetStarterForm) fleetStarterForm.hidden = modeSelect.value !== "fleet" || !configApplied || !alloyReady || !alloyHealthy;
+  if (fleetStarterForm) fleetStarterForm.hidden = modeSelect.value !== "fleet" || !configApplied || safeMode || !alloyReady || !alloyHealthy;
 }
 
 function scheduleFleetHealthPoll() {
-  const waitingForFleetHealth = modeSelect.value === "fleet" && configApplied && (!alloyReady || !alloyHealthy);
+  const waitingForFleetHealth = modeSelect.value === "fleet" && configApplied && !safeMode && (!alloyReady || !alloyHealthy);
   if (!waitingForFleetHealth || healthPollTimer) return;
   healthPollTimer = setTimeout(() => {
     healthPollTimer = null;
@@ -147,8 +149,17 @@ function serialize() {
   return { options, secrets };
 }
 
+function reportSavedFormValidity() {
+  const starterFields = Array.from(form.querySelectorAll("[data-starter]"));
+  const previousDisabled = starterFields.map((field) => field.disabled);
+  starterFields.forEach((field) => { field.disabled = true; });
+  const valid = form.reportValidity();
+  starterFields.forEach((field, index) => { field.disabled = previousDisabled[index]; });
+  return valid;
+}
+
 async function save(restart) {
-  if (!form.reportValidity()) return false;
+  if (!reportSavedFormValidity()) return false;
   setNotice("Validating and saving…");
   document.querySelectorAll("button").forEach((button) => { button.disabled = true; });
   try {

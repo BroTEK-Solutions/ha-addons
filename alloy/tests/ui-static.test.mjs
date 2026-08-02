@@ -16,6 +16,9 @@ assert.match(appSource, /let alloyReady = false;/, "Fleet starter availability m
 assert.match(appSource, /!alloyReady \|\| !alloyHealthy/, "Fleet starter must require both readiness and health");
 assert.match(appSource, /setTimeout\(\(\) => \{\s+healthPollTimer = null;\s+void loadStatus\(\)\.catch/, "the UI must keep checking health while Fleet starts");
 assert.match(html, /id="fleet-reference-expiry"/, "the generated command must show its expiry");
+assert.match(appSource, /function reportSavedFormValidity\(\)/, "starter controls must be excluded from saved-form validation");
+assert.match(appSource, /let safeMode = false;/, "Fleet starter visibility must track Safe mode");
+assert.match(appSource, /\|\| safeMode/, "Fleet starter must stay hidden during Safe mode");
 
 const secretField = {
   name: "loki_password",
