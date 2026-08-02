@@ -86,6 +86,7 @@
 gcx login home-assistant --server https://YOUR-STACK.grafana.net --oauth
 gcx config check</code></pre>
             <pre><code id="fleet-reference-command"></code></pre>
+            <p id="fleet-reference-expiry" class="help" hidden></p>
             <a id="fleet-reference-download" href="#" download="home-assistant-fleet-pipeline.yaml">Download the manifest instead</a>
           </div>
         </section>
@@ -170,17 +171,18 @@ gcx config check</code></pre>
             <div><label class="switch"><input name="alloy_disable_telemetry" type="checkbox" checked> Disable anonymous Alloy usage reporting</label><p class="help">Pass <code>--disable-reporting</code> so Alloy sends no anonymous feature-usage report to Grafana.</p></div>
             <div class="field wide"><label for="alloy_additional_args">Additional Alloy startup flags</label><p class="help">Whitespace-separated <code>--flag</code> or <code>--flag=value</code> arguments. Invalid flags are rejected before saving.</p><textarea id="alloy_additional_args" name="alloy_additional_args" rows="3"></textarea></div>
             <div class="field wide" data-mode="local"><label for="additional_config">Additional Alloy configuration</label><p class="help">River blocks appended verbatim after the generated configuration.</p><textarea id="additional_config" name="additional_config" rows="8" spellcheck="false"></textarea></div>
-            <div class="field wide break-glass">
-              <label class="switch"><input id="manual_config_enabled" name="manual_config_enabled" type="checkbox"> Full manual Alloy configuration override</label>
-              <p class="help">Break-glass mode replaces every generated pipeline with the complete Alloy configuration below. The candidate must pass Alloy validation before it can be saved.</p>
-              <div id="manual-config-panel" hidden>
-                <aside>Generated Fleet and Local settings are ignored while this override is enabled. Stored credentials remain available through their documented environment variables.</aside>
-                <label for="manual_config">Complete config.alloy contents</label>
-                <textarea id="manual_config" name="manual_config" rows="18" spellcheck="false" disabled></textarea>
-              </div>
-            </div>
           </div>
         </details>
+      </section>
+
+      <section class="card break-glass" data-mode="local" data-manual-control>
+        <label class="switch"><input id="manual_config_enabled" name="manual_config_enabled" type="checkbox"> Full manual Alloy configuration override</label>
+        <p class="help">Break-glass mode replaces every generated pipeline with the complete Alloy configuration below. The candidate must pass Alloy validation before it can be saved.</p>
+        <div id="manual-config-panel" hidden>
+          <aside>Generated Fleet and Local settings are ignored while this override is enabled. Stored credentials remain available through their documented environment variables.</aside>
+          <label for="manual_config">Complete config.alloy contents</label>
+          <textarea id="manual_config" name="manual_config" rows="18" spellcheck="false" disabled></textarea>
+        </div>
       </section>
 
       <footer class="actions">

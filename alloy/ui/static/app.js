@@ -16,12 +16,15 @@ const manualToggle = document.querySelector("#manual_config_enabled");
 const manualPanel = document.querySelector("#manual-config-panel");
 const fleetReference = document.querySelector("#fleet-reference");
 const fleetReferenceCommand = document.querySelector("#fleet-reference-command");
+const fleetReferenceExpiry = document.querySelector("#fleet-reference-expiry");
 const fleetStarterForm = document.querySelector("#fleet-starter-form");
 const fleetReferenceDownload = document.querySelector("#fleet-reference-download");
 const fleetReferenceDirectHost = document.querySelector("#fleet-reference-direct-host");
 let configDirty = false;
 let configApplied = false;
+let alloyReady = false;
 let alloyHealthy = false;
+let healthPollTimer = null;
 const defaults = {
   instance_name: "homeassistant", metrics_scrape_interval: "60s", fleet_poll_frequency: "1m",
   logs_exclude_addons: "alloy", logs_max_age: "24h", log_level: "info",
@@ -41,25 +44,40 @@ function setNotice(message, kind = "") {
 async function loadStatus() {
   const response = await fetch("api/status", { headers: { Accept: "application/json" } });
   const status = await response.json();
-  if (!response.ok) return;
+  if (!response.ok) {
+    scheduleFleetHealthPoll();
+    return;
+  }
   const messages = [];
   if (status.safe_mode) messages.push("Safe mode is active; saved pipelines are not running.");
   if (!status.alloy_ready) messages.push("Alloy is not ready, but this recovery page remains available.");
+  alloyReady = Boolean(status.alloy_ready);
   alloyHealthy = Boolean(status.alloy_healthy);
   if (status.alloy_ready && !alloyHealthy) messages.push("Alloy has started but one or more components are unhealthy.");
   if (status.manual_override) messages.push("The full manual configuration override is active.");
   runtimeStatus.textContent = messages.join(" ");
   runtimeStatus.hidden = messages.length === 0;
   updateFleetStarterVisibility();
+  scheduleFleetHealthPoll();
 }
 
 function updateFleetStarterVisibility() {
-  if (fleetStarterForm) fleetStarterForm.hidden = modeSelect.value !== "fleet" || !configApplied || !alloyHealthy;
+  if (fleetStarterForm) fleetStarterForm.hidden = modeSelect.value !== "fleet" || !configApplied || !alloyReady || !alloyHealthy;
+}
+
+function scheduleFleetHealthPoll() {
+  const waitingForFleetHealth = modeSelect.value === "fleet" && configApplied && (!alloyReady || !alloyHealthy);
+  if (!waitingForFleetHealth || healthPollTimer) return;
+  healthPollTimer = setTimeout(() => {
+    healthPollTimer = null;
+    void loadStatus().catch(() => scheduleFleetHealthPoll());
+  }, 2000);
 }
 
 function setMode(mode) {
   document.querySelectorAll("[data-mode]").forEach((section) => {
-    const active = section.dataset.mode.split(/\s+/).includes(mode);
+    const isManualControl = section.dataset.manualControl !== undefined;
+    const active = isManualControl ? manualToggle.checked || mode === "local" : section.dataset.mode.split(/\s+/).includes(mode);
     section.hidden = !active;
     section.querySelectorAll("input,select,textarea").forEach((field) => { field.disabled = !active; });
   });
@@ -107,6 +125,7 @@ async function loadConfig() {
   setManualOverride(manualToggle.checked);
   configApplied = !data.restart_required;
   updateFleetStarterVisibility();
+  scheduleFleetHealthPoll();
   configDirty = false;
   setNotice("");
 }
@@ -124,6 +143,7 @@ function serialize() {
     if (clear?.checked) secrets[field.name] = "";
     else if (field.value) secrets[field.name] = field.value;
   });
+  options.manual_config_enabled = manualToggle.checked;
   return { options, secrets };
 }
 
@@ -191,6 +211,13 @@ async function generateFleetReference() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || "Could not generate Fleet starter pipeline");
     fleetReferenceCommand.textContent = `curl -fsSL http://${hostname}:8099${data.path} | gcx fleet pipelines create -f -`;
+    const expiry = new Date(data.expires_at);
+    if (Number.isNaN(expiry.getTime())) {
+      fleetReferenceExpiry.hidden = true;
+    } else {
+      fleetReferenceExpiry.textContent = `This command expires at ${expiry.toLocaleString()}. Generate another command if it expires.`;
+      fleetReferenceExpiry.hidden = false;
+    }
     fleetReferenceDownload.href = data.path.replace(/^\/+/, "");
     fleetReference.hidden = false;
     setNotice("Fleet starter pipeline is ready. gcx will create it once; later changes belong in Fleet Management.", "success");
@@ -227,4 +254,4 @@ form.addEventListener("submit", (event) => { event.preventDefault(); void save(f
 document.querySelector("#save-restart").addEventListener("click", () => { void save(true); });
 document.querySelector("#generate-fleet-reference").addEventListener("click", () => { void generateFleetReference(); });
 loadConfig().catch((error) => setNotice(error.message, "error"));
-loadStatus().catch(() => {});
+loadStatus().catch(() => scheduleFleetHealthPoll());
