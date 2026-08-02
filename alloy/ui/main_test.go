@@ -137,6 +137,39 @@ func TestStatusAPIReportsRecoveryStateWhenAlloyIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestStatusAPIReportsComponentHealthSeparatelyFromReadiness(t *testing.T) {
+	alloy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/-/ready":
+			w.WriteHeader(http.StatusOK)
+		case "/-/healthy":
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer alloy.Close()
+	handler, err := newAppHandler(&fakeStore{settings: map[string]any{}}, fakeValidator{}, &fakeSupervisor{}, alloy.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/status", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /api/status = %d %s", response.Code, response.Body.String())
+	}
+	var status struct {
+		AlloyReady   bool `json:"alloy_ready"`
+		AlloyHealthy bool `json:"alloy_healthy"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &status); err != nil {
+		t.Fatal(err)
+	}
+	if !status.AlloyReady || !status.AlloyHealthy {
+		t.Fatalf("status = %#v, want ready and healthy", status)
+	}
+}
+
 func TestConfigAPIRejectsCandidateBeforePersistence(t *testing.T) {
 	store := &fakeStore{settings: map[string]any{"operation_mode": "local", "loki_url": "https://old.example"}}
 	handler, err := newAppHandler(store, fakeValidator{err: errors.New("Alloy rejected candidate")}, &fakeSupervisor{}, "http://127.0.0.1:12345")
@@ -233,14 +266,21 @@ func TestFleetReferenceAPIIssuesABriefPublicDownloadWithoutExposingControlPlane(
 		func() time.Time { return now },
 		10*time.Minute,
 	)
-	store := &fakeStore{settings: map[string]any{"operation_mode": "fleet"}}
+	store := &fakeStore{settings: map[string]any{
+		"operation_mode":    "fleet",
+		"fleet_url":         "https://fleet.example",
+		"fleet_username":    "123",
+		"gcloud_rw_api_key": "stored-secret",
+	}}
 	handler, err := newAppHandlerWithReferences(store, fakeValidator{}, &fakeSupervisor{}, broker, "http://127.0.0.1:12345")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	issueResponse := httptest.NewRecorder()
-	handler.ServeHTTP(issueResponse, httptest.NewRequest(http.MethodPost, "/api/fleet-reference", nil))
+	issueRequest := httptest.NewRequest(http.MethodPost, "/api/fleet-reference", strings.NewReader(`{"selection":{"loki_url":"https://logs.example/loki/api/v1/push"}}`))
+	issueRequest.Header.Set("Content-Type", "application/json")
+	handler.ServeHTTP(issueResponse, issueRequest)
 	if issueResponse.Code != http.StatusCreated {
 		t.Fatalf("POST /api/fleet-reference = %d %s", issueResponse.Code, issueResponse.Body.String())
 	}
@@ -289,9 +329,35 @@ func TestFleetReferenceAPIRequiresAppliedSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/fleet-reference", nil))
+	request := httptest.NewRequest(http.MethodPost, "/api/fleet-reference", strings.NewReader(`{"selection":{"loki_url":"https://logs.example/loki/api/v1/push"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "restart") {
 		t.Fatalf("POST /api/fleet-reference = %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestFleetReferenceAPIRejectsSecretBearingStarterSelections(t *testing.T) {
+	broker := newFleetReferenceBroker(
+		staticFleetRenderer{contents: []byte("kind: Pipeline\n")},
+		strings.NewReader("01234567890123456789012345678901"),
+		time.Now,
+		10*time.Minute,
+	)
+	store := &fakeStore{settings: map[string]any{"operation_mode": "fleet", "gcloud_rw_api_key": "stored-secret"}}
+	handler, err := newAppHandlerWithReferences(store, fakeValidator{}, &fakeSupervisor{}, broker, "http://127.0.0.1:12345")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/fleet-reference", strings.NewReader(`{"selection":{"loki_url":"https://logs.example/push","loki_password":"browser-secret"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("POST /api/fleet-reference = %d %s, want 400", response.Code, response.Body.String())
+	}
+	if store.saves != 0 {
+		t.Fatalf("fleet starter request persisted settings: saves=%d", store.saves)
 	}
 }
 
@@ -309,7 +375,9 @@ func TestFleetReferenceAPIRejectsSafeMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/fleet-reference", nil))
+	request := httptest.NewRequest(http.MethodPost, "/api/fleet-reference", strings.NewReader(`{"selection":{"loki_url":"https://logs.example/loki/api/v1/push"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "Safe mode") {
 		t.Fatalf("POST /api/fleet-reference = %d %s", response.Code, response.Body.String())
 	}
@@ -327,7 +395,8 @@ func TestStaticUIContainsConditionalAccessibleConfiguration(t *testing.T) {
 		"Operation mode",
 		"Fleet Management",
 		"Fleet starter pipeline",
-		"Generate 10-minute gcx command",
+		"Create gcx command",
+		"gcx config check",
 		"Home Assistant host for the terminal command",
 		"creates this pipeline once",
 		"Local configuration",

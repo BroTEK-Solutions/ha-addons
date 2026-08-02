@@ -37,7 +37,11 @@ FLEET_URL="${FLEET_URL:-}"
 FLEET_USERNAME="${FLEET_USERNAME:-}"
 FLEET_COLLECTOR_NAME="${FLEET_COLLECTOR_NAME:-}"
 FLEET_ATTRIBUTES="${FLEET_ATTRIBUTES:-}"
+FLEET_DEFAULT_ATTRIBUTES="${FLEET_DEFAULT_ATTRIBUTES:-true}"
 FLEET_POLL_FREQUENCY="${FLEET_POLL_FREQUENCY:-1m}"
+ADDON_SLUG="${ADDON_SLUG:-alloy}"
+ALLOY_CONTAINER_NAME="${ALLOY_CONTAINER_NAME:-app_${ADDON_SLUG}}"
+ALLOY_LEGACY_CONTAINER_NAME="${ALLOY_LEGACY_CONTAINER_NAME:-addon_${ADDON_SLUG}}"
 ADDITIONAL_CONFIG="${ADDITIONAL_CONFIG:-}"
 FLEET_REFERENCE_PIPELINE="${FLEET_REFERENCE_PIPELINE:-false}"
 
@@ -65,12 +69,19 @@ emit_basic_auth() {
     "$3" "$3" "$1" "$3" "$2" "$3"
 }
 
-# Emit the App's targeting attribute plus a comma-separated key=value list.
-# Input format is validated in init-alloy/run, so pairs are well-formed here.
+# Emit the App's targeting attribute, optional built-in HAOS discovery attributes,
+# and a comma-separated key=value list. Input format is validated in init-alloy/run.
 # $1 = attribute list, $2 = indent
 emit_attributes() {
   printf '%sattributes     = {\n' "$2"
   printf '%s  "ha_addon_instance" = "%s",\n' "$2" "${INSTANCE_NAME}"
+  if [ "${FLEET_DEFAULT_ATTRIBUTES}" = "true" ]; then
+    printf '%s  "haos" = "true",\n' "$2"
+    printf '%s  "journal_path" = "%s",\n' "$2" "${JOURNAL_PATH}"
+    printf '%s  "alloy_container_name" = "%s",\n' "$2" "${ALLOY_CONTAINER_NAME}"
+    printf '%s  "alloy_legacy_container_name" = "%s",\n' "$2" "${ALLOY_LEGACY_CONTAINER_NAME}"
+    printf '%s  "ha_addon_slug" = "%s",\n' "$2" "${ADDON_SLUG}"
+  fi
   if [ -n "$1" ]; then
     local -a pairs
     IFS=',' read -r -a pairs <<<"$1"

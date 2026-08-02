@@ -79,7 +79,7 @@ func migrateReservedFleetAttribute(settings map[string]any) bool {
 	changed := false
 	for _, part := range parts {
 		key, _, hasValue := strings.Cut(part, "=")
-		if hasValue && key == "ha_addon_instance" {
+		if hasValue && reservedFleetAttributeNames[key] {
 			changed = true
 			continue
 		}
@@ -190,7 +190,7 @@ var operationalSettingNames = map[string]struct{}{
 	"traces_enabled": {}, "traces_network_access": {},
 	"pyroscope_url": {}, "pyroscope_username": {}, "pyroscope_password": {},
 	"alloy_profiling": {}, "fleet_url": {}, "fleet_username": {},
-	"gcloud_rw_api_key": {}, "fleet_collector_name": {}, "fleet_attributes": {},
+	"gcloud_rw_api_key": {}, "fleet_collector_name": {}, "fleet_attributes": {}, "fleet_default_attributes": {},
 	"fleet_poll_frequency": {}, "log_level": {}, "alloy_stability_level": {},
 	"alloy_disable_telemetry": {}, "alloy_additional_args": {},
 	"additional_config": {}, "manual_config_enabled": {}, "manual_config": {},

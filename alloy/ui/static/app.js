@@ -1,17 +1,31 @@
 const form = document.querySelector("#config-form");
 const notice = document.querySelector("#notice");
 const runtimeStatus = document.querySelector("#runtime-status");
-const modeSelect = document.querySelector("#operation_mode");
+const discoveredModeChoices = Array.from(document.querySelectorAll('input[name="operation_mode"]'));
+const modeChoices = discoveredModeChoices.length > 0 ? discoveredModeChoices : [document.querySelector("#operation_mode")];
+const modeSelect = {
+  get value() { return modeChoices.find((choice) => choice.checked)?.value || ""; },
+  set value(value) { modeChoices.forEach((choice) => { choice.checked = choice.value === value; }); },
+  get required() { return modeChoices.some((choice) => choice.required); },
+  set required(value) { modeChoices.forEach((choice) => { choice.required = value; }); },
+  get disabled() { return modeChoices.every((choice) => choice.disabled); },
+  set disabled(value) { modeChoices.forEach((choice) => { choice.disabled = value; }); },
+};
 const legacyWarning = document.querySelector("#legacy-warning");
 const manualToggle = document.querySelector("#manual_config_enabled");
 const manualPanel = document.querySelector("#manual-config-panel");
 const fleetReference = document.querySelector("#fleet-reference");
 const fleetReferenceCommand = document.querySelector("#fleet-reference-command");
 const fleetReferenceExpiry = document.querySelector("#fleet-reference-expiry");
+const fleetStarterForm = document.querySelector("#fleet-starter-form");
 const fleetReferenceDownload = document.querySelector("#fleet-reference-download");
 const fleetReferenceDirectHost = document.querySelector("#fleet-reference-direct-host");
 let configDirty = false;
 let configApplied = false;
+let safeMode = false;
+let alloyReady = false;
+let alloyHealthy = false;
+let healthPollTimer = null;
 const defaults = {
   instance_name: "homeassistant", metrics_scrape_interval: "60s", fleet_poll_frequency: "1m",
   logs_exclude_addons: "alloy", logs_max_age: "24h", log_level: "info",
@@ -19,6 +33,7 @@ const defaults = {
   alloy_metrics: true, logs_system: true, logs_homeassistant: true, logs_addons: true,
   traces_enabled: false, traces_network_access: false, alloy_profiling: false,
   alloy_disable_telemetry: true,
+  fleet_default_attributes: true,
   manual_config_enabled: false,
 };
 
@@ -30,24 +45,51 @@ function setNotice(message, kind = "") {
 async function loadStatus() {
   const response = await fetch("api/status", { headers: { Accept: "application/json" } });
   const status = await response.json();
-  if (!response.ok) return;
+  if (!response.ok) {
+    scheduleFleetHealthPoll();
+    return;
+  }
   const messages = [];
+  safeMode = Boolean(status.safe_mode);
   if (status.safe_mode) messages.push("Safe mode is active; saved pipelines are not running.");
   if (!status.alloy_ready) messages.push("Alloy is not ready, but this recovery page remains available.");
+  alloyReady = Boolean(status.alloy_ready);
+  alloyHealthy = Boolean(status.alloy_healthy);
+  if (status.alloy_ready && !alloyHealthy) messages.push("Alloy has started but one or more components are unhealthy.");
   if (status.manual_override) messages.push("The full manual configuration override is active.");
   runtimeStatus.textContent = messages.join(" ");
   runtimeStatus.hidden = messages.length === 0;
+  updateFleetStarterVisibility();
+  scheduleFleetHealthPoll();
+}
+
+function updateFleetStarterVisibility() {
+  if (fleetStarterForm) fleetStarterForm.hidden = modeSelect.value !== "fleet" || !configApplied || safeMode || !alloyReady || !alloyHealthy;
+}
+
+function scheduleFleetHealthPoll() {
+  const waitingForFleetHealth = modeSelect.value === "fleet" && configApplied && !safeMode && (!alloyReady || !alloyHealthy);
+  if (!waitingForFleetHealth || healthPollTimer) return;
+  healthPollTimer = setTimeout(() => {
+    healthPollTimer = null;
+    void loadStatus().catch(() => scheduleFleetHealthPoll());
+  }, 2000);
 }
 
 function setMode(mode) {
   document.querySelectorAll("[data-mode]").forEach((section) => {
-    const active = section.dataset.mode.split(/\s+/).includes(mode);
+    const isManualControl = section.dataset.manualControl !== undefined;
+    const active = isManualControl ? manualToggle.checked || mode === "local" : section.dataset.mode.split(/\s+/).includes(mode);
     section.hidden = !active;
     section.querySelectorAll("input,select,textarea").forEach((field) => { field.disabled = !active; });
   });
 }
 
 function setField(name, value) {
+  if (name === "operation_mode") {
+    modeSelect.value = value ?? "";
+    return;
+  }
   const field = form.elements.namedItem(name);
   if (!field || field.dataset.secret !== undefined) return;
   if (field.type === "checkbox") field.checked = Boolean(value);
@@ -84,6 +126,8 @@ async function loadConfig() {
   setMode(modeSelect.value);
   setManualOverride(manualToggle.checked);
   configApplied = !data.restart_required;
+  updateFleetStarterVisibility();
+  scheduleFleetHealthPoll();
   configDirty = false;
   setNotice("");
 }
@@ -92,6 +136,7 @@ function serialize() {
   const options = {};
   const secrets = {};
   form.querySelectorAll("[name]:not([disabled]):not([data-secret])").forEach((field) => {
+    if (field.type === "radio" && !field.checked) return;
     if (field.type === "checkbox") options[field.name] = field.checked;
     else options[field.name] = field.value;
   });
@@ -100,11 +145,21 @@ function serialize() {
     if (clear?.checked) secrets[field.name] = "";
     else if (field.value) secrets[field.name] = field.value;
   });
+  options.manual_config_enabled = manualToggle.checked;
   return { options, secrets };
 }
 
+function reportSavedFormValidity() {
+  const starterFields = Array.from(form.querySelectorAll("[data-starter]"));
+  const previousDisabled = starterFields.map((field) => field.disabled);
+  starterFields.forEach((field) => { field.disabled = true; });
+  const valid = form.reportValidity();
+  starterFields.forEach((field, index) => { field.disabled = previousDisabled[index]; });
+  return valid;
+}
+
 async function save(restart) {
-  if (!form.reportValidity()) return false;
+  if (!reportSavedFormValidity()) return false;
   setNotice("Validating and saving…");
   document.querySelectorAll("button").forEach((button) => { button.disabled = true; });
   try {
@@ -116,7 +171,16 @@ async function save(restart) {
     if (!response.ok) throw new Error(data.message || "Could not save configuration");
     if (restart) {
       setNotice("Configuration saved. Restarting Alloy; this page will briefly disconnect.", "success");
-      const restartResponse = await fetch("api/restart", { method: "POST", headers: { Accept: "application/json" } });
+      let restartResponse;
+      try {
+        restartResponse = await fetch("api/restart", { method: "POST", headers: { Accept: "application/json" } });
+      } catch {
+        // Supervisor can terminate this add-on before the browser receives the
+        // queued-restart response. Reconnect to establish the actual outcome.
+        setNotice("Configuration saved. Reconnecting while Alloy restarts…", "success");
+        setTimeout(() => location.reload(), 8000);
+        return true;
+      }
       if (!restartResponse.ok) throw new Error("Configuration was saved, but restart could not be requested");
       setTimeout(() => location.reload(), 8000);
     } else {
@@ -147,11 +211,24 @@ async function generateFleetReference() {
   }
   setNotice("Generating Fleet starter pipeline…");
   try {
-    const response = await fetch("api/fleet-reference", { method: "POST", headers: { Accept: "application/json" } });
+    const selection = {};
+    document.querySelectorAll("[data-starter]").forEach((field) => {
+      selection[field.dataset.starter] = field.type === "checkbox" ? field.checked : field.value;
+    });
+    const response = await fetch("api/fleet-reference", {
+      method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ selection }),
+    });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || "Could not generate Fleet starter pipeline");
     fleetReferenceCommand.textContent = `curl -fsSL http://${hostname}:8099${data.path} | gcx fleet pipelines create -f -`;
-    fleetReferenceExpiry.textContent = `This download expires at ${new Date(data.expires_at).toLocaleTimeString()}.`;
+    const expiry = new Date(data.expires_at);
+    if (Number.isNaN(expiry.getTime())) {
+      fleetReferenceExpiry.hidden = true;
+    } else {
+      fleetReferenceExpiry.textContent = `This command expires at ${expiry.toLocaleString()}. Generate another command if it expires.`;
+      fleetReferenceExpiry.hidden = false;
+    }
     fleetReferenceDownload.href = data.path.replace(/^\/+/, "");
     fleetReference.hidden = false;
     setNotice("Fleet starter pipeline is ready. gcx will create it once; later changes belong in Fleet Management.", "success");
@@ -174,11 +251,12 @@ function formatDirectHost(value) {
   return colonCount >= 2 ? `[${host}]` : host;
 }
 
-modeSelect.addEventListener("change", () => { legacyWarning.hidden = true; setMode(modeSelect.value); });
+modeChoices.forEach((choice) => choice.addEventListener("change", () => { legacyWarning.hidden = true; setMode(modeSelect.value); }));
 manualToggle.addEventListener("change", () => setManualOverride(manualToggle.checked));
 function noteFormEdit(event) {
   fleetReference.hidden = true;
   if (event?.target?.dataset?.transient !== undefined) return;
+  if (event?.target?.dataset?.starter !== undefined) return;
   configDirty = true;
 }
 form.addEventListener("input", noteFormEdit);
@@ -187,4 +265,4 @@ form.addEventListener("submit", (event) => { event.preventDefault(); void save(f
 document.querySelector("#save-restart").addEventListener("click", () => { void save(true); });
 document.querySelector("#generate-fleet-reference").addEventListener("click", () => { void generateFleetReference(); });
 loadConfig().catch((error) => setNotice(error.message, "error"));
-loadStatus().catch(() => {});
+loadStatus().catch(() => scheduleFleetHealthPoll());
