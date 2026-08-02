@@ -1,2 +1,5 @@
 # Local planning/spec scratch (never committed)
 docs/superpowers/
+
+# Go build output from `go build` inside alloy/ui
+/alloy/ui/alloy-ui
