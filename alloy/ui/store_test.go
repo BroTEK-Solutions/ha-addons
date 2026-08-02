@@ -94,7 +94,7 @@ func TestFileStoreImportsLegacyOptionsOnlyOnce(t *testing.T) {
 func TestFileStoreMigratesReservedFleetTargetingAttribute(t *testing.T) {
 	dir := t.TempDir()
 	settingsPath := filepath.Join(dir, "settings.json")
-	stored := `{"schema_version":2,"fleet_attributes":"env=home,ha_addon_instance=old-name,role=hass"}`
+	stored := `{"schema_version":2,"fleet_attributes":"env=home,ha_addon_instance=old-name,haos=false,journal_path=/old,alloy_container_name=old,ha_addon_slug=old,role=hass"}`
 	if err := os.WriteFile(settingsPath, []byte(stored), 0o600); err != nil {
 		t.Fatal(err)
 	}

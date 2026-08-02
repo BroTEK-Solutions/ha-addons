@@ -171,14 +171,23 @@ func validateFleetAttributes(value string) error {
 		if len(parts) != 2 || parts[0] == "" {
 			return fmt.Errorf("fleet_attributes entries must use non-empty key=value pairs")
 		}
-		if parts[0] == "ha_addon_instance" {
-			return fmt.Errorf("fleet_attributes key ha_addon_instance is reserved for App targeting")
+		if reservedFleetAttributeNames[parts[0]] {
+			return fmt.Errorf("fleet_attributes key %s is reserved for App targeting", parts[0])
 		}
 		if strings.ContainsAny(pair, "\"\\") {
 			return fmt.Errorf("fleet_attributes entries cannot contain quotes or backslashes")
 		}
 	}
 	return nil
+}
+
+var reservedFleetAttributeNames = map[string]bool{
+	"ha_addon_instance":           true,
+	"haos":                        true,
+	"journal_path":                true,
+	"alloy_container_name":        true,
+	"alloy_legacy_container_name": true,
+	"ha_addon_slug":               true,
 }
 
 func candidateEnvironment(settings map[string]any) []string {
@@ -199,7 +208,7 @@ func candidateEnvironment(settings map[string]any) []string {
 		"pyroscope_password": "PYROSCOPE_PASSWORD", "alloy_profiling": "ALLOY_PROFILING",
 		"fleet_url": "FLEET_URL", "fleet_username": "FLEET_USERNAME",
 		"gcloud_rw_api_key": "GCLOUD_RW_API_KEY", "fleet_collector_name": "FLEET_COLLECTOR_NAME",
-		"fleet_attributes": "FLEET_ATTRIBUTES", "fleet_poll_frequency": "FLEET_POLL_FREQUENCY",
+		"fleet_attributes": "FLEET_ATTRIBUTES", "fleet_default_attributes": "FLEET_DEFAULT_ATTRIBUTES", "fleet_poll_frequency": "FLEET_POLL_FREQUENCY",
 		"log_level": "LOG_LEVEL", "additional_config": "ADDITIONAL_CONFIG",
 	} {
 		if value, present := settings[setting]; present && value != nil {
