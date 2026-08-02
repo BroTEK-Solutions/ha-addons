@@ -65,6 +65,10 @@ function setMode(mode) {
 }
 
 function setField(name, value) {
+  if (name === "operation_mode") {
+    modeSelect.value = value ?? "";
+    return;
+  }
   const field = form.elements.namedItem(name);
   if (!field || field.dataset.secret !== undefined) return;
   if (field.type === "checkbox") field.checked = Boolean(value);
@@ -110,6 +114,7 @@ function serialize() {
   const options = {};
   const secrets = {};
   form.querySelectorAll("[name]:not([disabled]):not([data-secret])").forEach((field) => {
+    if (field.type === "radio" && !field.checked) return;
     if (field.type === "checkbox") options[field.name] = field.checked;
     else options[field.name] = field.value;
   });
@@ -212,6 +217,7 @@ manualToggle.addEventListener("change", () => setManualOverride(manualToggle.che
 function noteFormEdit(event) {
   fleetReference.hidden = true;
   if (event?.target?.dataset?.transient !== undefined) return;
+  if (event?.target?.dataset?.starter !== undefined) return;
   configDirty = true;
 }
 form.addEventListener("input", noteFormEdit);

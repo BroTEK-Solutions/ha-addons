@@ -4,6 +4,11 @@ import { readFile } from "node:fs/promises";
 const html = await readFile(new URL("../ui/static/index.html", import.meta.url), "utf8");
 assert.match(html, /<input[^>]+name="operation_mode"[^>]+type="radio"/, "mode choice must use accessible radio cards");
 assert.doesNotMatch(html, /<select id="operation_mode"/, "mode choice must not use a select");
+const appSource = await readFile(new URL("../ui/static/app.js", import.meta.url), "utf8");
+assert.match(appSource, /field\.type === "radio" && !field\.checked/, "only the selected mode radio must be serialized");
+assert.match(appSource, /if \(name === "operation_mode"\) \{\s+modeSelect\.value = value \?\? "";/, "radio-group configuration must use the mode adapter");
+assert.match(appSource, /event\?\.target\?\.dataset\?\.starter !== undefined/, "starter-only edits must not dirty saved settings");
+assert.match(html, /data-mode="local fleet"[\s\S]*name="instance_name"/, "collector identity must remain configurable in Fleet mode");
 
 const secretField = {
   name: "loki_password",

@@ -90,6 +90,15 @@ gcx config check</code></pre>
         </section>
       </div>
 
+      <section class="card" data-mode="local fleet">
+        <h2>Collector identity</h2>
+        <div class="field">
+          <label for="instance_name">Instance name</label>
+          <p class="help">Used for metric labels, the Fleet collector identity, and this installation's starter-pipeline target. Default: <strong>homeassistant</strong>.</p>
+          <input id="instance_name" name="instance_name" value="homeassistant">
+        </div>
+      </section>
+
       <div data-mode="local" hidden>
         <section class="card">
           <h2>Metrics</h2>
@@ -155,7 +164,6 @@ gcx config check</code></pre>
         <details>
           <summary>Advanced &amp; optional configuration options</summary>
           <div class="grid advanced">
-            <div class="field"><label for="instance_name">Instance name</label><p class="help">Used for metric labels and Fleet collector identity. Default: <strong>homeassistant</strong>.</p><input id="instance_name" name="instance_name" value="homeassistant"></div>
             <div class="field"><label for="log_level">Alloy log level</label><p class="help">Changes Alloy's own App log verbosity, not the logs sent to Loki.</p><select id="log_level" name="log_level"><option>debug</option><option selected>info</option><option>warn</option><option>error</option></select></div>
             <div class="field"><label for="alloy_stability_level">Minimum component stability</label><p class="help">Keep generally available unless additional configuration needs a preview component.</p><select id="alloy_stability_level" name="alloy_stability_level"><option selected>generally-available</option><option>public-preview</option><option>experimental</option></select></div>
             <div><label class="switch"><input name="alloy_disable_telemetry" type="checkbox" checked> Disable anonymous Alloy usage reporting</label><p class="help">Pass <code>--disable-reporting</code> so Alloy sends no anonymous feature-usage report to Grafana.</p></div>
