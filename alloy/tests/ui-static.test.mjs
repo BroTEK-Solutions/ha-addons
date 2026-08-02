@@ -155,9 +155,8 @@ wizardListeners["back:click"]();
 assert.equal(modeStep.hidden, false, "manual recovery must allow returning to mode selection");
 assert.equal(modeSelect.disabled, false, "mode choices must become usable on the mode step");
 modeSelect.checked = true;
-modeListeners.change();
-assert.equal(manualToggle.checked, false, "choosing a generated mode must leave manual override");
 wizardListeners["next:click"]();
+assert.equal(manualToggle.checked, false, "confirming a preselected mode must leave manual override without a change event");
 assert.equal(configHeading.hidden, false, "the recovered mode choice must advance to configuration");
 
 generateFleetReference();

@@ -296,6 +296,10 @@ wizardModeNext.addEventListener("click", () => {
     setNotice("Choose Fleet Management or Local configuration to continue.", "error");
     return;
   }
+  if (manualToggle.checked) {
+    manualToggle.checked = false;
+    setManualOverride(false);
+  }
   starterDismissed = true;
   setNotice("");
   showWizardStep("config");
