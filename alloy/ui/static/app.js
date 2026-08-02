@@ -20,12 +20,18 @@ const fleetReferenceExpiry = document.querySelector("#fleet-reference-expiry");
 const fleetStarterForm = document.querySelector("#fleet-starter-form");
 const fleetReferenceDownload = document.querySelector("#fleet-reference-download");
 const fleetReferenceDirectHost = document.querySelector("#fleet-reference-direct-host");
+const wizardModeNext = document.querySelector("#wizard-mode-next");
+const wizardModeBack = document.querySelector("#wizard-mode-back");
+const wizardStarterBack = document.querySelector("#wizard-starter-back");
 let configDirty = false;
 let configApplied = false;
 let safeMode = false;
 let alloyReady = false;
 let alloyHealthy = false;
 let healthPollTimer = null;
+let wizardStep = "mode";
+let wizardInitialized = false;
+let starterDismissed = false;
 const defaults = {
   instance_name: "homeassistant", metrics_scrape_interval: "60s", fleet_poll_frequency: "1m",
   logs_exclude_addons: "alloy", logs_max_age: "24h", log_level: "info",
@@ -64,7 +70,10 @@ async function loadStatus() {
 }
 
 function updateFleetStarterVisibility() {
-  if (fleetStarterForm) fleetStarterForm.hidden = modeSelect.value !== "fleet" || !configApplied || safeMode || !alloyReady || !alloyHealthy;
+  const available = modeSelect.value === "fleet" && configApplied && !safeMode && alloyReady && alloyHealthy;
+  if (!wizardInitialized) return;
+  if (available && !configDirty && wizardStep === "config" && !starterDismissed) showWizardStep("starter");
+  if (!available && wizardStep === "starter") showWizardStep("config");
 }
 
 function scheduleFleetHealthPoll() {
@@ -76,13 +85,32 @@ function scheduleFleetHealthPoll() {
   }, 2000);
 }
 
-function setMode(mode) {
-  document.querySelectorAll("[data-mode]").forEach((section) => {
+function refreshWizardVisibility() {
+  const selectedMode = manualToggle.checked ? "" : modeSelect.value;
+  const sections = new Set([
+    ...document.querySelectorAll("[data-mode]"),
+    ...document.querySelectorAll("[data-wizard-step]"),
+  ]);
+  sections.forEach((section) => {
     const isManualControl = section.dataset.manualControl !== undefined;
-    const active = isManualControl ? manualToggle.checked || mode === "local" : section.dataset.mode.split(/\s+/).includes(mode);
+    const modeActive = section.dataset.mode === undefined
+      || (isManualControl ? manualToggle.checked || selectedMode === "local" : section.dataset.mode.split(/\s+/).includes(selectedMode));
+    const stepActive = section.dataset.wizardStep === undefined || section.dataset.wizardStep === wizardStep;
+    const active = modeActive && stepActive;
     section.hidden = !active;
     section.querySelectorAll("input,select,textarea").forEach((field) => { field.disabled = !active; });
   });
+}
+
+function setMode(mode) {
+  if (mode) modeSelect.value = mode;
+  refreshWizardVisibility();
+}
+
+function showWizardStep(step) {
+  wizardStep = step;
+  refreshWizardVisibility();
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function setField(name, value) {
@@ -91,15 +119,15 @@ function setField(name, value) {
     return;
   }
   const field = form.elements.namedItem(name);
-  if (!field || field.dataset.secret !== undefined) return;
+  if (!field || field.dataset?.secret !== undefined) return;
   if (field.type === "checkbox") field.checked = Boolean(value);
   else field.value = value ?? "";
 }
 
 function setManualOverride(enabled) {
   modeSelect.required = !enabled;
+  setMode(modeSelect.value);
   modeSelect.disabled = enabled;
-  setMode(enabled ? "" : modeSelect.value);
   manualPanel.hidden = !enabled;
   manualPanel.querySelectorAll("input,select,textarea").forEach((field) => {
     field.disabled = !enabled;
@@ -113,7 +141,7 @@ async function loadConfig() {
   const data = await response.json();
   if (!response.ok) throw new Error(data.message || "Could not load configuration");
   Object.entries({ ...defaults, ...data.options }).forEach(([name, value]) => setField(name, value));
-  modeSelect.value = data.mode === "legacy-hybrid" ? "" : data.mode;
+  modeSelect.value = data.mode_configured && data.mode !== "legacy-hybrid" ? data.mode : "";
   legacyWarning.hidden = !data.legacy_hybrid;
   document.querySelectorAll("[data-secret]").forEach((field) => {
     const configured = Boolean(data.secrets[field.name]);
@@ -126,6 +154,9 @@ async function loadConfig() {
   setMode(modeSelect.value);
   setManualOverride(manualToggle.checked);
   configApplied = !data.restart_required;
+  wizardInitialized = true;
+  starterDismissed = false;
+  showWizardStep(manualToggle.checked || (data.mode_configured && !data.legacy_hybrid) ? "config" : "mode");
   updateFleetStarterVisibility();
   scheduleFleetHealthPoll();
   configDirty = false;
@@ -145,6 +176,7 @@ function serialize() {
     if (clear?.checked) secrets[field.name] = "";
     else if (field.value) secrets[field.name] = field.value;
   });
+  if (!manualToggle.checked && modeSelect.value) options.operation_mode = modeSelect.value;
   options.manual_config_enabled = manualToggle.checked;
   return { options, secrets };
 }
@@ -251,7 +283,29 @@ function formatDirectHost(value) {
   return colonCount >= 2 ? `[${host}]` : host;
 }
 
-modeChoices.forEach((choice) => choice.addEventListener("change", () => { legacyWarning.hidden = true; setMode(modeSelect.value); }));
+modeChoices.forEach((choice) => choice.addEventListener("change", () => {
+  legacyWarning.hidden = true;
+  if (manualToggle.checked) {
+    manualToggle.checked = false;
+    setManualOverride(false);
+  }
+  setMode(modeSelect.value);
+}));
+wizardModeNext.addEventListener("click", () => {
+  if (!modeSelect.value) {
+    setNotice("Choose Fleet Management or Local configuration to continue.", "error");
+    return;
+  }
+  if (manualToggle.checked) {
+    manualToggle.checked = false;
+    setManualOverride(false);
+  }
+  starterDismissed = true;
+  setNotice("");
+  showWizardStep("config");
+});
+wizardModeBack.addEventListener("click", () => showWizardStep("mode"));
+wizardStarterBack.addEventListener("click", () => { starterDismissed = true; showWizardStep("config"); });
 manualToggle.addEventListener("change", () => setManualOverride(manualToggle.checked));
 function noteFormEdit(event) {
   fleetReference.hidden = true;

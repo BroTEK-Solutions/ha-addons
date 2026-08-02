@@ -1,6 +1,7 @@
 :root { color-scheme: light dark; --bg:#f5f5f5; --card:#fff; --text:#202124; --muted:#5f6368; --line:#d8dadd; --accent:#0378b9; --danger:#a32222; --notice:#ffecb3; --notice-text:#382f16; --success:#c8e6c9; --success-text:#143c17; --error:#ffcdd2; --error-text:#5f1010; }
 @media (prefers-color-scheme: dark) { :root { --bg:#111827; --card:#1f2937; --text:#f3f4f6; --muted:#cbd5e1; --line:#475569; --accent:#58c4ff; --danger:#ff8a8a; --notice:#55440b; --notice-text:#fff1b8; --success:#174c36; --success-text:#c5f5d7; --error:#651d2a; --error-text:#ffd9df; } }
 * { box-sizing:border-box; }
+[hidden] { display:none !important; }
 body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
 header { display:flex; gap:2rem; justify-content:space-between; align-items:end; padding:2rem max(1rem,calc((100% - 1100px)/2)); background:linear-gradient(120deg,#f05a28,#ff9830); color:#181818; }
 header h1 { margin:.1rem 0; font-size:2rem; } header p { margin:.25rem 0; } .eyebrow { font-size:.75rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
@@ -22,7 +23,11 @@ button { border:1px solid var(--accent); border-radius:7px; padding:.7rem 1rem; 
 code { overflow-wrap:anywhere; }
 pre { overflow:auto; padding:.8rem; border-radius:7px; background:var(--bg); border:1px solid var(--line); }
 .mode-cards { border:0; padding:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; }
-.mode-cards input { position:absolute; opacity:0; }
+.mode-cards input { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
 .mode-cards label { display:grid; gap:.25rem; border:2px solid var(--line); border-radius:10px; padding:1rem; cursor:pointer; color:var(--text); background:var(--card); }
 .mode-cards input:checked + label { border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent); }
+.mode-cards input:focus-visible + label { outline:2px solid var(--accent); outline-offset:2px; }
+.mode-icon { display:grid; place-items:center; width:2.6rem; height:2.6rem; margin-bottom:.35rem; border-radius:50%; color:var(--accent); background:color-mix(in srgb,var(--accent) 14%,var(--card)); font-size:1.5rem; }
+.wizard-actions { display:flex; justify-content:flex-end; margin-top:1rem; }
+.wizard-heading { border-left:4px solid var(--accent); }
 @media (max-width:700px) { header { align-items:start; flex-direction:column; } .grid,.mode-cards { grid-template-columns:1fr; } .field.wide { grid-column:auto; } .actions { justify-content:stretch; } .actions button { flex:1; } }
