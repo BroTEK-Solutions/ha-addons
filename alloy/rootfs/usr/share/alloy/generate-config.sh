@@ -165,7 +165,7 @@ if [ "${LOGS_ADDONS}" != "true" ]; then
 cat <<'ALLOYCONFIG'
   rule {
     source_labels = ["__journal_container_name"]
-    regex         = "^addon_.*$"
+    regex         = "^app_.*$"
     action        = "drop"
   }
 ALLOYCONFIG
@@ -176,7 +176,7 @@ if [ -n "${LOGS_EXCLUDE_ADDONS}" ]; then
   IFS=',' read -r -a excluded_addons <<<"${LOGS_EXCLUDE_ADDONS}"
   for addon in "${excluded_addons[@]}"; do
     [ -n "${excluded_regex}" ] && excluded_regex+="|"
-    excluded_regex+="addon_(?:[^_]+_)?${addon}"
+    excluded_regex+="app_(?:[^_]+_)?${addon}"
   done
 cat <<ALLOYCONFIG
   rule {

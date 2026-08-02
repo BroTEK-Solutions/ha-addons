@@ -210,7 +210,7 @@ OUT="$(gen OPERATION_MODE=local LOKI_URL=https://logs.example.net/loki/api/v1/pu
   LOGS_EXCLUDE_ADDONS=alloy,example LOGS_MAX_AGE=24h)"
 check_contains "$OUT" 'max_age      = "24h"'
 check_contains "$OUT" 'action        = "drop"'
-check_contains "$OUT" 'addon_(?:[^_]+_)?alloy|addon_(?:[^_]+_)?example'
+check_contains "$OUT" 'app_(?:[^_]+_)?alloy|app_(?:[^_]+_)?example'
 validate_alloy "$OUT" "filtered-journal"
 
 OUT="$(gen OPERATION_MODE=local TRACES_ENABLED=true \
