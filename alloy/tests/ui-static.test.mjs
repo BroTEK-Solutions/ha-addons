@@ -15,7 +15,10 @@ assert.match(appSource, /event\?\.target\?\.dataset\?\.starter !== undefined/, "
 assert.match(html, /data-mode="local fleet"[\s\S]*name="instance_name"/, "collector identity must remain configurable in Fleet mode");
 assert.match(html, /data-manual-control/, "the manual override control must have its own recovery section");
 assert.match(appSource, /options\.manual_config_enabled = manualToggle\.checked;/, "disabling manual override must always be serialized");
-assert.match(appSource, /const selectedMode = manualToggle\.checked \? "" : modeSelect\.value;/, "manual override must hide generated pipeline controls without losing the selected mode");
+assert.match(appSource, /const selectedMode = manualToggle\.checked \? "manual" : modeSelect\.value;/, "manual override must hide generated pipeline controls without losing the selected mode");
+assert.match(html, /data-mode="local fleet manual"[\s\S]*name="alloy_additional_args"/, "Alloy startup flags must stay editable during a manual override");
+assert.match(html, /data-mode="local fleet"><label for="log_level"/, "the generated log level must not be offered for a manual configuration");
+assert.match(html, /data-mode="local"><label for="additional_config"/, "appended River blocks must stay Local-only");
 assert.match(appSource, /if \(manualToggle\.checked\) \{\s+manualToggle\.checked = false;\s+setManualOverride\(false\);/, "choosing a wizard mode must leave manual override before Fleet configuration is shown");
 assert.match(appSource, /let alloyReady = false;/, "Fleet starter availability must track readiness separately from health");
 assert.match(appSource, /!alloyReady \|\| !alloyHealthy/, "Fleet starter must require both readiness and health");
@@ -57,7 +60,12 @@ const form = {
   querySelector(selector) {
     return selector === '[data-clear-secret="loki_password"]' ? clearSecret : null;
   },
-  querySelectorAll() { return []; },
+  querySelectorAll(selector) {
+    if (selector === "[name]:not([disabled]):not([data-secret])") {
+      return [logLevelField, additionalArgsField, additionalConfigField].filter((field) => !field.disabled);
+    }
+    return [];
+  },
   addEventListener(event, listener) { formListeners[event] = listener; },
   reportValidity() { return true; },
 };
@@ -79,6 +87,20 @@ const wizardStarterBack = { addEventListener() {} };
 const modeStep = { dataset: { wizardStep: "mode" }, hidden: false, querySelectorAll() { return [modeSelect]; } };
 const configHeading = { dataset: { wizardStep: "config" }, hidden: true, querySelectorAll() { return []; } };
 const manualSection = { dataset: { mode: "local", manualControl: "", wizardStep: "config" }, hidden: true, querySelectorAll() { return [manualToggle, manualField]; } };
+// The advanced section and the two field wrappers that narrow themselves to the
+// modes which consume them. Document order matters exactly as it does in the
+// page: the section enables its descendants, then a narrower wrapper disables
+// the field that does not apply.
+const logLevelField = { name: "log_level", value: "info", disabled: true, dataset: {} };
+const additionalArgsField = { name: "alloy_additional_args", value: "--disable-support-bundle", disabled: true, dataset: {} };
+const additionalConfigField = { name: "additional_config", value: "", disabled: true, dataset: {} };
+const advancedSection = {
+  dataset: { mode: "local fleet manual", wizardStep: "config" },
+  hidden: true,
+  querySelectorAll() { return [logLevelField, additionalArgsField, additionalConfigField]; },
+};
+const logLevelWrapper = { dataset: { mode: "local fleet" }, hidden: true, querySelectorAll() { return [logLevelField]; } };
+const additionalConfigWrapper = { dataset: { mode: "local" }, hidden: true, querySelectorAll() { return [additionalConfigField]; } };
 const requests = [];
 let saveAndRestart;
 const saveRestartButton = { addEventListener(_event, listener) { saveAndRestart = listener; } };
@@ -129,8 +151,8 @@ globalThis.document = {
   },
   querySelectorAll(selector) {
     if (selector === "[data-secret]") return [secretField];
-    if (selector === "[data-mode]") return [manualSection];
-    if (selector === "[data-wizard-step]") return [modeStep, configHeading, manualSection];
+    if (selector === "[data-mode]") return [manualSection, advancedSection, logLevelWrapper, additionalConfigWrapper];
+    if (selector === "[data-wizard-step]") return [modeStep, configHeading, manualSection, advancedSection];
     return [];
   },
   createElement() { return downloadLink; },
@@ -303,5 +325,32 @@ globalThis.setTimeout = realSetTimeout;
 assert.doesNotMatch(html, /name="alloy_stability_level"/, "the stability level must not be an ingress form field");
 assert.doesNotMatch(appSource, /alloy_stability_level/, "the ingress UI must not carry a stability level default");
 
+// Break-glass mode still starts Alloy from this App's own startup flags, so the
+// flags that apply to any configuration have to stay reachable while the manual
+// override is on. The ones that only reach a generated configuration must not.
+manualToggle.checked = true;
+manualListeners.change();
+assert.equal(advancedSection.hidden, false, "startup flags must stay visible during a manual override");
+assert.equal(additionalArgsField.disabled, false, "additional startup flags must stay editable during a manual override");
+assert.equal(logLevelField.disabled, true, "the generated log level must not be offered for a manual configuration");
+assert.equal(additionalConfigField.disabled, true, "appended River blocks must stay Local-only");
+
+formListeners.submit({ preventDefault() {} });
+await new Promise((resolve) => setTimeout(resolve, 0));
+await new Promise((resolve) => setTimeout(resolve, 0));
+const overrideSave = requests.filter(({ url, method }) => url === "api/config" && method === "POST").pop();
+const overrideOptions = JSON.parse(overrideSave.body).options;
+assert.equal(overrideOptions.alloy_additional_args, "--disable-support-bundle", "an edited startup flag must be saved from break-glass mode");
+assert.ok(!("log_level" in overrideOptions), "a hidden generated setting must not be submitted");
+assert.ok(!("additional_config" in overrideOptions), "a hidden Local-only setting must not be submitted");
+
+// Choosing Local leaves break-glass mode and restores every generated control.
+modeSelect.checked = true;
+modeListeners.change();
+assert.equal(manualToggle.checked, false, "choosing a mode must leave the manual override");
+assert.equal(logLevelField.disabled, false, "returning to Local must restore the generated log level");
+assert.equal(additionalConfigField.disabled, false, "returning to Local must restore appended River blocks");
+
 console.log("PASS: configuration reload resets secret controls");
 console.log("PASS: a restart that stops this App is not reported as a failure");
+console.log("PASS: startup flags stay editable during a manual override");

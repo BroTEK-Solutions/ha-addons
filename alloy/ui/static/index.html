@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Grafana Alloy configuration</title>
-  <link rel="stylesheet" href="app.css?v=20260803-stability">
-  <script src="app.js?v=20260803-stability" defer></script>
+  <link rel="stylesheet" href="app.css?v=20260803-startup-flags">
+  <script src="app.js?v=20260803-startup-flags" defer></script>
 </head>
 <body>
   <header>
@@ -172,11 +172,15 @@ gcx fleet pipelines create -f home-assistant-fleet-pipeline.yaml</code></pre>
         </section>
       </div>
 
-      <section class="card" data-mode="local" data-wizard-step="config" hidden>
+      <!-- Startup flags are read from the stored settings on every start, whatever
+           supplies the configuration, so this section follows the flags rather
+           than the mode. Each control below narrows itself to the modes that
+           actually consume it. -->
+      <section class="card" data-mode="local fleet manual" data-wizard-step="config" hidden>
         <details>
           <summary>Advanced &amp; optional configuration options</summary>
           <div class="grid advanced">
-            <div class="field"><label for="log_level">Alloy log level</label><p class="help">Changes Alloy's own App log verbosity, not the logs sent to Loki.</p><select id="log_level" name="log_level"><option>debug</option><option selected>info</option><option>warn</option><option>error</option></select></div>
+            <div class="field" data-mode="local fleet"><label for="log_level">Alloy log level</label><p class="help">Changes Alloy's own App log verbosity, not the logs sent to Loki. It is written into the generated configuration, so a full manual override sets its own <code>logging</code> block instead.</p><select id="log_level" name="log_level"><option>debug</option><option selected>info</option><option>warn</option><option>error</option></select></div>
             <div><label class="switch"><input name="alloy_disable_telemetry" type="checkbox" checked> Disable anonymous Alloy usage reporting</label><p class="help">Pass <code>--disable-reporting</code> so Alloy sends no anonymous feature-usage report to Grafana.</p></div>
             <div class="field wide"><label for="alloy_additional_args">Additional Alloy startup flags</label><p class="help">Whitespace-separated <code>--flag</code> or <code>--flag=value</code> arguments. Invalid flags are rejected before saving.</p><textarea id="alloy_additional_args" name="alloy_additional_args" rows="3"></textarea></div>
             <div class="field wide" data-mode="local"><label for="additional_config">Additional Alloy configuration</label><p class="help">River blocks appended verbatim after the generated configuration.</p><textarea id="additional_config" name="additional_config" rows="8" spellcheck="false"></textarea></div>
@@ -188,7 +192,7 @@ gcx fleet pipelines create -f home-assistant-fleet-pipeline.yaml</code></pre>
         <label class="switch"><input id="manual_config_enabled" name="manual_config_enabled" type="checkbox"> Full manual Alloy configuration override</label>
         <p class="help">Break-glass mode replaces every generated pipeline with the complete Alloy configuration below. The candidate must pass Alloy validation before it can be saved.</p>
         <div id="manual-config-panel" hidden>
-          <aside>Generated Fleet and Local settings are ignored while this override is enabled. Stored credentials remain available through their documented environment variables.</aside>
+          <aside>Generated Fleet and Local settings are ignored while this override is enabled. Stored credentials remain available through their documented environment variables. Alloy's startup flags still apply: usage reporting and additional startup flags stay editable under <strong>Advanced &amp; optional configuration options</strong>, and minimum component stability stays on the Home Assistant <strong>Configuration</strong> tab.</aside>
           <label for="manual_config">Complete config.alloy contents</label>
           <textarea id="manual_config" name="manual_config" rows="18" spellcheck="false" disabled></textarea>
         </div>
