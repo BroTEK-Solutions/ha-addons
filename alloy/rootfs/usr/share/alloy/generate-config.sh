@@ -299,9 +299,43 @@ discovery.relabel "host" {
 
 prometheus.scrape "host" {
   targets         = discovery.relabel.host.output
-  forward_to      = [prometheus.remote_write.metrics.receiver]
+  forward_to      = [prometheus.relabel.host_identity.receiver]
   scrape_interval = "${METRICS_SCRAPE_INTERVAL}"
   job_name        = "integrations/node_exporter"
+}
+
+// --- Pin host identity to the instance name ---
+// The exporter reports the container it runs in (for example a141124a-alloy),
+// which is what Grafana's stock dashboards then show as the machine. nodename
+// and hostname are rewritten only where they already exist, so no series gains
+// a label it did not carry; node_uname_info's nodename is the one the Linux
+// node dashboard renders as "Hostname".
+//
+// This sits in the host exporter's own chain, NOT on the shared remote-write
+// endpoint. Additional user configuration forwards straight to that endpoint,
+// and an unconditional instance there would flatten distinct scrape targets
+// into one series.
+prometheus.relabel "host_identity" {
+  forward_to = [prometheus.remote_write.metrics.receiver]
+
+  rule {
+    target_label = "instance"
+    replacement  = "${INSTANCE_NAME}"
+  }
+
+  rule {
+    source_labels = ["nodename"]
+    regex         = ".+"
+    target_label  = "nodename"
+    replacement   = "${INSTANCE_NAME}"
+  }
+
+  rule {
+    source_labels = ["hostname"]
+    regex         = ".+"
+    target_label  = "hostname"
+    replacement   = "${INSTANCE_NAME}"
+  }
 }
 ALLOYCONFIG
 fi
@@ -355,32 +389,6 @@ cat <<ALLOYCONFIG
 prometheus.remote_write "metrics" {
   endpoint {
     url = "${PROMETHEUS_URL}"
-
-    // Pin identity to the operator-chosen instance name at write time, so it
-    // also covers series from additional user configuration. Without this the
-    // labels carry the App's container hostname (for example a141124a-alloy),
-    // which is what Grafana's stock dashboards would show as the machine.
-    write_relabel_config {
-      target_label = "instance"
-      replacement  = "${INSTANCE_NAME}"
-    }
-
-    // nodename and hostname are only rewritten where they already exist, so no
-    // series gains a label it did not carry. node_uname_info.nodename is the one
-    // the Linux node dashboard renders as "Hostname".
-    write_relabel_config {
-      source_labels = ["nodename"]
-      regex         = ".+"
-      target_label  = "nodename"
-      replacement   = "${INSTANCE_NAME}"
-    }
-
-    write_relabel_config {
-      source_labels = ["hostname"]
-      regex         = ".+"
-      target_label  = "hostname"
-      replacement   = "${INSTANCE_NAME}"
-    }
 ALLOYCONFIG
 
 emit_basic_auth "${PROMETHEUS_USERNAME}" "$(pipeline_secret PROMETHEUS_PASSWORD)" "    "

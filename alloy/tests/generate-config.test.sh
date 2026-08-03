@@ -138,23 +138,37 @@ validate_alloy "$OUT" "both-auth"
 echo "== identity labels are forced to the instance name on metrics and logs =="
 # Grafana's stock dashboards key off instance/hostname/nodename. Inside the App
 # those default to the container's hostname (a141124a-alloy), so the generated
-# config overwrites them with the operator-chosen instance name at write time.
+# config overwrites them with the operator-chosen instance name.
 OUT="$(gen LOG_LEVEL=info LOKI_URL=https://logs-prod.example.net/loki/api/v1/push \
   PROMETHEUS_URL=https://prom-prod.example.net/api/prom/push INSTANCE_NAME=hass-test)"
+IDENTITY_BLOCK="$(block "$OUT" 'prometheus.relabel "host_identity" {')"
+check_contains "$IDENTITY_BLOCK" 'forward_to = [prometheus.remote_write.metrics.receiver]'
+check_contains "$IDENTITY_BLOCK" 'target_label = "instance"'
+check_contains "$IDENTITY_BLOCK" 'source_labels = ["nodename"]'
+check_contains "$IDENTITY_BLOCK" 'target_label  = "nodename"'
+check_contains "$IDENTITY_BLOCK" 'source_labels = ["hostname"]'
+check_contains "$IDENTITY_BLOCK" 'target_label  = "hostname"'
+check_contains "$IDENTITY_BLOCK" 'replacement  = "hass-test"'
+check_contains "$OUT" 'forward_to      = [prometheus.relabel.host_identity.receiver]'
+# The rewrite must NOT sit on the shared remote-write endpoint: additional user
+# config forwards straight to it, and an unconditional instance would collapse
+# distinct targets into one series.
 PROM_BLOCK="$(block "$OUT" 'prometheus.remote_write "metrics" {')"
-check_contains "$PROM_BLOCK" 'write_relabel_config {'
-check_contains "$PROM_BLOCK" 'target_label = "instance"'
-check_contains "$PROM_BLOCK" 'source_labels = ["nodename"]'
-check_contains "$PROM_BLOCK" 'target_label  = "nodename"'
-check_contains "$PROM_BLOCK" 'source_labels = ["hostname"]'
-check_contains "$PROM_BLOCK" 'target_label  = "hostname"'
-check_contains "$PROM_BLOCK" 'replacement  = "hass-test"'
+check_absent   "$PROM_BLOCK" 'write_relabel_config'
 JOURNAL_BLOCK="$(block "$OUT" 'loki.relabel "journal" {')"
 check_contains "$JOURNAL_BLOCK" 'target_label = "hostname"'
 check_contains "$JOURNAL_BLOCK" 'target_label = "instance"'
 check_contains "$JOURNAL_BLOCK" 'replacement  = "hass-test"'
 check_absent   "$JOURNAL_BLOCK" '"__journal__hostname"'
 validate_alloy "$OUT" "forced-identity-labels"
+
+# Only the host exporter emits nodename/hostname, so the relabel belongs in its
+# chain alone. Without host metrics there is nothing for it to rewrite.
+OUT="$(gen LOG_LEVEL=info PROMETHEUS_URL=https://prom-prod.example.net/api/prom/push \
+  HOST_METRICS=false ALLOY_METRICS=true INSTANCE_NAME=hass-test)"
+check_absent   "$OUT" 'prometheus.relabel "host_identity"'
+check_contains "$OUT" 'forward_to      = [prometheus.remote_write.metrics.receiver]'
+validate_alloy "$OUT" "identity-relabel-scoped-to-host-metrics"
 
 echo "== fleet-only =="
 # .invalid never resolves, so `alloy run` fails DNS instead of reaching a real endpoint.

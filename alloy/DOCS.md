@@ -168,9 +168,9 @@ Assistant install show up under a name nobody chose.
 The generated configuration therefore pins identity to the **Instance name**
 (default `homeassistant`) rather than to whatever the container is called:
 
-- Metrics get `instance` set on every series as it is written, so the rule also
-  covers series produced by additional user configuration.
-- `nodename` and `hostname` are rewritten only where they already exist, so no
+- Every built-in metric scrape sets `instance` on its own targets.
+- Host-exporter series additionally pass through a relabel step that rewrites
+  `nodename` and `hostname` - but only where those labels already exist, so no
   series gains a label it did not carry. `node_uname_info`'s `nodename` is the
   one the Linux node dashboard renders as "Hostname".
 - Logs get both `instance` and `hostname` set from the same value, replacing the
@@ -178,6 +178,11 @@ The generated configuration therefore pins identity to the **Instance name**
 
 The real kernel nodename is not preserved under another label. Give each install
 a distinct **Instance name** when more than one reports to the same stack.
+
+**Additional Alloy configuration is left alone.** The rewrite sits in the host
+exporter's own pipeline, not on the shared remote-write endpoint, so extra
+scrape targets you forward to `prometheus.remote_write.metrics.receiver` keep
+their own `instance` labels. Set those labels yourself on any target you add.
 
 This applies to metrics and logs. Traces carry OTLP resource attributes set by
 the sending application, which the App does not rewrite.
