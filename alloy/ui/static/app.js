@@ -33,7 +33,7 @@ let starterDismissed = false;
 const defaults = {
   instance_name: "homeassistant", metrics_scrape_interval: "60s", fleet_poll_frequency: "1m",
   logs_exclude_addons: "alloy", logs_max_age: "24h", log_level: "info",
-  alloy_stability_level: "generally-available", host_metrics: true, homeassistant_metrics: false,
+  host_metrics: true, homeassistant_metrics: false,
   alloy_metrics: true, logs_system: true, logs_homeassistant: true, logs_addons: true,
   traces_enabled: false, traces_network_access: false, alloy_profiling: false,
   alloy_disable_telemetry: true,

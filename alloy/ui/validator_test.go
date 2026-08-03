@@ -20,7 +20,7 @@ grep -q 'sys.env("LOKI_PASSWORD")' "$config"
 	if err := os.WriteFile(alloy, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	validator := newAlloyValidator("../rootfs/usr/share/alloy/generate-config.sh", alloy)
+	validator := newAlloyValidator("../rootfs/usr/share/alloy/generate-config.sh", alloy, "")
 	settings := map[string]any{
 		"operation_mode": "local",
 		"loki_url":       "https://logs.example/loki/api/v1/push",
@@ -46,7 +46,7 @@ fi
 	if err := os.WriteFile(alloy, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	validator := newAlloyValidator("../rootfs/usr/share/alloy/generate-config.sh", alloy)
+	validator := newAlloyValidator("../rootfs/usr/share/alloy/generate-config.sh", alloy, "")
 	err := validator.Validate(context.Background(), map[string]any{
 		"operation_mode":        "local",
 		"loki_url":              "https://logs.example/loki/api/v1/push",
@@ -54,6 +54,30 @@ fi
 		"manual_config":         "INVALID",
 	})
 	if err == nil || !strings.Contains(err.Error(), "manual config is invalid") {
+		t.Fatalf("Validate() error = %v", err)
+	}
+}
+
+func TestAlloyValidatorValidatesAtOptionsStabilityLevel(t *testing.T) {
+	dir := t.TempDir()
+	alloy := filepath.Join(dir, "alloy")
+	// The fake binary fails unless it is asked to validate at the raised level.
+	script := `#!/usr/bin/env bash
+set -eu
+[ "$2" = "--stability.level=experimental" ] || { echo "wrong stability: $2" >&2; exit 1; }
+`
+	if err := os.WriteFile(alloy, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	options := filepath.Join(dir, "options.json")
+	if err := os.WriteFile(options, []byte(`{"alloy_stability_level":"experimental"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	validator := newAlloyValidator("../rootfs/usr/share/alloy/generate-config.sh", alloy, options)
+	if err := validator.Validate(context.Background(), map[string]any{
+		"operation_mode": "local",
+		"loki_url":       "https://logs.example/loki/api/v1/push",
+	}); err != nil {
 		t.Fatalf("Validate() error = %v", err)
 	}
 }
@@ -132,7 +156,7 @@ exit 0
 			if err := os.WriteFile(alloy, []byte(script), 0o700); err != nil {
 				t.Fatal(err)
 			}
-			validator := newAlloyValidator("../rootfs/usr/share/alloy/generate-config.sh", alloy)
+			validator := newAlloyValidator("../rootfs/usr/share/alloy/generate-config.sh", alloy, "")
 			err := validator.Validate(context.Background(), test.settings)
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("Validate() error = %v, want %q", err, test.want)

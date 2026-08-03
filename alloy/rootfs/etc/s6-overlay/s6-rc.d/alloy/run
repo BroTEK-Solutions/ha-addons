@@ -32,8 +32,9 @@ declare -a args=(
 
 # Alloy refuses to load a component below the permitted stability level, so this
 # is the switch that makes public-preview and experimental components usable.
-stability_level=$(setting alloy_stability_level)
-[ -n "${stability_level}" ] || stability_level=generally-available
+# It is a Native App option so it stays reachable from the Configuration tab even
+# when a raised-stability config would otherwise keep Alloy from starting.
+stability_level=$(bashio::config 'alloy_stability_level' 'generally-available')
 args+=("--stability.level=${stability_level}")
 
 # Alloy reports anonymous usage statistics to Grafana by default.

@@ -9,10 +9,10 @@ to the selected operation mode, validates the complete candidate with Alloy,
 and links to Alloy's component graph. Saving does not interrupt collection;
 choose **Save and restart** when you are ready to apply the new configuration.
 
-The Home Assistant **Configuration** tab deliberately contains only two
-recovery controls: **Safe mode** and **Configuration UI log level**. All pipeline
-settings live in the Web UI, so the same option is never presented in two
-places.
+The Home Assistant **Configuration** tab contains the startup controls that must
+stay reachable even when Alloy will not start: **Safe mode**, **Configuration UI
+log level**, and **Stability level**. All pipeline settings live in the Web UI, so
+the same option is never presented in two places.
 
 ## Choose one operation mode
 
@@ -210,7 +210,6 @@ Home Assistant Core profiling.
 | Metrics scrape interval | `60s` | Frequency for local metric collection. |
 | Fleet poll frequency | `1m` | Frequency for remote-configuration checks. |
 | Disable Alloy usage reporting | on | Passes `--disable-reporting`; no anonymous usage report is sent. |
-| Stability level | generally available | Allows preview components when deliberately raised. |
 | Additional startup arguments | empty | Extra `--flag` or `--flag=value` Alloy CLI arguments, checked before saving. |
 | Additional Alloy configuration | empty | River blocks appended to generated local configuration. |
 | Full manual configuration override | off | Replaces every generated pipeline with the supplied complete Alloy configuration. |

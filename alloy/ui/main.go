@@ -295,7 +295,7 @@ func main() {
 	client := &http.Client{Timeout: 15 * time.Second}
 	supervisor := newSupervisorClient(envOr("SUPERVISOR_URL", "http://supervisor"), token, client)
 	store := newFileStore(envOr("SETTINGS_FILE", "/data/settings.json"), envOr("LEGACY_OPTIONS_FILE", "/data/options.json"))
-	validator := newAlloyValidator(envOr("GENERATOR", "/usr/share/alloy/generate-config.sh"), envOr("ALLOY_BIN", "/usr/bin/alloy"))
+	validator := newAlloyValidator(envOr("GENERATOR", "/usr/share/alloy/generate-config.sh"), envOr("ALLOY_BIN", "/usr/bin/alloy"), envOr("LEGACY_OPTIONS_FILE", "/data/options.json"))
 	referenceRenderer := newCommandFleetReferenceRenderer(envOr("GENERATOR", "/usr/share/alloy/generate-config.sh"), validator)
 	handler, err := newAppHandlerWithReferences(store, validator, supervisor, referenceRenderer, envOr("ALLOY_URL", "http://127.0.0.1:12345"))
 	if err != nil {

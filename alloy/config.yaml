@@ -29,8 +29,10 @@ backup_exclude:
 options:
   safe_mode: false
   ui_log_level: info
+  alloy_stability_level: generally-available
 schema:
   safe_mode: bool
   ui_log_level: list(debug|info|warn|error)
+  alloy_stability_level: list(generally-available|public-preview|experimental)
 stage: experimental
 apparmor: false

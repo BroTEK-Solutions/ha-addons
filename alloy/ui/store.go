@@ -191,7 +191,7 @@ var operationalSettingNames = map[string]struct{}{
 	"pyroscope_url": {}, "pyroscope_username": {}, "pyroscope_password": {},
 	"alloy_profiling": {}, "fleet_url": {}, "fleet_username": {},
 	"gcloud_rw_api_key": {}, "fleet_collector_name": {}, "fleet_attributes": {}, "fleet_default_attributes": {},
-	"fleet_poll_frequency": {}, "log_level": {}, "alloy_stability_level": {},
+	"fleet_poll_frequency": {}, "log_level": {},
 	"alloy_disable_telemetry": {}, "alloy_additional_args": {},
 	"additional_config": {}, "manual_config_enabled": {}, "manual_config": {},
 }
