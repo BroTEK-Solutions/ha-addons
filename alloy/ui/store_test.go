@@ -116,6 +116,37 @@ func TestFileStoreMigratesReservedFleetTargetingAttribute(t *testing.T) {
 	}
 }
 
+// The stability level moved to a Native App option. A copy left behind by an
+// older version is not honored any more, so it must not survive in the settings
+// file where it would contradict the option Supervisor holds.
+func TestFileStoreDropsStoredStabilityLevel(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+	stored := `{"schema_version":2,"alloy_stability_level":"experimental","instance_name":"homeassistant"}`
+	if err := os.WriteFile(settingsPath, []byte(stored), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := newFileStore(settingsPath, filepath.Join(dir, "options.json"))
+
+	got, err := store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, present := got["alloy_stability_level"]; present {
+		t.Fatalf("loaded settings still carry alloy_stability_level: %#v", got)
+	}
+	if got["instance_name"] != "homeassistant" {
+		t.Fatalf("instance_name = %#v", got["instance_name"])
+	}
+	persisted, err := readSettings(settingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, present := persisted["alloy_stability_level"]; present {
+		t.Fatalf("persisted settings still carry alloy_stability_level: %#v", persisted)
+	}
+}
+
 func TestFileStoreSavesAtomicallyWithOwnerOnlyPermissions(t *testing.T) {
 	dir := t.TempDir()
 	settingsPath := filepath.Join(dir, "settings.json")

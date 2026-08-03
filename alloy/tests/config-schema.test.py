@@ -17,6 +17,9 @@ TRANSLATIONS = ADDON / "translations" / "en.yaml"
 EXPECTED_SCHEMA = {
     "safe_mode": "bool",
     "ui_log_level": "list(debug|info|warn|error)",
+    # A startup flag rather than a pipeline setting: it has to apply to remote
+    # Fleet pipelines and to the manual override alike, and has to stay reachable
+    # when a raised-stability configuration stops Alloy from starting.
     "alloy_stability_level": "list(generally-available|public-preview|experimental)",
 }
 EXPECTED_OPTIONS = {
@@ -52,8 +55,8 @@ def main() -> int:
     check("ingress streams proxied responses", config.get("ingress_stream") is True)
     check("Supervisor restart API is enabled", config.get("hassio_api") is True)
     check("host-network services advertise no ineffective port mappings", "ports" not in config)
-    check("native schema contains recovery controls only", schema == EXPECTED_SCHEMA)
-    check("native defaults contain recovery controls only", options == EXPECTED_OPTIONS)
+    check("native schema contains recovery and startup controls only", schema == EXPECTED_SCHEMA)
+    check("native defaults contain recovery and startup controls only", options == EXPECTED_OPTIONS)
 
     print("\n== native values validate like Supervisor ==")
     for key, default in EXPECTED_OPTIONS.items():
@@ -69,11 +72,21 @@ def main() -> int:
         check("ui_log_level='trace' is rejected", False)
     except vol.Invalid:
         check("ui_log_level='trace' is rejected", True)
+    for level in ("generally-available", "public-preview", "experimental"):
+        check(
+            f"alloy_stability_level={level!r} is accepted",
+            validate(EXPECTED_SCHEMA["alloy_stability_level"], level) == level,
+        )
+    try:
+        validate(EXPECTED_SCHEMA["alloy_stability_level"], "beta")
+        check("alloy_stability_level='beta' is rejected", False)
+    except vol.Invalid:
+        check("alloy_stability_level='beta' is rejected", True)
 
     print("\n== every native option has user-facing copy ==")
     translations = yaml.safe_load(TRANSLATIONS.read_text()).get("configuration", {})
     check(
-        "translations match the recovery schema exactly",
+        "translations match the native schema exactly",
         set(translations) == set(EXPECTED_SCHEMA),
     )
     for key in schema:

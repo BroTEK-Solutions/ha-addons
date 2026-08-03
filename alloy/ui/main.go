@@ -295,7 +295,15 @@ func main() {
 	client := &http.Client{Timeout: 15 * time.Second}
 	supervisor := newSupervisorClient(envOr("SUPERVISOR_URL", "http://supervisor"), token, client)
 	store := newFileStore(envOr("SETTINGS_FILE", "/data/settings.json"), envOr("LEGACY_OPTIONS_FILE", "/data/options.json"))
-	validator := newAlloyValidator(envOr("GENERATOR", "/usr/share/alloy/generate-config.sh"), envOr("ALLOY_BIN", "/usr/bin/alloy"), envOr("LEGACY_OPTIONS_FILE", "/data/options.json"))
+	// OPTIONS_FILE and LEGACY_OPTIONS_FILE point at the same file today but mean
+	// different things: the live Native App options Supervisor maintains, versus
+	// the one-time version 1 import source. Keep them separate so repointing the
+	// legacy import cannot silently change the validation stability level.
+	validator := newAlloyValidator(
+		envOr("GENERATOR", "/usr/share/alloy/generate-config.sh"),
+		envOr("ALLOY_BIN", "/usr/bin/alloy"),
+		envOr("OPTIONS_FILE", "/data/options.json"),
+	)
 	referenceRenderer := newCommandFleetReferenceRenderer(envOr("GENERATOR", "/usr/share/alloy/generate-config.sh"), validator)
 	handler, err := newAppHandlerWithReferences(store, validator, supervisor, referenceRenderer, envOr("ALLOY_URL", "http://127.0.0.1:12345"))
 	if err != nil {

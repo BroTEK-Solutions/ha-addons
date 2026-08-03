@@ -188,6 +188,26 @@ function reportSavedFormValidity() {
   return valid;
 }
 
+// The Supervisor stops this container while the restart request is still open, so
+// a restart that works never answers it. Home Assistant ingress turns that
+// dropped upstream connection into a plain 502, which is indistinguishable from a
+// refusal unless the body is read: this service always answers with a JSON
+// envelope, so any other error body means the App is already going down, which is
+// the restart succeeding rather than failing.
+async function restartRejection(response) {
+  if (response.ok) return null;
+  if (!(response.headers?.get("Content-Type") || "").includes("application/json")) return null;
+  const data = await response.json().catch(() => null);
+  if (!data || data.ok !== false) return null;
+  return data.message || "Configuration was saved, but restart could not be requested";
+}
+
+function reconnectWhileRestarting() {
+  setNotice("Configuration saved. Reconnecting while Alloy restarts…", "success");
+  setTimeout(() => location.reload(), 8000);
+  return true;
+}
+
 async function save(restart) {
   if (!reportSavedFormValidity()) return false;
   setNotice("Validating and saving…");
@@ -207,11 +227,11 @@ async function save(restart) {
       } catch {
         // Supervisor can terminate this add-on before the browser receives the
         // queued-restart response. Reconnect to establish the actual outcome.
-        setNotice("Configuration saved. Reconnecting while Alloy restarts…", "success");
-        setTimeout(() => location.reload(), 8000);
-        return true;
+        return reconnectWhileRestarting();
       }
-      if (!restartResponse.ok) throw new Error("Configuration was saved, but restart could not be requested");
+      const rejection = await restartRejection(restartResponse);
+      if (rejection) throw new Error(rejection);
+      if (!restartResponse.ok) return reconnectWhileRestarting();
       setTimeout(() => location.reload(), 8000);
     } else {
       configApplied = false;

@@ -236,6 +236,21 @@ Home Assistant App options. The former `fleet_password` value becomes the shared
 Fleet-and-local configuration is shown as **legacy hybrid** until Fleet or Local
 is selected, and cannot be saved unchanged.
 
+## Minimum component stability
+
+Alloy refuses to load a component below its permitted stability level. **Minimum
+component stability** on the Home Assistant **Configuration** tab raises that
+limit to `public-preview` or `experimental`; restart the App to apply it. It is a
+native option rather than a Web UI setting for two reasons: it has to apply to
+pipelines delivered by Fleet Management and to the manual override, neither of
+which is described by the Web UI form, and it has to stay reachable when the
+component it permits is the reason Alloy will not start.
+
+Candidate validation in the Web UI runs at the same level, so a preview component
+is accepted only once the option permits it. Upgrading from version 2.2.0 or
+earlier resets this to `generally-available`; set it again here if a pipeline
+needs a preview component.
+
 If Alloy cannot start, enable **Safe mode** in the Home Assistant Configuration
 tab and restart the App. Safe mode starts Alloy with only logging configured,
 while leaving the Web UI available so the stored operational configuration can
@@ -262,3 +277,4 @@ graph** reports an upstream error until Alloy is ready again.
 | No expected journal entries | Check the three log source switches, excluded App slugs and replay-age limit. |
 | OTLP sender cannot connect | Enable traces and explicitly allow OTLP clients on the HAOS network. |
 | Alloy will not start | Open the Web UI, correct the rejected setting or manual configuration, and use Safe mode from the Home Assistant Configuration tab if recovery is needed. |
+| A component is rejected as below the permitted stability level | Raise **Minimum component stability** on the Home Assistant Configuration tab and restart the App. |

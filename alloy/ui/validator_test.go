@@ -82,6 +82,29 @@ set -eu
 	}
 }
 
+// A stale copy in the settings store must not decide what validation permits,
+// and a missing or unreadable options file must fall back to the shipped default
+// rather than to an empty flag value Alloy would reject.
+func TestAlloyValidatorIgnoresStoredStabilityLevel(t *testing.T) {
+	dir := t.TempDir()
+	alloy := filepath.Join(dir, "alloy")
+	script := `#!/usr/bin/env bash
+set -eu
+[ "$2" = "--stability.level=generally-available" ] || { echo "wrong stability: $2" >&2; exit 1; }
+`
+	if err := os.WriteFile(alloy, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	validator := newAlloyValidator("../rootfs/usr/share/alloy/generate-config.sh", alloy, filepath.Join(dir, "absent.json"))
+	if err := validator.Validate(context.Background(), map[string]any{
+		"operation_mode":        "local",
+		"loki_url":              "https://logs.example/loki/api/v1/push",
+		"alloy_stability_level": "experimental",
+	}); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+}
+
 func TestAlloyValidatorRejectsStartupOnlyInputs(t *testing.T) {
 	tests := []struct {
 		name     string

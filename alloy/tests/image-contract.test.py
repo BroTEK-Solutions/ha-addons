@@ -21,6 +21,13 @@ checks = {
     "health does not depend on Alloy readiness": "127.0.0.1:12345/-/ready" not in dockerfile,
     "Alloy serves its UI below the proxy prefix": "--server.http.ui-path-prefix=/alloy" in alloy_run,
     "Alloy debug listener is loopback-only behind ingress": "--server.http.listen-addr=127.0.0.1:12345" in alloy_run,
+    # One source of truth for --stability.level: the Native App option, so it
+    # covers Fleet pipelines and the manual override, and stays reachable when a
+    # raised-stability configuration stops Alloy from starting.
+    "stability level comes from the Native App option": "bashio::config 'alloy_stability_level'"
+    in alloy_run,
+    "stability level is not read from the ingress settings store": "setting alloy_stability_level"
+    not in alloy_run,
     "UI service run file exists": ui_run.is_file(),
     "UI service is a longrun": ui_type.is_file() and ui_type.read_text().strip() == "longrun",
     "UI starts independently of Alloy": not ui_dependency.exists(),
