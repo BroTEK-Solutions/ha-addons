@@ -34,9 +34,9 @@ func (s *fileStore) Load() (map[string]any, error) {
 		if !valid || version != settingsSchemaVersion {
 			return nil, fmt.Errorf("read settings: unsupported schema_version %v", settings["schema_version"])
 		}
-		if migrateReservedFleetAttribute(settings) {
+		if migrateSettings(settings) {
 			if err := s.Save(settings); err != nil {
-				return nil, fmt.Errorf("persist Fleet attribute migration: %w", err)
+				return nil, fmt.Errorf("persist settings migration: %w", err)
 			}
 			return readSettings(s.path)
 		}
@@ -67,6 +67,23 @@ func (s *fileStore) Load() (map[string]any, error) {
 		return nil, fmt.Errorf("persist migrated settings: %w", err)
 	}
 	return readSettings(s.path)
+}
+
+func migrateSettings(settings map[string]any) bool {
+	changed := migrateReservedFleetAttribute(settings)
+	return migrateStabilityLevelOut(settings) || changed
+}
+
+// The stability level became a Native App option. Nothing reads the stored copy
+// any more, so leaving it in place would keep showing a value this App no longer
+// honors - in the settings file and in every backup that contains it. It is
+// dropped rather than migrated; Supervisor owns the value now.
+func migrateStabilityLevelOut(settings map[string]any) bool {
+	if _, present := settings["alloy_stability_level"]; !present {
+		return false
+	}
+	delete(settings, "alloy_stability_level")
+	return true
 }
 
 func migrateReservedFleetAttribute(settings map[string]any) bool {
@@ -191,7 +208,7 @@ var operationalSettingNames = map[string]struct{}{
 	"pyroscope_url": {}, "pyroscope_username": {}, "pyroscope_password": {},
 	"alloy_profiling": {}, "fleet_url": {}, "fleet_username": {},
 	"gcloud_rw_api_key": {}, "fleet_collector_name": {}, "fleet_attributes": {}, "fleet_default_attributes": {},
-	"fleet_poll_frequency": {}, "log_level": {}, "alloy_stability_level": {},
+	"fleet_poll_frequency": {}, "log_level": {},
 	"alloy_disable_telemetry": {}, "alloy_additional_args": {},
 	"additional_config": {}, "manual_config_enabled": {}, "manual_config": {},
 }

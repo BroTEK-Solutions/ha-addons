@@ -12,3 +12,12 @@ configuration:
     description: >-
       Controls diagnostic messages from the ingress configuration service.
       This does not change Alloy's own log level or any logs sent to Loki.
+  alloy_stability_level:
+    name: Minimum component stability
+    description: >-
+      Lowest stability of Alloy components allowed to load. Keep it at generally
+      available unless your configuration needs a public-preview or experimental
+      component. It applies to every operation mode, including pipelines
+      delivered by Fleet Management and the full manual configuration override.
+      Kept here so it stays reachable if a raised level stops Alloy from
+      starting. Restart the App after changing it.

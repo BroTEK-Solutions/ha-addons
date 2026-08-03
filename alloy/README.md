@@ -20,8 +20,9 @@ OTLP ports 4317 and 4318 remain loopback-only unless network access is
 explicitly enabled for trusted senders.
 
 Version 2 uses the ingress page as the single operational configuration source.
-The native Home Assistant Configuration tab contains only safe mode and UI log
-level recovery controls. Advanced users can enable a validated, full manual
+The native Home Assistant Configuration tab contains only the startup controls
+that must stay reachable when Alloy will not start: safe mode, UI log level and
+minimum component stability. Advanced users can enable a validated, full manual
 Alloy configuration override from the ingress page.
 
 See the App's **Documentation** tab for setup, defaults, security boundaries and

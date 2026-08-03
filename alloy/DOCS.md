@@ -9,10 +9,10 @@ to the selected operation mode, validates the complete candidate with Alloy,
 and links to Alloy's component graph. Saving does not interrupt collection;
 choose **Save and restart** when you are ready to apply the new configuration.
 
-The Home Assistant **Configuration** tab deliberately contains only two
-recovery controls: **Safe mode** and **Configuration UI log level**. All pipeline
-settings live in the Web UI, so the same option is never presented in two
-places.
+The Home Assistant **Configuration** tab contains the startup controls that must
+stay reachable even when Alloy will not start: **Safe mode**, **Configuration UI
+log level**, and **Stability level**. All pipeline settings live in the Web UI, so
+the same option is never presented in two places.
 
 ## Choose one operation mode
 
@@ -210,7 +210,6 @@ Home Assistant Core profiling.
 | Metrics scrape interval | `60s` | Frequency for local metric collection. |
 | Fleet poll frequency | `1m` | Frequency for remote-configuration checks. |
 | Disable Alloy usage reporting | on | Passes `--disable-reporting`; no anonymous usage report is sent. |
-| Stability level | generally available | Allows preview components when deliberately raised. |
 | Additional startup arguments | empty | Extra `--flag` or `--flag=value` Alloy CLI arguments, checked before saving. |
 | Additional Alloy configuration | empty | River blocks appended to generated local configuration. |
 | Full manual configuration override | off | Replaces every generated pipeline with the supplied complete Alloy configuration. |
@@ -236,6 +235,21 @@ Home Assistant App options. The former `fleet_password` value becomes the shared
 `gcloud_rw_api_key`; unrelated or unknown keys are not imported. An old mixed
 Fleet-and-local configuration is shown as **legacy hybrid** until Fleet or Local
 is selected, and cannot be saved unchanged.
+
+## Minimum component stability
+
+Alloy refuses to load a component below its permitted stability level. **Minimum
+component stability** on the Home Assistant **Configuration** tab raises that
+limit to `public-preview` or `experimental`; restart the App to apply it. It is a
+native option rather than a Web UI setting for two reasons: it has to apply to
+pipelines delivered by Fleet Management and to the manual override, neither of
+which is described by the Web UI form, and it has to stay reachable when the
+component it permits is the reason Alloy will not start.
+
+Candidate validation in the Web UI runs at the same level, so a preview component
+is accepted only once the option permits it. Upgrading from version 2.2.0 or
+earlier resets this to `generally-available`; set it again here if a pipeline
+needs a preview component.
 
 If Alloy cannot start, enable **Safe mode** in the Home Assistant Configuration
 tab and restart the App. Safe mode starts Alloy with only logging configured,
@@ -263,3 +277,4 @@ graph** reports an upstream error until Alloy is ready again.
 | No expected journal entries | Check the three log source switches, excluded App slugs and replay-age limit. |
 | OTLP sender cannot connect | Enable traces and explicitly allow OTLP clients on the HAOS network. |
 | Alloy will not start | Open the Web UI, correct the rejected setting or manual configuration, and use Safe mode from the Home Assistant Configuration tab if recovery is needed. |
+| A component is rejected as below the permitted stability level | Raise **Minimum component stability** on the Home Assistant Configuration tab and restart the App. |

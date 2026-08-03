@@ -32,7 +32,12 @@ declare -a args=(
 
 # Alloy refuses to load a component below the permitted stability level, so this
 # is the switch that makes public-preview and experimental components usable.
-stability_level=$(setting alloy_stability_level)
+# It is a Native App option so it stays reachable from the Configuration tab even
+# when a raised-stability config would otherwise keep Alloy from starting.
+stability_level=$(bashio::config 'alloy_stability_level' 'generally-available')
+# bashio prints nothing at all - not the default - when its Supervisor API call
+# fails, and it still exits 0. Alloy rejects an empty --stability.level and would
+# refuse to start, so the fallback is applied here rather than trusted to bashio.
 [ -n "${stability_level}" ] || stability_level=generally-available
 args+=("--stability.level=${stability_level}")
 

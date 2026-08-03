@@ -24,10 +24,26 @@ type candidateValidator interface {
 type alloyValidator struct {
 	generatorPath string
 	alloyPath     string
+	optionsPath   string
 }
 
-func newAlloyValidator(generatorPath, alloyPath string) *alloyValidator {
-	return &alloyValidator{generatorPath: generatorPath, alloyPath: alloyPath}
+func newAlloyValidator(generatorPath, alloyPath, optionsPath string) *alloyValidator {
+	return &alloyValidator{generatorPath: generatorPath, alloyPath: alloyPath, optionsPath: optionsPath}
+}
+
+// stabilityLevel reads the Native App option Supervisor writes to options.json.
+// The startup flag lives there, not in the settings store, so validation must
+// match the level Alloy will actually run at.
+func (v *alloyValidator) stabilityLevel() string {
+	const fallback = "generally-available"
+	options, err := readSettings(v.optionsPath)
+	if err != nil {
+		return fallback
+	}
+	if level, ok := options["alloy_stability_level"].(string); ok && level != "" {
+		return level
+	}
+	return fallback
 }
 
 func (v *alloyValidator) Validate(ctx context.Context, settings map[string]any) error {
@@ -64,8 +80,7 @@ func (v *alloyValidator) Validate(ctx context.Context, settings map[string]any) 
 		}
 	}
 
-	stability := stringSetting(settings, "alloy_stability_level", "generally-available")
-	command := exec.CommandContext(ctx, v.alloyPath, "validate", "--stability.level="+stability, configPath)
+	command := exec.CommandContext(ctx, v.alloyPath, "validate", "--stability.level="+v.stabilityLevel(), configPath)
 	command.Env = candidateEnvironment(settings)
 	output, err := command.CombinedOutput()
 	if err != nil {

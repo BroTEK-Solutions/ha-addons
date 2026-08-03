@@ -80,6 +80,33 @@ const modeStep = { dataset: { wizardStep: "mode" }, hidden: false, querySelector
 const configHeading = { dataset: { wizardStep: "config" }, hidden: true, querySelectorAll() { return []; } };
 const manualSection = { dataset: { mode: "local", manualControl: "", wizardStep: "config" }, hidden: true, querySelectorAll() { return [manualToggle, manualField]; } };
 const requests = [];
+let saveAndRestart;
+const saveRestartButton = { addEventListener(_event, listener) { saveAndRestart = listener; } };
+// How the mocked api/restart call answers: "accepted" is this service's own
+// reply, "gateway" is the plain 502 Home Assistant ingress synthesizes once
+// Supervisor has stopped the container, and "rejected" is this service reporting
+// that Supervisor refused the restart.
+let restartOutcome = "accepted";
+const restartResponses = {
+  accepted: {
+    ok: true,
+    status: 202,
+    headers: { get: () => "application/json" },
+    json: async () => ({ ok: true, message: "Restart requested." }),
+  },
+  gateway: {
+    ok: false,
+    status: 502,
+    headers: { get: () => "text/plain; charset=utf-8" },
+    json: async () => { throw new SyntaxError("Unexpected token '5'"); },
+  },
+  rejected: {
+    ok: false,
+    status: 502,
+    headers: { get: () => "application/json" },
+    json: async () => ({ ok: false, message: "Supervisor returned 400 Bad Request" }),
+  },
+};
 
 globalThis.document = {
   querySelector(selector) {
@@ -94,7 +121,7 @@ globalThis.document = {
     if (selector === "#fleet-reference-manifest") return fleetReferenceManifest;
     if (selector === "#generate-fleet-reference") return fleetReferenceButton;
     if (selector === "#download-fleet-reference") return downloadButton;
-    if (selector === "#save-restart") return { addEventListener() {} };
+    if (selector === "#save-restart") return saveRestartButton;
     if (selector === "#wizard-mode-next") return wizardModeNext;
     if (selector === "#wizard-mode-back") return wizardModeBack;
     if (selector === "#wizard-starter-back") return wizardStarterBack;
@@ -122,6 +149,7 @@ globalThis.location = { hostname: "example.ui.nabu.casa", reload() {} };
 globalThis.window = { scrollTo() {} };
 globalThis.fetch = async (url, options = {}) => {
   requests.push({ url, method: options.method || "GET", body: options.body });
+  if (url === "api/restart") return restartResponses[restartOutcome];
   return {
     ok: true,
     async json() {
@@ -224,4 +252,56 @@ generateFleetReference();
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(referencePosts(), issuedBeforeEdit, "edited settings must not render a manifest before restart");
 assert.match(notice.textContent, /Save & restart/, "the UI must explain how to apply edited settings");
+// Save & restart: the restart request is expected not to answer, because
+// Supervisor stops this container while it is still open. Ingress reports that as
+// a plain 502, which must be read as "already restarting" rather than as a
+// failure - the previous behavior showed a red error on every successful restart.
+const scheduled = [];
+const realSetTimeout = globalThis.setTimeout;
+globalThis.setTimeout = (callback, delay) => {
+  scheduled.push({ callback, delay });
+  return 0;
+};
+// The click handler does not return its promise, so the save has to be given the
+// ticks it needs before its outcome is inspected.
+const settle = async () => {
+  for (let tick = 0; tick < 8; tick += 1) await new Promise((resolve) => realSetTimeout(resolve, 0));
+};
+
+restartOutcome = "gateway";
+saveAndRestart();
+await settle();
+assert.equal(notice.className, "success", "an ingress 502 after a restart request must not be shown as an error");
+assert.match(notice.textContent, /Reconnecting while Alloy restarts/, "the UI must reconnect instead of reporting failure");
+assert.ok(
+  scheduled.some(({ delay }) => delay === 8000),
+  "the page must reload once the restarted App is back",
+);
+
+// A restart Supervisor actually refused still has to surface: that answer comes
+// from this service, as its JSON envelope, and never from ingress.
+scheduled.length = 0;
+restartOutcome = "rejected";
+saveAndRestart();
+await settle();
+assert.equal(notice.className, "error", "a Supervisor refusal must still be reported");
+assert.match(notice.textContent, /Supervisor returned 400 Bad Request/, "the Supervisor message must reach the operator");
+assert.ok(!scheduled.some(({ delay }) => delay === 8000), "a refused restart must not schedule a reload");
+
+// The ordinary answer, for hosts where the response wins the race.
+scheduled.length = 0;
+restartOutcome = "accepted";
+saveAndRestart();
+await settle();
+assert.equal(notice.className, "success");
+assert.ok(scheduled.some(({ delay }) => delay === 8000), "an accepted restart must reload the page");
+
+globalThis.setTimeout = realSetTimeout;
+
+// One source of truth for the stability level: the Native App option. The ingress
+// form must not offer it, or the two would disagree.
+assert.doesNotMatch(html, /name="alloy_stability_level"/, "the stability level must not be an ingress form field");
+assert.doesNotMatch(appSource, /alloy_stability_level/, "the ingress UI must not carry a stability level default");
+
 console.log("PASS: configuration reload resets secret controls");
+console.log("PASS: a restart that stops this App is not reported as a failure");

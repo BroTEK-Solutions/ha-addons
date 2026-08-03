@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Grafana Alloy configuration</title>
-  <link rel="stylesheet" href="app.css?v=20260802-wizard">
-  <script src="app.js?v=20260802-wizard" defer></script>
+  <link rel="stylesheet" href="app.css?v=20260803-stability">
+  <script src="app.js?v=20260803-stability" defer></script>
 </head>
 <body>
   <header>
@@ -177,7 +177,6 @@ gcx fleet pipelines create -f home-assistant-fleet-pipeline.yaml</code></pre>
           <summary>Advanced &amp; optional configuration options</summary>
           <div class="grid advanced">
             <div class="field"><label for="log_level">Alloy log level</label><p class="help">Changes Alloy's own App log verbosity, not the logs sent to Loki.</p><select id="log_level" name="log_level"><option>debug</option><option selected>info</option><option>warn</option><option>error</option></select></div>
-            <div class="field"><label for="alloy_stability_level">Minimum component stability</label><p class="help">Keep generally available unless additional configuration needs a preview component.</p><select id="alloy_stability_level" name="alloy_stability_level"><option selected>generally-available</option><option>public-preview</option><option>experimental</option></select></div>
             <div><label class="switch"><input name="alloy_disable_telemetry" type="checkbox" checked> Disable anonymous Alloy usage reporting</label><p class="help">Pass <code>--disable-reporting</code> so Alloy sends no anonymous feature-usage report to Grafana.</p></div>
             <div class="field wide"><label for="alloy_additional_args">Additional Alloy startup flags</label><p class="help">Whitespace-separated <code>--flag</code> or <code>--flag=value</code> arguments. Invalid flags are rejected before saving.</p><textarea id="alloy_additional_args" name="alloy_additional_args" rows="3"></textarea></div>
             <div class="field wide" data-mode="local"><label for="additional_config">Additional Alloy configuration</label><p class="help">River blocks appended verbatim after the generated configuration.</p><textarea id="additional_config" name="additional_config" rows="8" spellcheck="false"></textarea></div>
