@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.3.0](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.2.0...alloy-v2.3.0) (2026-08-03)
+
+
+### Features
+
+* **alloy:** move stability level to config.yaml as a native option ([05c018d](https://github.com/BroTEK-Solutions/ha-addons/commit/05c018d9c6044bfb537e0bc729a322ed010457ef))
+* **alloy:** move stability level to config.yaml as a native option ([82f4203](https://github.com/BroTEK-Solutions/ha-addons/commit/82f4203d0c0466ea171c2544f2186ce8ae400c1f))
+
+
+### Bug Fixes
+
+* **alloy:** complete the native stability option and stop reporting successful restarts as failures ([27b3a85](https://github.com/BroTEK-Solutions/ha-addons/commit/27b3a858aa9c5a1e0e87375143c5115c39b9e4ef))
+* **alloy:** keep Alloy startup flags reachable in Fleet and break-glass modes ([285f610](https://github.com/BroTEK-Solutions/ha-addons/commit/285f61008aff0afa22781c47d5a38d44d0271311))
+* **alloy:** keep Alloy startup flags reachable in Fleet and break-glass modes ([d4b54e9](https://github.com/BroTEK-Solutions/ha-addons/commit/d4b54e93ba4f23f0e923bf1f9bd603dfdcd108b1))
+
 ## [2.2.0](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.1.1...alloy-v2.2.0) (2026-08-03)
 
 
