@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.2.0](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.1.1...alloy-v2.2.0) (2026-08-03)
+
+
+### Features
+
+* **alloy:** render Fleet starter pipelines with editable placeholders ([889ca64](https://github.com/BroTEK-Solutions/ha-addons/commit/889ca644bd4961f2deba67398562befc843f46b6))
+
+
+### Bug Fixes
+
+* **alloy:** drop starter endpoints for deselected signals ([fdf6c9b](https://github.com/BroTEK-Solutions/ha-addons/commit/fdf6c9bba89729f665b7c8e75f3f98f1f778ba12))
+* **alloy:** pin metric and log identity to the instance name ([557d5aa](https://github.com/BroTEK-Solutions/ha-addons/commit/557d5aa6c1930fbdb7804753084c2511ec7de784))
+* **alloy:** scope identity rewrite to the host exporter ([5fcdb30](https://github.com/BroTEK-Solutions/ha-addons/commit/5fcdb30d6097da150c8b36751c7a4b7aff6da2bd))
+* **alloy:** scope the identity relabel to the host exporter ([41392fb](https://github.com/BroTEK-Solutions/ha-addons/commit/41392fba9a00425027211618812f7b68bd8e202a))
+
 ## [2.1.1](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.1.0...alloy-v2.1.1) (2026-08-02)
 
 
