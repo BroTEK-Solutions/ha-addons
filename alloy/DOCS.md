@@ -222,6 +222,15 @@ anything. Generated Fleet and Local pipeline settings are ignored while the
 override is enabled, but stored secrets remain available through their
 documented environment variables.
 
+Alloy's **startup flags still apply** under the override, because the App still
+starts the collector - only the configuration comes from you. **Disable Alloy
+usage reporting** and **Additional Alloy startup flags** therefore stay editable
+while the override is on, and **Minimum component stability** stays on the Home
+Assistant Configuration tab. The two controls that are part of the *generated*
+configuration do not apply: **Alloy log level** becomes the `logging` block in
+your own configuration, and **Additional Alloy configuration** has nothing to be
+appended to.
+
 ## Secrets and upgrades
 
 Passwords and tokens are referenced from Alloy with `sys.env()` and are never

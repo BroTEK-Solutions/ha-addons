@@ -84,7 +84,12 @@ function scheduleFleetHealthPoll() {
 }
 
 function refreshWizardVisibility() {
-  const selectedMode = manualToggle.checked ? "" : modeSelect.value;
+  // The manual override is its own mode for visibility purposes. Sections that
+  // list only local or fleet stay hidden exactly as they did when this was "",
+  // but a section can now opt in to break-glass mode with a "manual" token -
+  // which the Alloy startup flags need, because they apply to a manual
+  // configuration just as much as to a generated one.
+  const selectedMode = manualToggle.checked ? "manual" : modeSelect.value;
   const sections = new Set([
     ...document.querySelectorAll("[data-mode]"),
     ...document.querySelectorAll("[data-wizard-step]"),
