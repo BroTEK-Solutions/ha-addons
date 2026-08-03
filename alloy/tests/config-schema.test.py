@@ -17,8 +17,13 @@ TRANSLATIONS = ADDON / "translations" / "en.yaml"
 EXPECTED_SCHEMA = {
     "safe_mode": "bool",
     "ui_log_level": "list(debug|info|warn|error)",
+    "alloy_stability_level": "list(generally-available|public-preview|experimental)",
 }
-EXPECTED_OPTIONS = {"safe_mode": False, "ui_log_level": "info"}
+EXPECTED_OPTIONS = {
+    "safe_mode": False,
+    "ui_log_level": "info",
+    "alloy_stability_level": "generally-available",
+}
 
 
 def validate(schema: str, value: object) -> object:

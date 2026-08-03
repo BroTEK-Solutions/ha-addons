@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -37,12 +36,8 @@ func newAlloyValidator(generatorPath, alloyPath, optionsPath string) *alloyValid
 // match the level Alloy will actually run at.
 func (v *alloyValidator) stabilityLevel() string {
 	const fallback = "generally-available"
-	data, err := os.ReadFile(v.optionsPath)
+	options, err := readSettings(v.optionsPath)
 	if err != nil {
-		return fallback
-	}
-	var options map[string]any
-	if json.Unmarshal(data, &options) != nil {
 		return fallback
 	}
 	if level, ok := options["alloy_stability_level"].(string); ok && level != "" {
