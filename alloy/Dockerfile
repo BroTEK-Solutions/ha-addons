@@ -17,7 +17,7 @@ ARG TARGETARCH
 # this file so the validation container always matches the shipped binary.
 RUN set -eux; \
     # renovate: datasource=github-releases depName=grafana/alloy
-    ALLOY_VERSION="1.18.0"; \
+    ALLOY_VERSION="1.18.1"; \
     case "${TARGETARCH}" in \
         amd64)  ARCH="linux-amd64" ;; \
         arm64) ARCH="linux-arm64" ;; \
