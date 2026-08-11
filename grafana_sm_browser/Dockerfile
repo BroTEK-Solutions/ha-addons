@@ -8,7 +8,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /out/ha-sm-launcher \
     .
 
-FROM grafana/synthetic-monitoring-agent:v0.62.1-browser@sha256:6ebab67eab36e4a86d847929c7c7bc9712856cdda77a0721de7357c5634169ea
+FROM grafana/synthetic-monitoring-agent:v0.63.0-browser@sha256:2678de4f78a317b6b7eecfec7c5e0a8800d1f95931653a51ec8577c57969bb36
 
 USER root
 COPY --from=launcher-builder --chown=0:0 --chmod=0500 \
