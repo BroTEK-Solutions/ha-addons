@@ -69,6 +69,32 @@ Anyone who can change checks assigned to this probe can cause requests from the 
 network. Protect Grafana Cloud administrator access, and enable private k6 targets only when that
 trust boundary is acceptable.
 
+## Home Assistant entities over MQTT
+
+If Home Assistant has an MQTT broker (the Mosquitto broker App is the usual
+one), this App publishes its own health as entities using MQTT discovery. There
+is nothing to configure and no credentials to copy: the broker details come from
+the Supervisor, so rotating them does not strand a copy here. Without a broker
+the App behaves exactly as before, and it keeps checking, so installing one
+later needs no restart.
+
+The point is to make the monitoring pipeline itself monitorable. These entities
+let an automation notice that telemetry stopped - which is precisely the failure
+that otherwise hides, because the thing that would have told you is the thing
+that broke.
+
+| Entity | Type | Meaning |
+| --- | --- | --- |
+| Probe running | binary sensor | The agent's local HTTP server answers, so the process is alive. |
+| Connected to Grafana Cloud | binary sensor | The agent's `/ready` endpoint answers. It returns 503 until the probe has actually connected, which makes this the entity worth alerting on. |
+
+
+Entities appear under a device named after the App. They report `unavailable`
+when the App stops, through an MQTT last-will message, and an individual entity
+reads `unknown` when its value cannot currently be observed. `unknown` means
+this App could not measure the state - it is never a silent substitute for a
+real "off".
+
 ## Health and troubleshooting
 
 The container health check calls the agent's local `/` endpoint, which proves the process and HTTP

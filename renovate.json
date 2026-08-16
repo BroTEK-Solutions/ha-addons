@@ -13,6 +13,10 @@
   "platformAutomerge": true,
   "rebaseWhen": "behind-base-branch",
   "internalChecksFilter": "strict",
+  "ignorePaths": [
+    "*/reporter/**",
+    "*/launcher/**"
+  ],
   "customManagers": [
     {
       "customType": "regex",

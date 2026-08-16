@@ -1,0 +1,8 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# Publishes the connector's health to Home Assistant over MQTT. This is a side
+# channel and must never be able to disturb the tunnel, so it runs as its own
+# service and stays quiet when no MQTT broker is configured.
+REPORTER_APP=grafana_pdc
+export REPORTER_APP
+exec /usr/bin/ha-reporter

@@ -1,3 +1,9 @@
+FROM golang:1.26.4-alpine3.22@sha256:727cfc3c40be55cd1bc9a4a059406b28a059857e3be752aa9d09531e12c20c56 AS reporter-builder
+
+WORKDIR /src
+COPY reporter/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -buildid=" -o /out/ha-reporter .
+
 FROM grafana/pdc-agent:0.0.63@sha256:3d8346ee5ec30aeaaae5f82db2a77f8347405fbfc4e4a3248ae26d65dd8bf031 AS pdc-source
 
 FROM ghcr.io/home-assistant/base:3.24@sha256:94ff231402a5e7ad2a82e261ad5fa4ffae7d7bb095c3febb2edbdf309c9b6aca
@@ -14,6 +20,7 @@ RUN apk upgrade --no-cache \
     && adduser -S -D -H -u 30000 -G pdc pdc
 
 COPY --from=pdc-source /usr/bin/pdc /usr/bin/pdc
+COPY --from=reporter-builder /out/ha-reporter /usr/bin/ha-reporter
 COPY rootfs /
 
 # This is deliberately a liveness probe. Startup and tunnel readiness are

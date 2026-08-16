@@ -16,6 +16,12 @@ init: false
 # backup archive that is frequently unencrypted and copied off the device.
 backup_exclude:
   - ssh/**
+# Optional: when Home Assistant has an MQTT broker, the App publishes its own
+# health as entities so automations can react to a broken telemetry pipeline.
+# "want" rather than "need" - the App runs perfectly well without a broker. This
+# grants only the MQTT service; it deliberately does not add hassio_api.
+services:
+  - mqtt:want
 ports:
   8090/tcp: null
 options:

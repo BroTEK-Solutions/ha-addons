@@ -6,6 +6,12 @@ WORKDIR /src
 COPY ui/ ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/alloy-ui .
 
+FROM golang:1.26-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 AS reporter-builder
+
+WORKDIR /src
+COPY reporter/ ./
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ha-reporter .
+
 FROM ${BUILD_FROM}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -31,6 +37,7 @@ RUN set -eux; \
 
 COPY rootfs /
 COPY --from=ui-builder /out/alloy-ui /usr/bin/alloy-ui
+COPY --from=reporter-builder /out/ha-reporter /usr/bin/ha-reporter
 
 # Supervisor reads the container's Docker health status and surfaces it as the
 # add-on's health, which is what the user-facing Watchdog toggle acts on. This

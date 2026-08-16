@@ -52,8 +52,13 @@ def expected_files(slug: str, values: dict[str, str]) -> dict[Path, bytes]:
             relative = source.relative_to(TEMPLATE)
             result[ROOT / slug / relative] = render(source.read_text(), values).encode()
     for source in sorted((SOURCE / "launcher").iterdir()):
-        if source.is_file() and source.name != "main_test.go":
-            result[ROOT / slug / "launcher" / source.name] = source.read_bytes()
+        if not source.is_file() or source.name == "main_test.go":
+            continue
+        # Only module sources travel. Anything else is a local build artifact
+        # and must never reach an image build context.
+        if source.name not in {"go.mod", "go.sum"} and source.suffix != ".go":
+            continue
+        result[ROOT / slug / "launcher" / source.name] = source.read_bytes()
     for source in sorted((SOURCE / "assets").iterdir()):
         if source.is_file():
             result[ROOT / slug / source.name] = source.read_bytes()
@@ -69,9 +74,15 @@ def synchronize(check: bool) -> int:
         existing_paths = {path for path in app_dir.rglob("*") if path.is_file()} if app_dir.exists() else set()
         # Dockerfiles remain variant-owned for Renovate. Changelogs remain
         # variant-owned because Release Please prepends package release notes.
+        # The MQTT reporter is owned by scripts/sync_shared_lib.py, which copies
+        # the same sources into every App; leaving it in this script's deletion
+        # set would make the two synchronizers fight over it.
         existing_paths.difference_update(
             {app_dir / "Dockerfile", app_dir / "CHANGELOG.md"}
         )
+        existing_paths = {
+            path for path in existing_paths if path.parent != app_dir / "reporter"
+        }
         for destination, content in expected.items():
             if destination.exists() and destination.read_bytes() == content:
                 continue

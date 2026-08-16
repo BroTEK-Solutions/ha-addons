@@ -1,0 +1,8 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# Publishes Alloy's health to Home Assistant over MQTT. This is a side channel:
+# it must never be able to disturb Alloy, so it runs as its own service and the
+# reporter itself stays quiet when no MQTT broker is configured.
+REPORTER_APP=alloy
+export REPORTER_APP
+exec /usr/bin/ha-reporter

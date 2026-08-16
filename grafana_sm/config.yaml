@@ -11,6 +11,11 @@ arch:
 init: false
 privileged:
   - NET_RAW
+# Optional: when Home Assistant has an MQTT broker, the probe publishes whether
+# it is running and connected to Grafana Cloud as entities. "want" rather than
+# "need" - the probe runs perfectly well without a broker.
+services:
+  - mqtt:want
 options:
   log_level: info
   allow_private_networks: false

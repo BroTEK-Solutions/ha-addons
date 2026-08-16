@@ -14,6 +14,11 @@ startup: services
 journald: true
 host_network: true
 homeassistant_api: true
+# Optional: when Home Assistant has an MQTT broker, the App publishes its own
+# health as entities so automations can react to a broken telemetry pipeline.
+# "want" rather than "need" - the App runs perfectly well without a broker.
+services:
+  - mqtt:want
 ingress: true
 ingress_stream: true
 hassio_api: true

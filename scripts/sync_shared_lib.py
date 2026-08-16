@@ -20,6 +20,14 @@ SOURCE = ROOT / "shared" / "lib" / "ha-validate.sh"
 DESTINATION = Path("rootfs/usr/share/ha-lib/ha-validate.sh")
 CONSUMERS = ("alloy", "grafana_pdc")
 
+# The MQTT reporter is a Go module rather than a shell library, so it is copied
+# verbatim into every App that publishes Home Assistant entities. Tests stay in
+# the source tree: they are run once from shared/reporter and would only add
+# weight to four build contexts.
+REPORTER_SOURCE = ROOT / "shared" / "reporter"
+REPORTER_DESTINATION = Path("reporter")
+REPORTER_CONSUMERS = ("alloy", "grafana_pdc", "grafana_sm", "grafana_sm_browser")
+
 BANNER = (
     "# GENERATED FILE - DO NOT EDIT.\n"
     "# Source: shared/lib/ha-validate.sh\n"
@@ -35,6 +43,20 @@ def expected_content() -> bytes:
     return f"{first_line}\n{BANNER}{remainder}".encode()
 
 
+def reporter_files() -> dict[Path, bytes]:
+    """The reporter sources each consuming App needs in its build context."""
+    result: dict[Path, bytes] = {}
+    for source in sorted(REPORTER_SOURCE.iterdir()):
+        if not source.is_file() or source.name.endswith("_test.go"):
+            continue
+        # Only module sources travel. Anything else in the directory is a local
+        # build artifact and must never reach an image build context.
+        if source.name not in {"go.mod", "go.sum"} and source.suffix != ".go":
+            continue
+        result[REPORTER_DESTINATION / source.name] = source.read_bytes()
+    return result
+
+
 def synchronize(check: bool) -> int:
     content = expected_content()
     stale: list[str] = []
@@ -46,6 +68,27 @@ def synchronize(check: bool) -> int:
         if not check:
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(content)
+
+    reporter = reporter_files()
+    for slug in REPORTER_CONSUMERS:
+        expected_paths = {ROOT / slug / relative for relative in reporter}
+        for relative, body in reporter.items():
+            destination = ROOT / slug / relative
+            if destination.exists() and destination.read_bytes() == body:
+                continue
+            stale.append(str(destination.relative_to(ROOT)))
+            if not check:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(body)
+        # A source file removed upstream has to disappear from the App copies
+        # too, or a stale build would keep compiling it.
+        reporter_dir = ROOT / slug / REPORTER_DESTINATION
+        if reporter_dir.is_dir():
+            for existing in sorted(reporter_dir.iterdir()):
+                if existing.is_file() and existing not in expected_paths:
+                    stale.append(str(existing.relative_to(ROOT)))
+                    if not check:
+                        existing.unlink()
 
     if stale and check:
         print("Generated shared library copies are stale:", file=sys.stderr)

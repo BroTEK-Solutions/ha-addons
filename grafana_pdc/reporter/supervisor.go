@@ -1,0 +1,112 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+)
+
+// mqttService is the broker Home Assistant already manages. Reading it from the
+// Supervisor is the whole reason these Apps need no broker options: the user
+// never types a host, port or password, and rotating the Mosquitto credentials
+// does not strand a hard-coded copy in an App's configuration.
+type mqttService struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	SSL      bool   `json:"ssl"`
+}
+
+// appInfo is what the Supervisor knows about the App this reporter runs inside.
+// It names the device in the Home Assistant device registry, so entities group
+// under the App rather than appearing as unrelated orphans.
+type appInfo struct {
+	Slug    string `json:"slug"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+type supervisorClient struct {
+	baseURL string
+	token   string
+	client  *http.Client
+}
+
+func newSupervisorClient(baseURL, token string, client *http.Client) *supervisorClient {
+	return &supervisorClient{baseURL: strings.TrimRight(baseURL, "/"), token: token, client: client}
+}
+
+func (s *supervisorClient) get(ctx context.Context, path string, into any) (int, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, s.baseURL+path, nil)
+	if err != nil {
+		return 0, err
+	}
+	request.Header.Set("Authorization", "Bearer "+s.token)
+	response, err := s.client.Do(request)
+	if err != nil {
+		return 0, err
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return response.StatusCode, fmt.Errorf("supervisor %s returned HTTP %d", path, response.StatusCode)
+	}
+	var envelope struct {
+		Result string          `json:"result"`
+		Data   json.RawMessage `json:"data"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&envelope); err != nil {
+		return response.StatusCode, fmt.Errorf("decode supervisor %s: %w", path, err)
+	}
+	if envelope.Result != "ok" {
+		return response.StatusCode, fmt.Errorf("supervisor %s reported %q", path, envelope.Result)
+	}
+	if into == nil {
+		return response.StatusCode, nil
+	}
+	if err := json.Unmarshal(envelope.Data, into); err != nil {
+		return response.StatusCode, fmt.Errorf("decode supervisor %s payload: %w", path, err)
+	}
+	return response.StatusCode, nil
+}
+
+// MQTTService reports the broker's connection details. The second return value
+// distinguishes "Home Assistant has no MQTT broker" from "the lookup failed":
+// the first is an ordinary state that means this reporter should stay quiet,
+// the second is worth retrying and logging.
+func (s *supervisorClient) MQTTService(ctx context.Context) (mqttService, bool, error) {
+	var service mqttService
+	status, err := s.get(ctx, "/services/mqtt", &service)
+	if err != nil {
+		// The Supervisor answers 400 or 404 when no MQTT service is published,
+		// which is the normal state on an install without a broker.
+		if status == http.StatusBadRequest || status == http.StatusNotFound {
+			return mqttService{}, false, nil
+		}
+		return mqttService{}, false, err
+	}
+	if service.Host == "" || service.Port == 0 {
+		return mqttService{}, false, nil
+	}
+	return service, true, nil
+}
+
+func (s *supervisorClient) AppInfo(ctx context.Context) (appInfo, error) {
+	var info appInfo
+	if _, err := s.get(ctx, "/addons/self/info", &info); err != nil {
+		return appInfo{}, err
+	}
+	return info, nil
+}
+
+// Address renders the broker URL in the scheme autopaho expects.
+func (m mqttService) Address() string {
+	scheme := "mqtt"
+	if m.SSL {
+		scheme = "tls"
+	}
+	return scheme + "://" + m.Host + ":" + strconv.Itoa(m.Port)
+}

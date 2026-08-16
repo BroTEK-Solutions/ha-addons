@@ -10,7 +10,7 @@ on:
 permissions: {}
 
 env:
-  MONITORED_FILES: "config.json config.yaml config.yml Dockerfile launcher rootfs apparmor.txt"
+  MONITORED_FILES: "config.json config.yaml config.yml Dockerfile launcher reporter rootfs apparmor.txt"
 
 concurrency:
   group: build-apps-${{ github.workflow }}-${{ github.ref }}
@@ -69,11 +69,15 @@ jobs:
             alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run \
             alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run \
             alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish \
+            alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy-reporter/run \
+            alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy-reporter/finish \
             alloy/tests/generate-config.test.sh \
             alloy/tests/init-alloy.test.sh \
             grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run \
             grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run \
             grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish \
+            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-reporter/run \
+            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-reporter/finish \
             grafana_pdc/tests/service.test.sh \
             grafana_pdc/tests/image-smoke.test.sh \
             grafana_pdc/tests/fixtures/bashio \
@@ -81,6 +85,16 @@ jobs:
 
       - name: Shared validator library tests
         run: bash tests/shared_validate_lib_test.sh
+
+      - name: Set up Go for the shared MQTT reporter
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: shared/reporter/go.mod
+          cache: false
+
+      - name: Shared MQTT reporter tests
+        working-directory: shared/reporter
+        run: go test ./...
 
       - name: Repository contract tests
         run: |

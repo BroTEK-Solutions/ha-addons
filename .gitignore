@@ -3,3 +3,8 @@ docs/superpowers/
 
 # Go build output from `go build` inside alloy/ui
 /alloy/ui/alloy-ui
+
+# Local `go build` output. These directories are copied verbatim into image
+# build contexts by the sync scripts, so a stray binary must never linger.
+shared/reporter/ha-reporter
+synthetic_monitoring_shared/launcher/synthetic-monitoring-launcher

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -179,4 +181,52 @@ func containsString(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestStartReporterIsANoOpWithoutAnAppName(t *testing.T) {
+	t.Setenv("REPORTER_APP", "")
+	var log strings.Builder
+	// A missing REPORTER_APP means this image does not publish entities. It must
+	// not warn, and above all must not fail: the probe still has to start.
+	startReporter("/nonexistent/ha-reporter", os.Environ(), &log)
+	if log.String() != "" {
+		t.Fatalf("expected silence, got %q", log.String())
+	}
+}
+
+func TestStartReporterIsANoOpWhenTheBinaryIsAbsent(t *testing.T) {
+	t.Setenv("REPORTER_APP", "grafana_sm")
+	var log strings.Builder
+	startReporter(filepath.Join(t.TempDir(), "absent"), os.Environ(), &log)
+	if log.String() != "" {
+		t.Fatalf("an absent reporter must not be reported as a failure, got %q", log.String())
+	}
+}
+
+func TestReporterNeverReceivesTheProbeToken(t *testing.T) {
+	// The agent's token is added to the agent's own environment only. Whatever
+	// the launcher hands the reporter must not carry it.
+	opts := options{
+		APIToken:         "super-secret-token",
+		APIServerAddress: "example.grafana.net:443",
+		LogLevel:         "warn",
+	}
+	process, err := buildAgentProcess(opts, []string{"PATH=/usr/bin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentCarriesToken := false
+	for _, entry := range process.Env {
+		if strings.Contains(entry, opts.APIToken) {
+			agentCarriesToken = true
+		}
+	}
+	if !agentCarriesToken {
+		t.Fatal("the agent must receive its token")
+	}
+	for _, entry := range os.Environ() {
+		if strings.Contains(entry, opts.APIToken) {
+			t.Fatal("the ambient environment handed to the reporter must not contain the token")
+		}
+	}
 }

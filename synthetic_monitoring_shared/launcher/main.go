@@ -16,11 +16,12 @@ import (
 )
 
 const (
-	agentPath   = "/usr/local/bin/synthetic-monitoring-agent"
-	agentUID    = 12345
-	agentGID    = 12345
-	optionsPath = "/data/options.json"
-	healthURL   = "http://127.0.0.1:4050/"
+	agentPath    = "/usr/local/bin/synthetic-monitoring-agent"
+	reporterPath = "/usr/local/bin/ha-reporter"
+	agentUID     = 12345
+	agentGID     = 12345
+	optionsPath  = "/data/options.json"
+	healthURL    = "http://127.0.0.1:4050/"
 )
 
 type options struct {
@@ -103,6 +104,35 @@ func wrapWithTini(process agentProcess, tiniPath string) agentProcess {
 	process.Path = tiniPath
 	process.Args = args
 	return process
+}
+
+// startReporter launches the optional Home Assistant MQTT reporter alongside
+// the agent. This App has no supervision tree - the launcher execs the agent and
+// is replaced by it - so the reporter is started as a child beforehand and is
+// bounded by the container's lifetime.
+//
+// Every failure here is deliberately silent-ish and non-fatal: the probe is the
+// product, and a telemetry side channel must never keep it from starting. The
+// child is started while the launcher is still root so it can be dropped to the
+// same unprivileged account the agent runs as, and it inherits only the ambient
+// environment, never the probe's API token.
+func startReporter(reporterPath string, environment []string, log io.Writer) {
+	if os.Getenv("REPORTER_APP") == "" {
+		return
+	}
+	if _, err := os.Stat(reporterPath); err != nil {
+		return
+	}
+	command := exec.Command(reporterPath)
+	command.Env = environment
+	command.Stdout = log
+	command.Stderr = log
+	command.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{Uid: agentUID, Gid: agentGID},
+	}
+	if err := command.Start(); err != nil {
+		fmt.Fprintf(log, "Warning: could not start the Home Assistant MQTT reporter: %v\n", err)
+	}
 }
 
 func dropPrivileges() error {
@@ -190,6 +220,10 @@ func run() error {
 		}
 		process = wrapWithTini(process, tiniPath)
 	}
+	// Started before the privilege drop, because setting the child's credentials
+	// requires the launcher to still be root. os.Environ() is passed rather than
+	// the agent's environment so the probe's API token never reaches it.
+	startReporter(reporterPath, os.Environ(), os.Stderr)
 	if err := dropPrivileges(); err != nil {
 		return fmt.Errorf("drop launcher privileges: %w", err)
 	}
