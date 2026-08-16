@@ -51,14 +51,15 @@ def expected_files(slug: str, values: dict[str, str]) -> dict[Path, bytes]:
         if source.is_file():
             relative = source.relative_to(TEMPLATE)
             result[ROOT / slug / relative] = render(source.read_text(), values).encode()
-    for source in sorted((SOURCE / "launcher").iterdir()):
-        if not source.is_file() or source.name == "main_test.go":
-            continue
-        # Only module sources travel. Anything else is a local build artifact
-        # and must never reach an image build context.
-        if source.name not in {"go.mod", "go.sum"} and source.suffix != ".go":
-            continue
-        result[ROOT / slug / "launcher" / source.name] = source.read_bytes()
+    for component in ("launcher", "ui"):
+        for source in sorted((SOURCE / component).iterdir()):
+            if not source.is_file() or source.name.endswith("_test.go"):
+                continue
+            # Only module sources travel. Anything else is a local build
+            # artifact and must never reach an image build context.
+            if source.name not in {"go.mod", "go.sum"} and source.suffix != ".go":
+                continue
+            result[ROOT / slug / component / source.name] = source.read_bytes()
     for source in sorted((SOURCE / "assets").iterdir()):
         if source.is_file():
             result[ROOT / slug / source.name] = source.read_bytes()

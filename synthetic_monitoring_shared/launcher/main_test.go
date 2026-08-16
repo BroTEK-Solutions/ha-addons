@@ -230,3 +230,11 @@ func TestReporterNeverReceivesTheProbeToken(t *testing.T) {
 		}
 	}
 }
+
+func TestStartUIIsANoOpWhenTheBinaryIsAbsent(t *testing.T) {
+	var log strings.Builder
+	startUI(filepath.Join(t.TempDir(), "absent"), os.Environ(), options{}, &log)
+	if log.String() != "" {
+		t.Fatalf("an absent UI must not prevent probe startup, got %q", log.String())
+	}
+}
