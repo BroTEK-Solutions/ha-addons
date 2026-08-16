@@ -1,5 +1,5 @@
 name: Grafana Synthetic Monitoring Probe
-version: 1.1.0
+version: 1.1.0 # x-release-please-version
 slug: grafana_sm
 description: >-
   Run a private Grafana Cloud Synthetic Monitoring probe from Home Assistant.

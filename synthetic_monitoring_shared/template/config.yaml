@@ -1,5 +1,5 @@
 name: {{APP_NAME}}
-version: {{APP_VERSION}}
+version: {{APP_VERSION}} # x-release-please-version
 slug: {{APP_SLUG}}
 description: >-
   {{APP_DESCRIPTION}}
