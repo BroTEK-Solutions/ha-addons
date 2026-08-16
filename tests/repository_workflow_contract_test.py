@@ -78,10 +78,22 @@ def main() -> None:
             fail(f"{app} must use release component {component}")
         if package.get("release-type") != "simple":
             fail(f"{app} must use the simple semantic release strategy")
-        if package.get("extra-files") != [
-            {"type": "yaml", "path": "config.yaml", "jsonpath": "$.version"}
-        ]:
+        expected_extra_file = (
+            {"type": "generic", "path": "config.yaml"}
+            if app in {"grafana_sm", "grafana_sm_browser"}
+            else {"type": "yaml", "path": "config.yaml", "jsonpath": "$.version"}
+        )
+        if package.get("extra-files") != [expected_extra_file]:
             fail(f"{app} release must update its config.yaml root version")
+
+    for app in ("grafana_sm", "grafana_sm_browser"):
+        config_text = (ROOT / app / "config.yaml").read_text()
+        if not re.search(
+            r"^version:\s+\S+\s+# x-release-please-version$",
+            config_text,
+            re.MULTILINE,
+        ):
+            fail(f"{app} version must use the formatting-preserving release annotation")
 
     release_action = (
         "googleapis/release-please-action@"
