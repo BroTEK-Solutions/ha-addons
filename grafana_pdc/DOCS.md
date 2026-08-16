@@ -112,6 +112,36 @@ This differs from the Grafana Alloy App, which keeps its container running when
 Alloy exits so its configuration Web UI stays reachable for repair. Alloy has a
 recovery surface worth preserving; PDC does not.
 
+## Status page
+
+Choose **Open Web UI** to see a read-only status page through Home Assistant
+ingress. It is deliberately read-only: PDC's settings live on the
+**Configuration** tab, where Home Assistant already validates them against the
+App schema, and a second place to set the same value is a second place for it to
+be wrong.
+
+The page answers the question the logs could not:
+
+- whether the agent process is responding on its local metrics port; and
+- whether each entry in `allowed_endpoints` can actually be reached from this
+  App, tested with a real TCP connection over the same path Grafana's traffic
+  takes.
+
+That second check matters because a misconfigured allowlist and a genuinely
+unreachable data source look identical from Grafana Cloud. The page distinguishes
+"hostname does not resolve" from "nothing is listening on that port" from "timed
+out", so the next step is obvious. Wildcard patterns and the `any`/`none`
+sentinels are policy rather than destinations, so they are reported as not
+tested.
+
+The page shows the connector identity - Hosted Grafana ID, cluster and endpoint
+overrides - but never the signing token, which is not read by the status service
+at all. It accepts Supervisor ingress traffic only and is not published on any
+host port.
+
+Agent liveness here still does not mean the tunnel is registered. That remains
+Grafana Cloud's view, under **Connections > Private data source connections**.
+
 ## Home Assistant entities over MQTT
 
 If Home Assistant has an MQTT broker (the Mosquitto broker App is the usual

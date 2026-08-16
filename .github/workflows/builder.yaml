@@ -10,7 +10,7 @@ on:
 permissions: {}
 
 env:
-  MONITORED_FILES: "config.json config.yaml config.yml Dockerfile launcher reporter rootfs apparmor.txt"
+  MONITORED_FILES: "config.json config.yaml config.yml Dockerfile launcher reporter ui rootfs apparmor.txt"
 
 concurrency:
   group: build-apps-${{ github.workflow }}-${{ github.ref }}
@@ -78,6 +78,8 @@ jobs:
             grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish \
             grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-reporter/run \
             grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-reporter/finish \
+            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-ui/run \
+            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-ui/finish \
             grafana_pdc/tests/service.test.sh \
             grafana_pdc/tests/image-smoke.test.sh \
             grafana_pdc/tests/fixtures/bashio \
@@ -130,6 +132,16 @@ jobs:
         run: |
           python3 grafana_pdc/tests/config-schema.test.py
           python3 grafana_pdc/tests/image-contract.test.py
+
+      - name: Set up Go for the PDC status page
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: grafana_pdc/ui/go.mod
+          cache: false
+
+      - name: PDC status page tests
+        working-directory: grafana_pdc/ui
+        run: go test ./...
 
       - name: PDC service tests in the Home Assistant base
         run: |

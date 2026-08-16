@@ -22,6 +22,15 @@ backup_exclude:
 # grants only the MQTT service; it deliberately does not add hassio_api.
 services:
   - mqtt:want
+# A read-only status page. It reports whether the agent is answering and whether
+# each allowlisted destination can actually be reached from this App, which was
+# previously impossible to determine without guessing. It exposes no
+# configuration surface and no secret, and it accepts Supervisor ingress traffic
+# only.
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:lan-connect
+panel_title: PDC status
 ports:
   8090/tcp: null
 options:

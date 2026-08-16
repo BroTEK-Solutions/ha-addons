@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grafana Private Data Source Connect</title>
+<link rel="stylesheet" href="app.css">
+<main>
+  <h1>Private Data Source Connect</h1>
+  <p class="lede">
+    Read-only status. Change settings on the Home Assistant
+    <strong>Configuration</strong> tab.
+  </p>
+
+  <section>
+    <h2>Agent</h2>
+    <p id="agent" class="state state-unknown">Checking&hellip;</p>
+    <p class="note">
+      This reports only that the agent process is answering locally. Whether the
+      tunnel is registered is Grafana Cloud's view &mdash; check
+      <strong>Connections &gt; Private data source connections</strong> there.
+    </p>
+  </section>
+
+  <section>
+    <h2>Connector identity</h2>
+    <dl id="identity"></dl>
+  </section>
+
+  <section>
+    <h2>Destination allowlist</h2>
+    <p class="note">
+      Each destination is tested with a TCP connection from this App, which is
+      the same path Grafana's traffic takes. An empty list permits every
+      destination reachable from the App network.
+    </p>
+    <table>
+      <thead><tr><th>Destination</th><th>Result</th><th>Detail</th></tr></thead>
+      <tbody id="endpoints"></tbody>
+    </table>
+  </section>
+
+  <p class="footer">
+    Last checked <span id="checked">never</span>.
+    <button id="refresh" type="button">Check again</button>
+  </p>
+</main>
+<script src="app.js"></script>

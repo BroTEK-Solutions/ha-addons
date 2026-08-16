@@ -173,6 +173,11 @@ def main() -> int:
         is not None,
     )
     check("8090/tcp has no default host mapping", config.get("ports") == {"8090/tcp": None})
+    # The status page is read-only and Supervisor-ingress only. It must never
+    # gain a host port, which would publish internal topology to the network.
+    check("ingress serves the read-only status page", config.get("ingress") is True)
+    check("ingress uses the internal status port", config.get("ingress_port") == 8099)
+    check("status page has no host port mapping", "8099/tcp" not in (config.get("ports") or {}))
     for key in (
         "host_network",
         "host_pid",
@@ -195,7 +200,6 @@ def main() -> int:
         "audio",
         "gpio",
         "kernel_modules",
-        "ingress",
         "roles",
         "advanced",
         "apparmor",

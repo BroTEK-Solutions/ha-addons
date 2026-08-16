@@ -8,3 +8,4 @@ docs/superpowers/
 # build contexts by the sync scripts, so a stray binary must never linger.
 shared/reporter/ha-reporter
 synthetic_monitoring_shared/launcher/synthetic-monitoring-launcher
+grafana_pdc/ui/grafana-pdc-ui
