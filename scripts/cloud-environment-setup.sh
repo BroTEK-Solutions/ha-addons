@@ -19,18 +19,35 @@ log() {
 
 persist_user_path() {
   mkdir -p "${NPM_BIN}"
+
+  # Add Python user-base bin directory to PATH
+  local python_user_bin
+  python_user_bin="$(python3 -m site --user-base)/bin"
+  mkdir -p "${python_user_bin}"
+
+  # Update current shell PATH with both NPM and Python user bins
   case ":${PATH}:" in
     *":${NPM_BIN}:"*) ;;
     *) export PATH="${NPM_BIN}:${PATH}" ;;
+  esac
+  case ":${PATH}:" in
+    *":${python_user_bin}:"*) ;;
+    *) export PATH="${python_user_bin}:${PATH}" ;;
   esac
 
   # Codex setup and agent commands run in separate shells. Claude's cached
   # setup also retains files, not shell exports. Persist a user-local prefix;
   # /usr/local/bin is already on PATH when Claude runs this script as root.
-  [[ "${NPM_PREFIX}" == "${HOME}/.local" ]] || return 0
-  local path_line="export PATH=\"\$HOME/.local/bin:\$PATH\""
-  touch "${HOME}/.bashrc"
-  grep -Fqx "${path_line}" "${HOME}/.bashrc" || printf '\n%s\n' "${path_line}" >> "${HOME}/.bashrc"
+  if [[ "${NPM_PREFIX}" == "${HOME}/.local" ]]; then
+    local path_line="export PATH=\"\$HOME/.local/bin:\$(python3 -m site --user-base)/bin:\$PATH\""
+    touch "${HOME}/.bashrc"
+    grep -Fqx "${path_line}" "${HOME}/.bashrc" || printf '\n%s\n' "${path_line}" >> "${HOME}/.bashrc"
+  else
+    # When running as root, persist Python user-base bin to PATH
+    local python_path_line="export PATH=\"\$(python3 -m site --user-base)/bin:\$PATH\""
+    touch "${HOME}/.bashrc"
+    grep -Fqx "${python_path_line}" "${HOME}/.bashrc" || printf '\n%s\n' "${python_path_line}" >> "${HOME}/.bashrc"
+  fi
 }
 
 install_os_tools() {
@@ -87,6 +104,10 @@ verify_tools() {
   backlog --version
 
   if command -v docker >/dev/null 2>&1; then
+    docker info >/dev/null 2>&1 || {
+      log "Docker CLI is installed but daemon is not accessible; image tests require a Docker-enabled cloud environment"
+      return 0
+    }
     docker --version
   else
     log "Docker is unavailable; image tests require a Docker-enabled cloud environment"
