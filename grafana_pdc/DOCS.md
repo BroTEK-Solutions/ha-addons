@@ -99,6 +99,19 @@ means the process answers HTTP; it does not prove the tunnel is registered or a
 data source is reachable. Use Grafana Cloud's PDC connection status and the App
 log for readiness.
 
+### Failure handling
+
+If the agent exits unexpectedly, or dies on any signal other than `SIGTERM`,
+this App **stops the whole container** and preserves the agent's exit code.
+That is deliberate: PDC has no other user-facing surface, so a silent restart
+loop would look identical to a working tunnel from the Home Assistant side. A
+stopped App is visible, and the Watchdog toggle then controls whether the
+Supervisor restarts it.
+
+This differs from the Grafana Alloy App, which keeps its container running when
+Alloy exits so its configuration Web UI stays reachable for repair. Alloy has a
+recovery surface worth preserving; PDC does not.
+
 ## Persistent identity and upgrades
 
 The SSH private key and signed certificate live under `/data/ssh`. This location

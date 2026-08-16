@@ -75,6 +75,11 @@ The container health check calls the agent's local `/` endpoint, which proves th
 server are alive. It deliberately does not call `/ready`: `/ready` returns 503 until the probe is
 connected to Grafana Cloud, and an upstream outage must not create a restart loop.
 
+This App runs the agent as its only process rather than under a supervision tree, so if the agent
+exits, the container exits with the same code and the Supervisor's Watchdog toggle decides whether
+it restarts. The Grafana Alloy App behaves differently on purpose: it keeps running so its
+configuration Web UI stays available for repair, which this probe has no equivalent of.
+
 If the probe stays offline:
 
 1. Verify the API address is the regional gRPC address with `:443`, not the backend URL and not an
