@@ -48,6 +48,21 @@ Merging ordinary App code builds and tests the image but does not replace an exi
 Manual runs of the Builder workflow also build without publishing. To force an exact version, use a
 `Release-As: X.Y.Z` footer on the relevant App commit and merge the resulting release PR normally.
 
+## AI cloud environments
+
+Codex and Claude Code cloud tasks can use the repository's shared setup script to install the same
+Python and shell validation tools used by CI, download Go modules, and install the Backlog.md
+task-tracking CLI. Use this command as the manual setup script in either provider's environment
+settings (and disable Codex automatic setup):
+
+```bash
+bash scripts/cloud-environment-setup.sh
+```
+
+Codex's universal image and Claude Code's Ubuntu cloud environment supply Python, Node.js, Go, and
+normally Docker. The script supports Codex's non-root setup user and Claude Code's root setup user,
+verifies the available toolchain, and reports when Docker-backed tests cannot run.
+
 ## License
 
 MIT
