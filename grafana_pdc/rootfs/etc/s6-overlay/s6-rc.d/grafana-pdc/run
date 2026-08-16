@@ -9,6 +9,17 @@ PDC_BIN="${PDC_BIN:-/usr/bin/pdc}"
 S6_SETUIDGID="${S6_SETUIDGID:-/command/s6-setuidgid}"
 GETENT_BIN="${GETENT_BIN:-/usr/bin/getent}"
 
+# The option validators are shared with the other Apps. The generated copy sits
+# at the same rootfs-relative path inside the image and in a checkout, so
+# resolving it from this script works in both without a container.
+SERVICE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HA_LIB_DIR="${HA_LIB_DIR:-${SERVICE_DIR}/../../../../usr/share/ha-lib}"
+# ha_valid_endpoint resolves IPv6 literals through this; the App's own override
+# is the name the test suite sets.
+export HA_GETENT_BIN="${GETENT_BIN}"
+# shellcheck source=../../../../usr/share/ha-lib/ha-validate.sh
+. "${HA_LIB_DIR}/ha-validate.sh"
+
 fatal() {
     bashio::log.fatal "$1"
     exit 1
@@ -20,61 +31,6 @@ config_or() {
     else
         printf '%s' "$2"
     fi
-}
-
-valid_dns_name() {
-    local value="$1"
-    [[ ${#value} -le 253 ]] &&
-    [[ "$value" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$ ]]
-}
-
-valid_dns_label() {
-    local value="$1"
-    [[ ${#value} -le 63 ]] &&
-        [[ "$value" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]
-}
-
-valid_duration() {
-    local value="$1"
-    [[ "$value" == 0 ]] ||
-        [[ "$value" =~ ^(([0-9]+(\.[0-9]+)?|[0-9]*\.[0-9]+)(ns|us|µs|ms|s|m|h))+$ ]]
-}
-
-valid_positive_duration() {
-    valid_duration "$1" && [[ "$1" =~ [1-9] ]]
-}
-
-valid_integer_range() {
-    local value="$1" minimum="$2" maximum="$3"
-    [[ "$value" =~ ^[0-9]+$ ]] &&
-        ((10#${value} >= minimum && 10#${value} <= maximum))
-}
-
-valid_endpoint() {
-    local endpoint="$1" host port label
-
-    # PermitRemoteOpen's two sentinels are OpenSSH syntax, not host:port.
-    [[ "$endpoint" == any || "$endpoint" == none ]] && return 0
-    [[ "$endpoint" == */* ]] && return 1
-
-    if [[ "$endpoint" =~ ^\[([0-9A-Fa-f:.]+)\]:(\*|[0-9]+)$ ]]; then
-        host="${BASH_REMATCH[1]}"
-        port="${BASH_REMATCH[2]}"
-        [[ "$host" == *:* ]] || return 1
-        "$GETENT_BIN" ahosts "$host" >/dev/null 2>&1 || return 1
-    elif [[ "$endpoint" == *:* ]]; then
-        host="${endpoint%:*}"
-        port="${endpoint##*:}"
-        [[ "$host" != *:* && -n "$host" && "$port" =~ ^(\*|[0-9]+)$ ]] || return 1
-        [[ "$host" != .* && "$host" != *. && "$host" != *..* ]] || return 1
-        while IFS= read -r label; do
-            [[ "$label" == '*' || "$label" =~ ^[[:alnum:]]([[:alnum:]-]*[[:alnum:]])?$ ]] || return 1
-        done < <(tr '.' '\n' <<<"$host")
-    else
-        return 1
-    fi
-
-    [[ "$port" == '*' ]] || valid_integer_range "$port" 1 65535
 }
 
 SIGNING_TOKEN="$(config_or signing_token '')"
@@ -97,19 +53,19 @@ ALLOWED_ENDPOINTS_JSON="$(jq -c '.allowed_endpoints // []' <<<"$OPTIONS_JSON")"
 
 [[ -n "$SIGNING_TOKEN" ]] || fatal "signing_token is required."
 [[ "$HOSTED_GRAFANA_ID" =~ ^[1-9][0-9]*$ ]] || fatal "hosted_grafana_id must be positive digits."
-valid_dns_label "$CLUSTER" || fatal "cluster must be a DNS-safe label."
+ha_valid_dns_label "$CLUSTER" || fatal "cluster must be a DNS-safe label."
 [[ "$LOG_LEVEL" =~ ^(debug|info|warn|error)$ ]] || fatal "log_level must be debug, info, warn or error."
 [[ "$REGION_FORMAT" == true || "$REGION_FORMAT" == false ]] || fatal "region_format must be true or false."
 [[ "$PARSE_METRICS" == true || "$PARSE_METRICS" == false ]] || fatal "parse_metrics must be true or false."
 [[ "$USE_GOSSH" == true || "$USE_GOSSH" == false ]] || fatal "use_gossh must be true or false."
-valid_dns_name "$DOMAIN" || fatal "domain must be a hostname or domain."
-[[ -z "$API_FQDN" ]] || valid_dns_name "$API_FQDN" || fatal "api_fqdn must be a hostname or FQDN."
-[[ -z "$GATEWAY_FQDN" ]] || valid_dns_name "$GATEWAY_FQDN" || fatal "gateway_fqdn must be a hostname or FQDN."
-valid_positive_duration "$CERT_EXPIRY_WINDOW" || fatal "cert_expiry_window must be a positive Go duration."
-valid_duration "$CERT_CHECK_EXPIRY_PERIOD" || fatal "cert_check_expiry_period must be a Go duration."
-valid_integer_range "$CONNECTIONS" 1 50 || fatal "connections must be an integer from 1 to 50."
-valid_integer_range "$RETRY_MAX" 0 20 || fatal "retry_max must be an integer from 0 to 20."
-valid_integer_range "$CONNECT_TIMEOUT_SECONDS" 1 600 || fatal "connect_timeout_seconds must be an integer from 1 to 600."
+ha_valid_dns_name "$DOMAIN" || fatal "domain must be a hostname or domain."
+[[ -z "$API_FQDN" ]] || ha_valid_dns_name "$API_FQDN" || fatal "api_fqdn must be a hostname or FQDN."
+[[ -z "$GATEWAY_FQDN" ]] || ha_valid_dns_name "$GATEWAY_FQDN" || fatal "gateway_fqdn must be a hostname or FQDN."
+ha_valid_positive_duration "$CERT_EXPIRY_WINDOW" || fatal "cert_expiry_window must be a positive Go duration."
+ha_valid_duration "$CERT_CHECK_EXPIRY_PERIOD" || fatal "cert_check_expiry_period must be a Go duration."
+ha_valid_integer_range "$CONNECTIONS" 1 50 || fatal "connections must be an integer from 1 to 50."
+ha_valid_integer_range "$RETRY_MAX" 0 20 || fatal "retry_max must be an integer from 0 to 20."
+ha_valid_integer_range "$CONNECT_TIMEOUT_SECONDS" 1 600 || fatal "connect_timeout_seconds must be an integer from 1 to 600."
 
 if ! jq -e 'type == "array" and all(.[]; type == "string")' <<<"$ALLOWED_ENDPOINTS_JSON" >/dev/null; then
     fatal "allowed_endpoints must be a list of endpoint strings."
@@ -122,7 +78,7 @@ done < <(jq -r '.[]' <<<"$ALLOWED_ENDPOINTS_JSON")
 sentinel=""
 if ((${#ALLOWED_ENDPOINTS[@]})); then
     for endpoint in "${ALLOWED_ENDPOINTS[@]}"; do
-        valid_endpoint "$endpoint" || fatal "allowed_endpoints entry is not a valid host:port."
+        ha_valid_endpoint "$endpoint" || fatal "allowed_endpoints entry is not a valid host:port."
         if [[ "$endpoint" == any || "$endpoint" == none ]]; then
             if [[ -n "$sentinel" || ${#ALLOWED_ENDPOINTS[@]} -ne 1 ]]; then
                 fatal "allowed_endpoints sentinel $endpoint cannot be combined with other endpoints."

@@ -62,19 +62,19 @@ configuration options**. That label is global Home Assistant UI text and cannot
 be renamed per App. These PDC controls use the upstream pdc-agent 0.0.63 defaults
 when omitted:
 
-| Field | Upstream default | Meaning |
-| --- | --- | --- |
-| Connections | `1` | Parallel reverse SSH tunnels. Go SSH requires exactly one. |
-| Use region endpoint format | off | Changes derived endpoint naming; enable only when Grafana instructs you. |
-| Grafana domain | `grafana.net` | Base suffix used to derive API and gateway names. |
-| API FQDN override | unset | Explicit signing API hostname; supersedes derivation. |
-| Gateway FQDN override | unset | Explicit SSH gateway hostname; supersedes derivation. |
-| Certificate expiry window | `5m` | How early certificate renewal starts. |
-| Certificate check interval | `1m` | Renewal check frequency; `0` checks only at startup. |
-| Maximum retries | `4` | Signing API retry limit. |
-| Parse OpenSSH connection metrics | on | Parses verbose OpenSSH output into PDC Prometheus connection/forwarding metrics. |
-| Use GoSSH | off | Experimental in-process SSH path with a narrower feature set. |
-| Connection timeout | `1` second | Limit for each SSH connection attempt. |
+| Field | Option key | Upstream default | Meaning |
+| --- | --- | --- | --- |
+| Connections | `connections` | `1` | Parallel reverse SSH tunnels. Go SSH requires exactly one. |
+| Use region endpoint format | `region_format` | off | Changes derived endpoint naming; enable only when Grafana instructs you. |
+| Grafana domain | `domain` | `grafana.net` | Base suffix used to derive API and gateway names. |
+| API FQDN override | `api_fqdn` | unset | Explicit signing API hostname; supersedes derivation. |
+| Gateway FQDN override | `gateway_fqdn` | unset | Explicit SSH gateway hostname; supersedes derivation. |
+| Certificate expiry window | `cert_expiry_window` | `5m` | How early certificate renewal starts. |
+| Certificate check interval | `cert_check_expiry_period` | `1m` | Renewal check frequency; `0` checks only at startup. |
+| Maximum retries | `retry_max` | `4` | Signing API retry limit. |
+| Parse OpenSSH connection metrics | `parse_metrics` | on | Parses verbose OpenSSH output into PDC Prometheus connection/forwarding metrics. |
+| Use GoSSH | `use_gossh` | off | Experimental in-process SSH path with a narrower feature set. |
+| Connection timeout | `connect_timeout_seconds` | `1` second | Limit for each SSH connection attempt. |
 
 `domain` is relevant only to automatically derived endpoints. If both explicit
 FQDN overrides are supplied, those values take precedence and the domain and
@@ -102,9 +102,20 @@ log for readiness.
 ## Persistent identity and upgrades
 
 The SSH private key and signed certificate live under `/data/ssh`. This location
-persists across normal restarts and updates and is included in Home Assistant App
-backups. Do not delete it as routine troubleshooting: deletion discards the
-connector identity and forces registration with a new key.
+persists across normal restarts and updates. Do not delete it as routine
+troubleshooting: deletion discards the connector identity and forces
+registration with a new key.
+
+`/data/ssh` is deliberately **excluded from Home Assistant backups**. A private
+key does not belong in an archive that is often unencrypted and copied off the
+device, and the material is reproducible: the signing token is an ordinary
+option and is captured by the backup, so the agent mints a fresh keypair and
+re-registers on its own.
+
+After restoring a backup, expect the connector to be briefly offline while it
+registers the new key. That first-boot delay is normal and needs no action. The
+connector appears in Grafana Cloud under the same Hosted Grafana ID and cluster;
+you do not need to re-copy the signing token or create a new PDC configuration.
 
 Uncommon fields are deliberately omitted from stored defaults. The runtime
 still supplies the matching pdc-agent defaults, so upgrading keeps existing

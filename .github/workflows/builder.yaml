@@ -63,6 +63,8 @@ jobs:
       - name: ShellCheck
         run: |
           shellcheck \
+            shared/lib/ha-validate.sh \
+            tests/shared_validate_lib_test.sh \
             alloy/rootfs/usr/share/alloy/generate-config.sh \
             alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run \
             alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run \
@@ -77,13 +79,18 @@ jobs:
             grafana_pdc/tests/fixtures/bashio \
             grafana_pdc/tests/fixtures/fake-pdc
 
+      - name: Shared validator library tests
+        run: bash tests/shared_validate_lib_test.sh
+
       - name: Repository contract tests
         run: |
           python3 tests/app_metadata_contract_test.py
+          python3 tests/app_contract_test.py
           python3 tests/app_version_changed_test.py
           python3 tests/renovate_config_contract_test.py
           python3 tests/repository_workflow_contract_test.py
           python3 tests/synthetic_monitoring_variants_test.py
+          python3 scripts/sync_shared_lib.py --check
 
   pdc-test:
     name: Grafana PDC tests

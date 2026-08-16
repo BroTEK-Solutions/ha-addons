@@ -10,9 +10,19 @@ and links to Alloy's component graph. Saving does not interrupt collection;
 choose **Save and restart** when you are ready to apply the new configuration.
 
 The Home Assistant **Configuration** tab contains the startup controls that must
-stay reachable even when Alloy will not start: **Safe mode**, **Configuration UI
-log level**, and **Stability level**. All pipeline settings live in the Web UI, so
-the same option is never presented in two places.
+stay reachable even when Alloy will not start. All pipeline settings live in the
+Web UI, so the same option is never presented in two places. These three are the
+complete set of native App options:
+
+| Field | Option key | Default | Meaning |
+| --- | --- | --- | --- |
+| Start in recovery safe mode | `safe_mode` | `false` | Ignores the saved Web UI configuration and starts Alloy with logging only, so a configuration that prevents startup can be repaired. See [Troubleshooting](#troubleshooting). |
+| Configuration UI log level | `ui_log_level` | `info` | Verbosity of the ingress configuration service itself. It does not change Alloy's log level or anything shipped to Loki. |
+| Minimum component stability | `alloy_stability_level` | `generally-available` | Lowest component stability Alloy will load. See [Minimum component stability](#minimum-component-stability). |
+
+Because these three are what you reach for when Alloy will not start, they stay
+on the Home Assistant Configuration tab rather than moving into the Web UI,
+which may itself be unreachable at that moment.
 
 ## Choose one operation mode
 

@@ -10,6 +10,12 @@ arch:
   - aarch64
   - amd64
 init: false
+# The connector's SSH private key lives in /data/ssh. It is reproducible - the
+# agent mints a new keypair and re-registers with the signing token, which is an
+# option and so is still captured - and a private key does not belong in a
+# backup archive that is frequently unencrypted and copied off the device.
+backup_exclude:
+  - ssh/**
 ports:
   8090/tcp: null
 options:
