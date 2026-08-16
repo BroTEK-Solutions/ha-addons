@@ -97,6 +97,15 @@ real "off".
 
 ## Health and troubleshooting
 
+Open **Probe status** from the App page for read-only operational diagnostics. The ingress page
+shows local agent and Grafana Cloud connection state, tests the configured gRPC endpoint from the
+App, and summarizes publishing totals and running checks by safe check type. It deliberately
+excludes the API token, check names and targets, tenant and probe IDs, and arbitrary metric labels.
+The page is available only through Home Assistant ingress; it does not publish a host port.
+
+Its counters cover the current agent process and reset when the App restarts. They are diagnostic
+totals, not a replacement for check results and dashboards in Grafana Cloud.
+
 The container health check calls the agent's local `/` endpoint, which proves the process and HTTP
 server are alive. It deliberately does not call `/ready`: `/ready` returns 503 until the probe is
 connected to Grafana Cloud, and an upstream outage must not create a restart loop.

@@ -16,6 +16,9 @@ This variant includes Chromium and can run every Synthetic Monitoring check type
    no `https://` prefix.
 5. Start the App and confirm the probe is online in Grafana Cloud before assigning checks.
 
+The App's **Probe status** ingress page provides connection state, a regional API reachability
+test, publishing counters, and check counts by type without exposing tokens, targets, or IDs.
+
 See [DOCS.md](DOCS.md) for browser selection, security, private-network k6 checks, resource sizing,
 and troubleshooting.
 

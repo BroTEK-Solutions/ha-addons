@@ -18,6 +18,7 @@ import (
 const (
 	agentPath    = "/usr/local/bin/synthetic-monitoring-agent"
 	reporterPath = "/usr/local/bin/ha-reporter"
+	uiPath       = "/usr/local/bin/ha-sm-ui"
 	agentUID     = 12345
 	agentGID     = 12345
 	optionsPath  = "/data/options.json"
@@ -135,6 +136,35 @@ func startReporter(reporterPath string, environment []string, log io.Writer) {
 	}
 }
 
+// startUI launches the ingress-only, read-only status server before this
+// launcher is replaced by the agent. Like the reporter, it is deliberately a
+// sibling process bounded by the container lifetime and receives no API token.
+func startUI(path string, environment []string, opts options, log io.Writer) {
+	if _, err := os.Stat(path); err != nil {
+		return
+	}
+	safeOptions, err := json.Marshal(struct {
+		APIServerAddress     string `json:"api_server_address"`
+		LogLevel             string `json:"log_level"`
+		AllowPrivateNetworks bool   `json:"allow_private_networks"`
+		DisableUsageReports  bool   `json:"disable_usage_reports"`
+	}{opts.APIServerAddress, opts.LogLevel, opts.AllowPrivateNetworks, opts.DisableUsageReports})
+	if err != nil {
+		fmt.Fprintf(log, "Warning: could not prepare ingress status options: %v\n", err)
+		return
+	}
+	command := exec.Command(path)
+	command.Env = setEnvironment(environment, "SM_UI_OPTIONS", string(safeOptions))
+	command.Stdout = log
+	command.Stderr = log
+	command.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{Uid: agentUID, Gid: agentGID},
+	}
+	if err := command.Start(); err != nil {
+		fmt.Fprintf(log, "Warning: could not start the ingress status page: %v\n", err)
+	}
+}
+
 func dropPrivileges() error {
 	if err := syscall.Setgroups([]int{}); err != nil {
 		return fmt.Errorf("clear supplementary groups: %w", err)
@@ -224,6 +254,7 @@ func run() error {
 	// requires the launcher to still be root. os.Environ() is passed rather than
 	// the agent's environment so the probe's API token never reaches it.
 	startReporter(reporterPath, os.Environ(), os.Stderr)
+	startUI(uiPath, os.Environ(), opts, os.Stderr)
 	if err := dropPrivileges(); err != nil {
 		return fmt.Errorf("drop launcher privileges: %w", err)
 	}
