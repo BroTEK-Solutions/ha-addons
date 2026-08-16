@@ -92,7 +92,8 @@ func parseMetrics(reader io.Reader) []sample {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		name, labels, rest := line, map[string]string{}, ""
+		var name, rest string
+		labels := map[string]string{}
 		if open := strings.IndexByte(line, '{'); open >= 0 {
 			close := strings.IndexByte(line[open:], '}')
 			if close < 0 {
