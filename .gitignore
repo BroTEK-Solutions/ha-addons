@@ -1,5 +1,14 @@
-# Local planning/spec scratch (never committed)
+# Local planning/spec scratch (never committed). Both directories are mirrored
+# between machines by the agent config's own sync; a tracked copy here would
+# commit scratch work and stop that sync.
 docs/superpowers/
+codex/
+
+# Per-machine agent state: worktrees, scheduler locks, settings.local.json. The
+# Backlog.md guard hook is NOT here on purpose — it is a global hook in the agent
+# config, parity-enforced across harnesses. Per-repo copies drifted into four
+# variants once and are not coming back.
+.claude/
 
 # Go build output from `go build` inside alloy/ui
 /alloy/ui/alloy-ui
