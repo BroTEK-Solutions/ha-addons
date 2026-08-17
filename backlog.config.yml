@@ -13,8 +13,20 @@ definition_of_done:
     python3 tests/repository_workflow_contract_test.py &&
     python3 tests/synthetic_monitoring_variants_test.py
   - >-
-    shellcheck over the file list in builder.yaml's ShellCheck step
-    (only if a shell script changed)
+    SHELL only: shellcheck
+    alloy/rootfs/usr/share/alloy/generate-config.sh
+    alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run
+    alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run
+    alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish
+    alloy/tests/generate-config.test.sh
+    alloy/tests/init-alloy.test.sh
+    grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run
+    grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run
+    grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish
+    grafana_pdc/tests/service.test.sh
+    grafana_pdc/tests/image-smoke.test.sh
+    grafana_pdc/tests/fixtures/bashio
+    grafana_pdc/tests/fixtures/fake-pdc
   - >-
     ALLOY only: python3 alloy/tests/config-schema.test.py &&
     python3 alloy/tests/image-contract.test.py &&

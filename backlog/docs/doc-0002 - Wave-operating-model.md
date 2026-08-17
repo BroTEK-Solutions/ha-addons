@@ -3,7 +3,7 @@ id: doc-0002
 title: Wave operating model
 type: guide
 created_date: '2026-08-17 12:03'
-updated_date: '2026-08-17 12:18'
+updated_date: '2026-08-17 12:45'
 ---
 # Wave operating model — ha-addons
 
@@ -19,8 +19,11 @@ in `.github/workflows/`, `scripts/` and `tests/`.
 
 ## Ownership map
 
-One lane per App directory is the natural split, and the four are genuinely independent — they share
-no code, only CI orchestration. The files that are *not* App-local are the contended ones:
+**There are three independent work units, not four:** `alloy/`, `grafana_pdc/`, and
+`synthetic_monitoring_shared/` — the last owning both generated variants with it. Do not read the
+four published Apps as four lanes; `grafana_sm/` and `grafana_sm_browser/` share a source and a
+launcher, so a lane on either is really a lane on the shared tree. The three units share no code with
+each other, only CI orchestration. The files that are *not* unit-local are the contended ones:
 
 | Path | Owner |
 |---|---|
