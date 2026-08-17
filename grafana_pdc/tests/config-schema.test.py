@@ -264,6 +264,24 @@ def main() -> int:
             "" if accepted == expected_valid else f"expected {'accept' if expected_valid else 'reject'}",
         )
 
+    # The private key under /data/ssh is excluded from Home Assistant backups on
+    # purpose, so a restore has to be able to REBUILD it. That only works while
+    # signing_token stays an ordinary option: options are captured by the
+    # backup, so the agent finds its token, mints a fresh keypair and
+    # re-registers. Widen backup_exclude to /data and the restored App would
+    # come back with neither a key nor a way to earn a new one.
+    print("\n== a restored backup can rebuild the excluded keypair ==")
+    excluded = config.get("backup_exclude") or []
+    check("backups exclude the SSH material only", excluded == ["ssh/**"])
+    check(
+        "the signing token is a required option, so backups capture it",
+        "signing_token" in schema and "signing_token" in REQUIRED,
+    )
+    check(
+        "the signing token is not stored under the excluded path",
+        not any(entry.startswith("ssh") for entry in options),
+    )
+
     print("\n== English translations cover the UI ==")
     translations = yaml.safe_load(TRANSLATIONS.read_text())
     documented = translations.get("configuration", {})

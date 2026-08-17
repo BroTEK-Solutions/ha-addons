@@ -98,10 +98,11 @@ real "off".
 ## Health and troubleshooting
 
 Open **Probe status** from the App page for read-only operational diagnostics. The ingress page
-shows local agent and Grafana Cloud connection state, tests the configured gRPC endpoint from the
-App, and summarizes publishing totals and running checks by safe check type. It deliberately
-excludes the API token, check names and targets, tenant and probe IDs, and arbitrary metric labels.
-The page is available only through Home Assistant ingress; it does not publish a host port.
+shows local agent and Grafana Cloud connection state, performs a TCP reachability test to the
+configured gRPC endpoint from the App, and summarizes publishing totals and running checks by safe
+check type. It deliberately excludes the API token, check names and targets, tenant and probe IDs,
+and arbitrary metric labels. The page is available only through Home Assistant ingress; it does not
+publish a host port.
 
 Its counters cover the current agent process and reset when the App restarts. They are diagnostic
 totals, not a replacement for check results and dashboards in Grafana Cloud.
@@ -114,6 +115,14 @@ This App runs the agent as its only process rather than under a supervision tree
 exits, the container exits with the same code and the Supervisor's Watchdog toggle decides whether
 it restarts. The Grafana Alloy App behaves differently on purpose: it keeps running so its
 configuration Web UI stays available for repair, which this probe has no equivalent of.
+
+That choice has a consequence worth stating plainly: **the MQTT entities and the Probe status page
+are best-effort side channels.** Both are started once before the agent takes over the container,
+and nothing supervises them afterwards. If either exits, it stays down until the App is restarted -
+the MQTT entities go `unavailable` and the status page stops answering, while the probe itself
+carries on running checks normally. Restart the App to bring them back. A probe that is publishing
+results to Grafana Cloud while its Home Assistant entities read `unavailable` is this case, not a
+probe failure.
 
 If the probe stays offline:
 

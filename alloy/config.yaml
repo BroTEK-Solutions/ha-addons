@@ -39,4 +39,3 @@ schema:
   safe_mode: bool
   ui_log_level: list(debug|info|warn|error)
   alloy_stability_level: list(generally-available|public-preview|experimental)
-stage: stable

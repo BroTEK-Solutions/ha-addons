@@ -103,10 +103,17 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// ReadHeaderTimeout alone does not bound a request whose declared body never
+	// arrives: Go drains the unread body before finishing the response, so the
+	// connection is held for as long as the client wants. IdleTimeout only
+	// covers the gap between requests. ReadTimeout and WriteTimeout are what
+	// actually cap a single exchange.
 	server := &http.Server{
 		Addr:              envOr("LISTEN_ADDR", "0.0.0.0:8099"),
 		Handler:           ingressOnly(envOr("INGRESS_SOURCE_IP", "172.30.32.2"), handler),
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 	log.Printf("PDC status page listening on %s", server.Addr)

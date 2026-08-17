@@ -204,30 +204,40 @@ func TestStartReporterIsANoOpWhenTheBinaryIsAbsent(t *testing.T) {
 }
 
 func TestReporterNeverReceivesTheProbeToken(t *testing.T) {
-	// The agent's token is added to the agent's own environment only. Whatever
-	// the launcher hands the reporter must not carry it.
+	// The token reaches the agent's environment and nothing else. The ambient
+	// environment is seeded with a token here on purpose: asserting that
+	// os.Environ() happens not to contain one proves nothing, because the test
+	// process never sets it. Seeding it makes the strip the thing under test.
 	opts := options{
 		APIToken:         "super-secret-token",
 		APIServerAddress: "example.grafana.net:443",
 		LogLevel:         "warn",
 	}
-	process, err := buildAgentProcess(opts, []string{"PATH=/usr/bin"})
+	ambient := []string{"PATH=/usr/bin", tokenEnvVar + "=" + opts.APIToken}
+
+	process, err := buildAgentProcess(opts, ambient)
 	if err != nil {
 		t.Fatal(err)
 	}
-	agentCarriesToken := false
-	for _, entry := range process.Env {
-		if strings.Contains(entry, opts.APIToken) {
-			agentCarriesToken = true
+	if !containsString(process.Env, tokenEnvVar+"="+opts.APIToken) {
+		t.Fatalf("the agent must receive its token, got %#v", process.Env)
+	}
+
+	for _, environment := range map[string][]string{
+		"reporter": withoutToken(ambient),
+		"UI":       setEnvironment(withoutToken(ambient), "SM_UI_OPTIONS", "{}"),
+	} {
+		for _, entry := range environment {
+			if strings.Contains(entry, opts.APIToken) {
+				t.Fatalf("a side channel received the probe token: %q", entry)
+			}
 		}
 	}
-	if !agentCarriesToken {
-		t.Fatal("the agent must receive its token")
-	}
-	for _, entry := range os.Environ() {
-		if strings.Contains(entry, opts.APIToken) {
-			t.Fatal("the ambient environment handed to the reporter must not contain the token")
-		}
+
+	// buildAgentProcess must not have rewritten the caller's slice in place;
+	// that is the aliasing bug the strip would not save us from.
+	if !containsString(ambient, tokenEnvVar+"="+opts.APIToken) || len(ambient) != 2 {
+		t.Fatalf("the caller's environment was mutated: %#v", ambient)
 	}
 }
 

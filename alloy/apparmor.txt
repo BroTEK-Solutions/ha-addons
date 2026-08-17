@@ -18,8 +18,16 @@ profile alloy flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
   #include <abstractions/nameservice>
 
-  # Required by the Home Assistant S6 base image.
-  file,
+  # Read and memory-map anywhere. A bare `file,` was here first, but that is
+  # shorthand for `/ rwmlk,` - it grants write, link and lock everywhere too,
+  # and AppArmor rules are cumulative, so no later path rule can take those
+  # back. Every write rule below was decorative while it was present.
+  #
+  # `rm` is the half that has to stay broad. Reads are what break silently: a
+  # denied read costs a metric family with no error anyone sees. `m` is not
+  # optional either - Go binaries memory-map their own executable segments at
+  # startup, and `ix` alone does not permit that.
+  /{,**} rm,
   signal (send) set=(kill,term,int,hup,cont),
   capability chown,
   capability kill,

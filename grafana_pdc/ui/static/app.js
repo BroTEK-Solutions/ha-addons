@@ -74,6 +74,33 @@ function renderEndpoints(endpoints) {
   }
 }
 
+// Every field on this page is derived from one /api/status response. When that
+// read fails, leaving the previous render in place would present values from an
+// unknown point in the past as current, which is worse than showing nothing.
+// The "Last checked" time deliberately survives: it records the last successful
+// read and stays true.
+function markStale(message) {
+  const node = document.getElementById("agent");
+  node.className = "state state-unknown";
+  node.textContent = message;
+
+  const identity = document.getElementById("identity");
+  const term = document.createElement("dt");
+  term.textContent = "Unavailable";
+  const detail = document.createElement("dd");
+  detail.textContent = "The App could not be read, so no value here is current.";
+  identity.replaceChildren(term, detail);
+
+  const endpoints = document.getElementById("endpoints");
+  const row = document.createElement("tr");
+  const cell = document.createElement("td");
+  cell.colSpan = 3;
+  cell.className = "empty";
+  cell.textContent = "Reachability is unknown while the status read is failing.";
+  row.append(cell);
+  endpoints.replaceChildren(row);
+}
+
 async function refresh() {
   const button = document.getElementById("refresh");
   button.disabled = true;
@@ -87,9 +114,7 @@ async function refresh() {
     document.getElementById("checked").textContent =
       new Date(status.checked_at).toLocaleTimeString();
   } catch (error) {
-    const node = document.getElementById("agent");
-    node.className = "state state-unknown";
-    node.textContent = "Could not read status: " + error.message;
+    markStale("Could not read status: " + error.message);
   } finally {
     button.disabled = false;
   }

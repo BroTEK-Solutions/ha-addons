@@ -116,6 +116,14 @@ exits, the container exits with the same code and the Supervisor's Watchdog togg
 it restarts. The Grafana Alloy App behaves differently on purpose: it keeps running so its
 configuration Web UI stays available for repair, which this probe has no equivalent of.
 
+That choice has a consequence worth stating plainly: **the MQTT entities and the Probe status page
+are best-effort side channels.** Both are started once before the agent takes over the container,
+and nothing supervises them afterwards. If either exits, it stays down until the App is restarted -
+the MQTT entities go `unavailable` and the status page stops answering, while the probe itself
+carries on running checks normally. Restart the App to bring them back. A probe that is publishing
+results to Grafana Cloud while its Home Assistant entities read `unavailable` is this case, not a
+probe failure.
+
 If the probe stays offline:
 
 1. Verify the API address is the regional gRPC address with `:443`, not the backend URL and not an

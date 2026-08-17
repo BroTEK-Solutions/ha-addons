@@ -50,16 +50,16 @@ func parseMetrics(reader io.Reader) []sample {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		name, remainder := line, ""
+		var name, remainder string
 		labels := map[string]string{}
 		if open := strings.IndexByte(line, '{'); open >= 0 {
-			close := strings.LastIndexByte(line, '}')
-			if close < open {
+			end := strings.LastIndexByte(line, '}')
+			if end < open {
 				continue
 			}
 			name = line[:open]
-			labels = parseLabels(line[open+1 : close])
-			remainder = strings.TrimSpace(line[close+1:])
+			labels = parseLabels(line[open+1 : end])
+			remainder = strings.TrimSpace(line[end+1:])
 		} else if space := strings.IndexAny(line, " \t"); space >= 0 {
 			name = line[:space]
 			remainder = strings.TrimSpace(line[space:])
@@ -143,7 +143,7 @@ func (c *collector) statusOK(ctx context.Context, url string) bool {
 	if err != nil {
 		return false
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
 	return response.StatusCode >= 200 && response.StatusCode < 300
 }
@@ -157,7 +157,7 @@ func (c *collector) samples(ctx context.Context, url string) ([]sample, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return nil, nil
 	}
