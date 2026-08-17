@@ -1,10 +1,10 @@
 ---
 id: HAB-0002
 title: 'Land PR #58: resolve CodeRabbit findings and fix CI'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-17 13:24'
-updated_date: '2026-08-17 13:45'
+updated_date: '2026-08-17 13:56'
 labels: []
 dependencies: []
 ordinal: 2000
@@ -24,23 +24,23 @@ Every finding must be judged against the current code before it is acted on, and
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Every CodeRabbit finding on PR #58 is either fixed or dismissed with a written reason recorded in the task notes
-- [ ] #2 The Repository quality check passes: the Home Assistant App linter accepts every App
-- [ ] #3 The Trivy check reports no new high or medium alerts
-- [ ] #4 renovate.json no longer ignores the shared reporter and launcher source modules
-- [ ] #5 The repository gate and every per-App test suite named in AGENTS.md pass locally
-- [ ] #6 Generated artefacts are in sync: sync_shared_lib.py --check and sync_synthetic_monitoring_variants.py leave no drift
-- [ ] #7 PR #58 is mergeable and all required checks are green
+- [x] #1 Every CodeRabbit finding on PR #58 is either fixed or dismissed with a written reason recorded in the task notes
+- [x] #2 The Repository quality check passes: the Home Assistant App linter accepts every App
+- [x] #3 The Trivy check reports no new high or medium alerts
+- [x] #4 renovate.json no longer ignores the shared reporter and launcher source modules
+- [x] #5 The repository gate and every per-App test suite named in AGENTS.md pass locally
+- [x] #6 Generated artefacts are in sync: sync_shared_lib.py --check and sync_synthetic_monitoring_variants.py leave no drift
+- [x] #7 PR #58 is mergeable and all required checks are green
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 yamllint --strict .
-- [ ] #2 python3 tests/app_metadata_contract_test.py && python3 tests/app_version_changed_test.py && python3 tests/renovate_config_contract_test.py && python3 tests/repository_workflow_contract_test.py && python3 tests/synthetic_monitoring_variants_test.py
-- [ ] #3 SHELL only: shellcheck alloy/rootfs/usr/share/alloy/generate-config.sh alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish alloy/tests/generate-config.test.sh alloy/tests/init-alloy.test.sh grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish grafana_pdc/tests/service.test.sh grafana_pdc/tests/image-smoke.test.sh grafana_pdc/tests/fixtures/bashio grafana_pdc/tests/fixtures/fake-pdc
-- [ ] #4 ALLOY only: python3 alloy/tests/config-schema.test.py && python3 alloy/tests/image-contract.test.py && bash alloy/tests/generate-config.test.sh && node alloy/tests/ui-static.test.mjs && (cd alloy/ui && go test ./...)
-- [ ] #5 PDC only: python3 grafana_pdc/tests/config-schema.test.py && python3 grafana_pdc/tests/image-contract.test.py
-- [ ] #6 SM only: python3 scripts/sync_synthetic_monitoring_variants.py && (cd synthetic_monitoring_shared/launcher && go test ./...)
+- [x] #1 yamllint --strict .
+- [x] #2 python3 tests/app_metadata_contract_test.py && python3 tests/app_version_changed_test.py && python3 tests/renovate_config_contract_test.py && python3 tests/repository_workflow_contract_test.py && python3 tests/synthetic_monitoring_variants_test.py
+- [x] #3 SHELL only: shellcheck alloy/rootfs/usr/share/alloy/generate-config.sh alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish alloy/tests/generate-config.test.sh alloy/tests/init-alloy.test.sh grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish grafana_pdc/tests/service.test.sh grafana_pdc/tests/image-smoke.test.sh grafana_pdc/tests/fixtures/bashio grafana_pdc/tests/fixtures/fake-pdc
+- [x] #4 ALLOY only: python3 alloy/tests/config-schema.test.py && python3 alloy/tests/image-contract.test.py && bash alloy/tests/generate-config.test.sh && node alloy/tests/ui-static.test.mjs && (cd alloy/ui && go test ./...)
+- [x] #5 PDC only: python3 grafana_pdc/tests/config-schema.test.py && python3 grafana_pdc/tests/image-contract.test.py
+- [x] #6 SM only: python3 scripts/sync_synthetic_monitoring_variants.py && (cd synthetic_monitoring_shared/launcher && go test ./...)
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -103,4 +103,24 @@ PDC's contract test asserted `ingress_port == 8099`, which is no longer expressi
 - **The merge from main left generated drift.** `synthetic_monitoring_shared/template/DOCS.md` and the two generated `DOCS.md` copies had diverged across the merge, and `sync_synthetic_monitoring_variants.py` corrected it. CI would have caught this, but only after the linter step it never reached.
 - **grafana_sm/ui and grafana_sm_browser/ui were generated but not in `ignorePaths`**, so Renovate could have opened a PR against files the next sync reverts. Added.
 - **alloy/ui/config_test.go has pre-existing gofmt drift.** Not touched by this work and not gated by CI. Left alone.
+
+**ShellCheck was a third, hidden failure.** It had never run on this branch - the App linter aborted the Repository quality job before reaching it - and it is clean on main, so this PR introduced it. The new `# shellcheck source=` directives never resolved: ShellCheck reads those paths relative to the WORKING DIRECTORY, not the sourcing script, so from the repository root all three escaped the tree and SC1091 failed the step at info level. Fixed with `shellcheck -x --source-path=SCRIPTDIR`, which both resolves the directives and makes ShellCheck genuinely follow the library. The directives themselves were already correct; only the resolution base was wrong.
+
+A local check reported ShellCheck passing before this. It was reading the exit status of a `head` at the end of a pipeline rather than ShellCheck's own. Use `${PIPESTATUS[0]}` or redirect to a file when checking a linter's exit code.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+PR #58 merged to main as 999b229 with every required check green, including all eight multi-arch image builds.
+
+Of the 12 CodeRabbit findings, 11 were fixed and 1 was dismissed in writing. The dismissal is 'reject credentialed non-TLS MQTT connections': the broker, credentials and network are all Supervisor-supplied, the credentials are per-App and Supervisor-minted, and the Mosquitto broker App is plaintext on the internal Docker network by default, so refusing them would disable health entities for essentially every user to protect a hop that never leaves the host.
+
+CI was three failures, not the two that were visible. Repository quality aborts at its first error, so each fix exposed the next: alloy's 'stage: stable', then grafana_pdc's 'ingress_port: 8099' - both keys restating a linter default - and then ShellCheck, which had never run on this branch at all and which this PR broke by adding '# shellcheck source=' directives that ShellCheck resolves against the working directory rather than the sourcing script. Trivy's 50 alerts were one cause, golang.org/x/net v0.43.0 across the five reporter modules, now v0.58.0.
+
+The Renovate glob is the interesting one. '*/reporter/**' also matched the source module shared/reporter, so Renovate had quietly stopped managing the code every App compiles from, which is why a transitive CVE sat unproposed until Trivy failed. ignorePaths is now eight explicit generated-copy paths, and tests/renovate_config_contract_test.py asserts both directions so the class cannot recur.
+
+Verification: all six Definition of Done commands run locally and green, plus the Go suites for shared/reporter, both SM components and both UI modules, node --check on the edited status-page JS, and frenck/action-addon-linter built from source and run against all four Apps. CI then confirmed the same on the merge commit. The one change no test covers is Alloy's AppArmor profile - it only exercises on a real HAOS install, with 'apparmor: false' documented in the profile header as the escape hatch.
+
+Follow-ups deliberately left out of scope: alloy/ui/main.go has the same missing ReadTimeout/WriteTimeout but is not touched by this PR, and alloy/ui/config_test.go carries pre-existing gofmt drift that CI does not gate.
+<!-- SECTION:FINAL_SUMMARY:END -->
