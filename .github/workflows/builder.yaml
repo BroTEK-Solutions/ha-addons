@@ -61,8 +61,13 @@ jobs:
           path: "./grafana_sm_browser"
 
       - name: ShellCheck
+        # -x follows the `# shellcheck source=` directives into the shared
+        # validator library, and --source-path=SCRIPTDIR is what makes them
+        # resolve: without it those paths are read relative to the working
+        # directory rather than the sourcing script, every one misses, and
+        # SC1091 fails the step at info level.
         run: |
-          shellcheck \
+          shellcheck -x --source-path=SCRIPTDIR \
             shared/lib/ha-validate.sh \
             tests/shared_validate_lib_test.sh \
             alloy/rootfs/usr/share/alloy/generate-config.sh \

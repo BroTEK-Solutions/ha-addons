@@ -4,7 +4,7 @@ title: 'Land PR #58: resolve CodeRabbit findings and fix CI'
 status: In Progress
 assignee: []
 created_date: '2026-08-17 13:24'
-updated_date: '2026-08-17 13:37'
+updated_date: '2026-08-17 13:45'
 labels: []
 dependencies: []
 ordinal: 2000
@@ -87,4 +87,20 @@ All 12 were judged against head 7118ff6, which is the exact SHA the review was s
 
 - **alloy/ui/main.go has the same missing ReadTimeout/WriteTimeout.** It is NOT touched by this PR - it is the pre-existing configuration UI, not a status page added here - so it is left alone rather than retro-fitted. Worth a follow-up task.
 - **No test for markStale().** The house style for static assets is regex assertions over the source string (see alloy/tests/ui-static.test.mjs), which is exactly the refactor-brittle implementation-detail test to avoid, and a DOM test would mean adding jsdom for one branch with no logic in it. `node --check` proves the syntax; the behaviour is reviewed, not pinned.
+
+## CI
+
+Two failures, both now fixed, plus one the first fix uncovered.
+
+**Repository quality** ran the Home Assistant App linter per App and stopped at the first error, so the second problem was invisible until the first was fixed. `alloy/config.yaml` declared `stage: stable`, then `grafana_pdc/config.yaml` declared `ingress_port: 8099` - both are the linter's own defaults and it rejects a key that restates one. To stop discovering these one CI run at a time, `frenck/action-addon-linter` was built from source and run locally against all four Apps; all four pass.
+
+PDC's contract test asserted `ingress_port == 8099`, which is no longer expressible. It now asserts the two things that have to agree instead: the key is absent, and the status server still binds 8099. The Synthetic Monitoring probes keep their `ingress_port: 4051` - not a default, so the linter accepts it.
+
+**Trivy** was 25 high plus 25 medium, all golang.org/x/net v0.43.0 across the five reporter modules. Green after the v0.58.0 bump.
+
+## Incidental finds
+
+- **The merge from main left generated drift.** `synthetic_monitoring_shared/template/DOCS.md` and the two generated `DOCS.md` copies had diverged across the merge, and `sync_synthetic_monitoring_variants.py` corrected it. CI would have caught this, but only after the linter step it never reached.
+- **grafana_sm/ui and grafana_sm_browser/ui were generated but not in `ignorePaths`**, so Renovate could have opened a PR against files the next sync reverts. Added.
+- **alloy/ui/config_test.go has pre-existing gofmt drift.** Not touched by this work and not gated by CI. Left alone.
 <!-- SECTION:NOTES:END -->
