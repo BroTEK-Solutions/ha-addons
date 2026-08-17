@@ -3,7 +3,7 @@ id: doc-0002
 title: Wave operating model
 type: guide
 created_date: '2026-08-17 12:03'
-updated_date: '2026-08-17 12:07'
+updated_date: '2026-08-17 12:18'
 ---
 # Wave operating model — ha-addons
 
@@ -101,11 +101,23 @@ check is running the generator twice, not reading the diff.
 
 ## Rules this project adds
 
+**Any directory holding a `config.yml` at depth 2 becomes an App.**
+`home-assistant/actions/helpers/find-addons` discovers Apps with
+`find ./ -maxdepth 2 -name config.json -o -name config.yaml -o -name config.yml`, and it has no
+exclude mechanism. Adding *any* top-level directory with a `config.{json,yaml,yml}` in it silently
+enlists that directory in the build matrix, which then fails on missing `name`, `slug`, `version`,
+`arch` and `description` — five errors that read like a broken App rather than a misplaced file.
+
+This is why the tracker config is `backlog.config.yml` at the repository root and not
+`backlog/config.yml` (`backlog init --config-location root`). It looks like an untidy stray and must
+not be "fixed": `backlog/docs/` has to stay at that exact path for the fleet's sync and drift tooling,
+so the config is the part that moves. Found on the Backlog.md setup PR itself, after CI failed.
+
 **`.yamllint` caps lines at 120 and ignores only `.git/`.** Every YAML file a lane adds anywhere in
 the tree is linted by `yamllint --strict .`, including files that feel like tooling rather than
-source. This bit the Backlog.md setup itself: `backlog/config.yml`'s `definition_of_done` entries
+source. This also bit the Backlog.md setup: `backlog.config.yml`'s `definition_of_done` entries
 exceeded 120 characters and had to be written as folded scalars. If the `backlog` CLI ever rewrites
-`config.yml` it will re-flatten them, and the gate will fail — reapply the folding.
+that file it will re-flatten them, and the gate will fail — reapply the folding.
 
 **Reusable workflows are pinned to a release SHA with the version in a trailing comment.** zizmor
 fails a reintroduced floating `@main`, and the pin and the comment must move together or Renovate's

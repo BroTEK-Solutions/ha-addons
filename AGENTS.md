@@ -93,9 +93,15 @@ on demand with `backlog doc view <id> --plain`, so a long one costs nothing unti
   `backlog task edit hab-0007 --check-ac 1 --check-ac 2 -s Done`.
 - **Never hand-edit task, doc or decision markdown.** Section boundaries are HTML-comment markers;
   breaking one drops the section silently on read and makes the file unwritable by the CLI, with no
-  repair command. `backlog/config.yml` is the one file edited by hand, because list-valued keys
+  repair command. `backlog.config.yml` is the one file edited by hand, because list-valued keys
   cannot be set through `backlog config set` — keep its `definition_of_done` entries as folded
   scalars or `yamllint --strict .` fails on line length.
+- **The tracker config lives at the repo root as `backlog.config.yml`, NOT at `backlog/config.yml`.**
+  This is not cosmetic and must not be tidied back. `home-assistant/actions/helpers/find-addons`
+  discovers Apps with `find ./ -maxdepth 2 -name config.json -o -name config.yaml -o -name
+  config.yml`, so a `config.yml` inside `backlog/` makes the whole build treat `backlog` as a fifth
+  App and fail on missing `name`, `slug`, `version`, `arch` and `description`. The action has no
+  exclude mechanism. `backlog/docs/` must stay where it is, so the config is what moves.
 - **Statuses are `To Do`, `In Progress`, `Parked`, `Done`.** `Parked` means attempted, blocked, and
   left with a concrete resume boundary — it is not `To Do`.
 
