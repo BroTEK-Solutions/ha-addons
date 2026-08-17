@@ -11,7 +11,17 @@ arch:
 init: false
 privileged:
   - NET_RAW
+# Optional: when Home Assistant has an MQTT broker, the probe publishes whether
+# it is running and connected to Grafana Cloud as entities. "want" rather than
+# "need" - the probe runs perfectly well without a broker.
+services:
+  - mqtt:want
 tmpfs: true
+# Read-only operational diagnostics, available only through Supervisor ingress.
+ingress: true
+ingress_port: 4051
+panel_icon: mdi:radar
+panel_title: Probe status
 options:
   log_level: info
   allow_private_networks: false

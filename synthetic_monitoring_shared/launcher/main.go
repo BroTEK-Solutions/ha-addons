@@ -16,11 +16,16 @@ import (
 )
 
 const (
-	agentPath   = "/usr/local/bin/synthetic-monitoring-agent"
-	agentUID    = 12345
-	agentGID    = 12345
-	optionsPath = "/data/options.json"
-	healthURL   = "http://127.0.0.1:4050/"
+	agentPath    = "/usr/local/bin/synthetic-monitoring-agent"
+	reporterPath = "/usr/local/bin/ha-reporter"
+	uiPath       = "/usr/local/bin/ha-sm-ui"
+	agentUID     = 12345
+	agentGID     = 12345
+	optionsPath  = "/data/options.json"
+	healthURL    = "http://127.0.0.1:4050/"
+	// tokenEnvVar is the only environment variable that ever carries the probe's
+	// API token, and buildAgentProcess is the only thing that sets it.
+	tokenEnvVar = "SM_AGENT_API_TOKEN"
 )
 
 type options struct {
@@ -92,7 +97,7 @@ func buildAgentProcess(opts options, environment []string) (agentProcess, error)
 	return agentProcess{
 		Path: agentPath,
 		Args: args,
-		Env:  setEnvironment(environment, "SM_AGENT_API_TOKEN", opts.APIToken),
+		Env:  setEnvironment(environment, tokenEnvVar, opts.APIToken),
 	}, nil
 }
 
@@ -103,6 +108,73 @@ func wrapWithTini(process agentProcess, tiniPath string) agentProcess {
 	process.Path = tiniPath
 	process.Args = args
 	return process
+}
+
+// startReporter launches the optional Home Assistant MQTT reporter alongside
+// the agent. This App has no supervision tree - the launcher execs the agent and
+// is replaced by it - so the reporter is started as a child beforehand and is
+// bounded by the container's lifetime.
+//
+// Every failure here is deliberately silent-ish and non-fatal: the probe is the
+// product, and a telemetry side channel must never keep it from starting. The
+// child is started while the launcher is still root so it can be dropped to the
+// same unprivileged account the agent runs as, and it inherits only the ambient
+// environment, never the probe's API token.
+//
+// The child is also unsupervised for the container's lifetime. syscall.Exec
+// replaces this launcher with the agent, so the agent inherits the reporter and
+// the UI without ever having asked for them: it does not restart them and, in
+// the variant that runs without tini, does not reap them either. An exited
+// reporter means the Home Assistant entities go unavailable until the App is
+// restarted. That is the accepted trade for never letting a side channel gate
+// the probe, and DOCS.md states it as a documented behaviour rather than
+// leaving users to infer it from silence.
+func startReporter(reporterPath string, environment []string, log io.Writer) {
+	if os.Getenv("REPORTER_APP") == "" {
+		return
+	}
+	if _, err := os.Stat(reporterPath); err != nil {
+		return
+	}
+	command := exec.Command(reporterPath)
+	command.Env = withoutToken(environment)
+	command.Stdout = log
+	command.Stderr = log
+	command.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{Uid: agentUID, Gid: agentGID},
+	}
+	if err := command.Start(); err != nil {
+		fmt.Fprintf(log, "Warning: could not start the Home Assistant MQTT reporter: %v\n", err)
+	}
+}
+
+// startUI launches the ingress-only, read-only status server before this
+// launcher is replaced by the agent. Like the reporter, it is deliberately a
+// sibling process bounded by the container lifetime and receives no API token.
+func startUI(path string, environment []string, opts options, log io.Writer) {
+	if _, err := os.Stat(path); err != nil {
+		return
+	}
+	safeOptions, err := json.Marshal(struct {
+		APIServerAddress     string `json:"api_server_address"`
+		LogLevel             string `json:"log_level"`
+		AllowPrivateNetworks bool   `json:"allow_private_networks"`
+		DisableUsageReports  bool   `json:"disable_usage_reports"`
+	}{opts.APIServerAddress, opts.LogLevel, opts.AllowPrivateNetworks, opts.DisableUsageReports})
+	if err != nil {
+		fmt.Fprintf(log, "Warning: could not prepare ingress status options: %v\n", err)
+		return
+	}
+	command := exec.Command(path)
+	command.Env = setEnvironment(withoutToken(environment), "SM_UI_OPTIONS", string(safeOptions))
+	command.Stdout = log
+	command.Stderr = log
+	command.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{Uid: agentUID, Gid: agentGID},
+	}
+	if err := command.Start(); err != nil {
+		fmt.Fprintf(log, "Warning: could not start the ingress status page: %v\n", err)
+	}
 }
 
 func dropPrivileges() error {
@@ -116,6 +188,23 @@ func dropPrivileges() error {
 		return fmt.Errorf("set agent user: %w", err)
 	}
 	return nil
+}
+
+// withoutToken removes the probe's API token from an environment. The side
+// channels are handed os.Environ() rather than the agent's environment, so in
+// practice the token is not there to remove - but that made the guarantee a
+// property of every call site rather than of the functions that must uphold it.
+// Stripping it where the child is built holds even if a future caller passes
+// the wrong slice.
+func withoutToken(environment []string) []string {
+	prefix := tokenEnvVar + "="
+	result := make([]string, 0, len(environment))
+	for _, item := range environment {
+		if !strings.HasPrefix(item, prefix) {
+			result = append(result, item)
+		}
+	}
+	return result
 }
 
 func setEnvironment(environment []string, key, value string) []string {
@@ -190,6 +279,11 @@ func run() error {
 		}
 		process = wrapWithTini(process, tiniPath)
 	}
+	// Started before the privilege drop, because setting the child's credentials
+	// requires the launcher to still be root. os.Environ() is passed rather than
+	// the agent's environment so the probe's API token never reaches it.
+	startReporter(reporterPath, os.Environ(), os.Stderr)
+	startUI(uiPath, os.Environ(), opts, os.Stderr)
 	if err := dropPrivileges(); err != nil {
 		return fmt.Errorf("drop launcher privileges: %w", err)
 	}

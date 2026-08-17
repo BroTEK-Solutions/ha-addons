@@ -1,0 +1,10 @@
+module github.com/BroTEK-Solutions/ha-addons/ha-reporter
+
+go 1.26
+
+require github.com/eclipse/paho.golang v0.23.0
+
+require (
+	github.com/gorilla/websocket v1.5.3 // indirect
+	golang.org/x/net v0.58.0 // indirect
+)

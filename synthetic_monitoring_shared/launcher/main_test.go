@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -179,4 +181,70 @@ func containsString(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestStartReporterIsANoOpWithoutAnAppName(t *testing.T) {
+	t.Setenv("REPORTER_APP", "")
+	var log strings.Builder
+	// A missing REPORTER_APP means this image does not publish entities. It must
+	// not warn, and above all must not fail: the probe still has to start.
+	startReporter("/nonexistent/ha-reporter", os.Environ(), &log)
+	if log.String() != "" {
+		t.Fatalf("expected silence, got %q", log.String())
+	}
+}
+
+func TestStartReporterIsANoOpWhenTheBinaryIsAbsent(t *testing.T) {
+	t.Setenv("REPORTER_APP", "grafana_sm")
+	var log strings.Builder
+	startReporter(filepath.Join(t.TempDir(), "absent"), os.Environ(), &log)
+	if log.String() != "" {
+		t.Fatalf("an absent reporter must not be reported as a failure, got %q", log.String())
+	}
+}
+
+func TestReporterNeverReceivesTheProbeToken(t *testing.T) {
+	// The token reaches the agent's environment and nothing else. The ambient
+	// environment is seeded with a token here on purpose: asserting that
+	// os.Environ() happens not to contain one proves nothing, because the test
+	// process never sets it. Seeding it makes the strip the thing under test.
+	opts := options{
+		APIToken:         "super-secret-token",
+		APIServerAddress: "example.grafana.net:443",
+		LogLevel:         "warn",
+	}
+	ambient := []string{"PATH=/usr/bin", tokenEnvVar + "=" + opts.APIToken}
+
+	process, err := buildAgentProcess(opts, ambient)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsString(process.Env, tokenEnvVar+"="+opts.APIToken) {
+		t.Fatalf("the agent must receive its token, got %#v", process.Env)
+	}
+
+	for _, environment := range map[string][]string{
+		"reporter": withoutToken(ambient),
+		"UI":       setEnvironment(withoutToken(ambient), "SM_UI_OPTIONS", "{}"),
+	} {
+		for _, entry := range environment {
+			if strings.Contains(entry, opts.APIToken) {
+				t.Fatalf("a side channel received the probe token: %q", entry)
+			}
+		}
+	}
+
+	// buildAgentProcess must not have rewritten the caller's slice in place;
+	// that is the aliasing bug the strip would not save us from.
+	if !containsString(ambient, tokenEnvVar+"="+opts.APIToken) || len(ambient) != 2 {
+		t.Fatalf("the caller's environment was mutated: %#v", ambient)
+	}
+}
+
+func TestStartUIIsANoOpWhenTheBinaryIsAbsent(t *testing.T) {
+	var log strings.Builder
+	startUI(filepath.Join(t.TempDir(), "absent"), os.Environ(), options{}, &log)
+	if log.String() != "" {
+		t.Fatalf("an absent UI must not prevent probe startup, got %q", log.String())
+	}
 }

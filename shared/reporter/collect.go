@@ -1,0 +1,222 @@
+package main
+
+import (
+	"bufio"
+	"context"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
+)
+
+// probeKind selects how one entity's value is obtained.
+type probeKind int
+
+const (
+	// probeHTTPStatus reports whether an endpoint answers with a 2xx. It is the
+	// right shape for liveness and readiness endpoints, whose meaning is carried
+	// by the status code rather than the body.
+	probeHTTPStatus probeKind = iota
+	// probeMetric reads a single named series from a Prometheus text endpoint.
+	probeMetric
+	// probeMetricLabel reads a label's value from the first matching sample,
+	// which is how build-info style series carry their version string.
+	probeMetricLabel
+)
+
+type probe struct {
+	Kind   probeKind
+	URL    string
+	Metric string
+	Label  string
+}
+
+// sample is one parsed line of the Prometheus text exposition format.
+type sample struct {
+	Name   string
+	Labels map[string]string
+	Value  float64
+}
+
+// parseMetrics reads the Prometheus text exposition format. It is deliberately
+// permissive: this reporter only ever looks up a handful of known series, and a
+// line it cannot parse must not cost us the ones it can.
+func parseMetrics(reader io.Reader) []sample {
+	var samples []sample
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		var name, remainder string
+		labels := map[string]string{}
+		if open := strings.IndexByte(line, '{'); open >= 0 {
+			end := strings.LastIndexByte(line, '}')
+			if end < open {
+				continue
+			}
+			name = line[:open]
+			labels = parseLabels(line[open+1 : end])
+			remainder = strings.TrimSpace(line[end+1:])
+		} else if space := strings.IndexAny(line, " \t"); space >= 0 {
+			name = line[:space]
+			remainder = strings.TrimSpace(line[space:])
+		} else {
+			continue
+		}
+		// A trailing timestamp is legal and is not part of the value.
+		if space := strings.IndexAny(remainder, " \t"); space >= 0 {
+			remainder = remainder[:space]
+		}
+		value, err := strconv.ParseFloat(remainder, 64)
+		if err != nil {
+			continue
+		}
+		samples = append(samples, sample{Name: strings.TrimSpace(name), Labels: labels, Value: value})
+	}
+	return samples
+}
+
+// parseLabels handles the quoted, comma-separated label set. Escapes are limited
+// to the three the exposition format defines.
+func parseLabels(text string) map[string]string {
+	labels := map[string]string{}
+	var key, value strings.Builder
+	inValue, inQuotes, escaped := false, false, false
+	flush := func() {
+		if k := strings.TrimSpace(key.String()); k != "" {
+			labels[k] = value.String()
+		}
+		key.Reset()
+		value.Reset()
+		inValue = false
+	}
+	for _, character := range text {
+		switch {
+		case escaped:
+			switch character {
+			case 'n':
+				value.WriteRune('\n')
+			case 't':
+				value.WriteRune('\t')
+			default:
+				value.WriteRune(character)
+			}
+			escaped = false
+		case inQuotes && character == '\\':
+			escaped = true
+		case character == '"':
+			inQuotes = !inQuotes
+		case inQuotes:
+			value.WriteRune(character)
+		case character == '=':
+			inValue = true
+		case character == ',':
+			flush()
+		case inValue:
+			// Unquoted value characters are not valid, but tolerate them.
+			value.WriteRune(character)
+		default:
+			key.WriteRune(character)
+		}
+	}
+	flush()
+	return labels
+}
+
+type collector struct {
+	client *http.Client
+}
+
+func newCollector(client *http.Client) *collector {
+	return &collector{client: client}
+}
+
+func (c *collector) statusOK(ctx context.Context, url string) bool {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	response, err := c.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = response.Body.Close() }()
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+	return response.StatusCode >= 200 && response.StatusCode < 300
+}
+
+func (c *collector) samples(ctx context.Context, url string) ([]sample, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	response, err := c.client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return nil, nil
+	}
+	return parseMetrics(io.LimitReader(response.Body, 16*1024*1024)), nil
+}
+
+// Collect resolves every entity in the spec into a state value. Values are the
+// JSON the state topic carries: "ON"/"OFF" for binary sensors so the default
+// payload_on and payload_off apply, numbers for sensors, and null for anything
+// currently unavailable, which Home Assistant renders as unknown.
+func (c *collector) Collect(ctx context.Context, entities []entitySpec) map[string]any {
+	// One scrape per distinct endpoint per cycle, not one per entity.
+	scraped := map[string][]sample{}
+	state := map[string]any{}
+	for _, entity := range entities {
+		switch entity.Probe.Kind {
+		case probeHTTPStatus:
+			state[entity.Key] = boolPayload(c.statusOK(ctx, entity.Probe.URL))
+		case probeMetric, probeMetricLabel:
+			samples, seen := scraped[entity.Probe.URL]
+			if !seen {
+				collected, err := c.samples(ctx, entity.Probe.URL)
+				if err == nil {
+					samples = collected
+				}
+				scraped[entity.Probe.URL] = samples
+			}
+			state[entity.Key] = resolveMetric(entity, samples)
+		}
+	}
+	return state
+}
+
+func resolveMetric(entity entitySpec, samples []sample) any {
+	for _, candidate := range samples {
+		if candidate.Name != entity.Probe.Metric {
+			continue
+		}
+		if entity.Probe.Kind == probeMetricLabel {
+			if value, ok := candidate.Labels[entity.Probe.Label]; ok && value != "" {
+				return value
+			}
+			continue
+		}
+		if entity.Component == componentBinarySensor {
+			return boolPayload(candidate.Value != 0)
+		}
+		return candidate.Value
+	}
+	// A series that is not present means the reporter could not observe the
+	// state, not that the state is false. Returning OFF here would claim, for
+	// example, that Alloy's configuration failed to load whenever an upstream
+	// rename moved the metric. Unknown is the honest answer.
+	return nil
+}
+
+func boolPayload(value bool) string {
+	if value {
+		return "ON"
+	}
+	return "OFF"
+}

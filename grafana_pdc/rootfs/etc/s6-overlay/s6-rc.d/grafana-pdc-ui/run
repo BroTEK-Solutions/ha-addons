@@ -1,0 +1,5 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# Serves the read-only ingress status page. Like the MQTT reporter this is a
+# side channel: it must never be able to disturb the tunnel.
+exec /usr/bin/grafana-pdc-ui

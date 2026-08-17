@@ -10,6 +10,8 @@ ui_run = ROOT / "rootfs/etc/s6-overlay/s6-rc.d/alloy-ui/run"
 ui_type = ROOT / "rootfs/etc/s6-overlay/s6-rc.d/alloy-ui/type"
 ui_dependency = ROOT / "rootfs/etc/s6-overlay/s6-rc.d/alloy-ui/dependencies.d/alloy"
 ui_manifest = ROOT / "rootfs/etc/s6-overlay/s6-rc.d/user/contents.d/alloy-ui"
+apparmor = (ROOT / "apparmor.txt").read_text()
+apparmor_rules = [line.strip() for line in apparmor.splitlines() if not line.lstrip().startswith("#")]
 
 checks = {
     "BUILD_FROM is declared before every build stage": dockerfile.index("ARG BUILD_FROM")
@@ -32,6 +34,30 @@ checks = {
     "UI service is a longrun": ui_type.is_file() and ui_type.read_text().strip() == "longrun",
     "UI starts independently of Alloy": not ui_dependency.exists(),
     "UI service is in the user bundle": ui_manifest.is_file(),
+    "AppArmor uses Home Assistant's profile preamble": "#include <tunables/global>" in apparmor,
+    "AppArmor declares the alloy profile with the required flags": "profile alloy flags=(attach_disconnected,mediate_deleted)"
+    in apparmor,
+    # `file,` is shorthand for `/ rwmlk,`. AppArmor permissions are cumulative,
+    # so one such rule makes every write rule below it decorative and there is
+    # no way to claw the permission back. This profile has no inner profile to
+    # fall back on, so the outer one is the whole confinement.
+    "AppArmor grants no unrestricted file rule": "file," not in apparmor_rules,
+    "AppArmor keeps reads and memory-mapping broad": "/{,**} rm," in apparmor_rules,
+    # The writable set is the point of the profile: everything else is read-only.
+    "AppArmor writes are confined to App state": {rule for rule in apparmor_rules if " rw" in rule or " w" in rule}
+    == {
+        "/etc/services.d/** rwix,",
+        "/etc/cont-init.d/** rwix,",
+        "/etc/cont-finish.d/** rwix,",
+        "/run/{,**} rwk,",
+        "/dev/tty rw,",
+        "/dev/null rw,",
+        "/tmp/** rwk,",
+        "/data/ rw,",
+        "/data/** rwk,",
+        "/etc/alloy/ rw,",
+        "/etc/alloy/** rwk,",
+    },
 }
 
 failed = [name for name, ok in checks.items() if not ok]

@@ -1,0 +1,16 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# The status page is a convenience; the tunnel is the product. Never halt the
+# App because the page died, and back off so a deterministic fault cannot
+# become a hot restart loop.
+declare exit_code="${1:-0}"
+declare exit_signal="${2:-0}"
+
+if [[ "${exit_code}" -eq 256 ]] && [[ "${exit_signal}" -eq 15 ]]; then
+    exit 0
+fi
+if [[ "${exit_code}" -ne 0 ]]; then
+    bashio::log.warning "Status page exited (code ${exit_code}); the PDC tunnel is unaffected. Retrying shortly."
+    sleep 30
+fi
+exit 0

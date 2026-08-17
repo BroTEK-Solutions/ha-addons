@@ -10,9 +10,19 @@ and links to Alloy's component graph. Saving does not interrupt collection;
 choose **Save and restart** when you are ready to apply the new configuration.
 
 The Home Assistant **Configuration** tab contains the startup controls that must
-stay reachable even when Alloy will not start: **Safe mode**, **Configuration UI
-log level**, and **Stability level**. All pipeline settings live in the Web UI, so
-the same option is never presented in two places.
+stay reachable even when Alloy will not start. All pipeline settings live in the
+Web UI, so the same option is never presented in two places. These three are the
+complete set of native App options:
+
+| Field | Option key | Default | Meaning |
+| --- | --- | --- | --- |
+| Start in recovery safe mode | `safe_mode` | `false` | Ignores the saved Web UI configuration and starts Alloy with logging only, so a configuration that prevents startup can be repaired. See [Troubleshooting](#troubleshooting). |
+| Configuration UI log level | `ui_log_level` | `info` | Verbosity of the ingress configuration service itself. It does not change Alloy's log level or anything shipped to Loki. |
+| Minimum component stability | `alloy_stability_level` | `generally-available` | Lowest component stability Alloy will load. See [Minimum component stability](#minimum-component-stability). |
+
+Because these three are what you reach for when Alloy will not start, they stay
+on the Home Assistant Configuration tab rather than moving into the Web UI,
+which may itself be unreachable at that moment.
 
 ## Choose one operation mode
 
@@ -275,6 +285,34 @@ exceptions. Its separate health endpoint contains no configuration or restart
 capability. App health follows this recovery UI rather than Alloy readiness. If Alloy exits,
 S6 can restart it and the Web UI remains available; **Alloy status & component
 graph** reports an upstream error until Alloy is ready again.
+
+## Home Assistant entities over MQTT
+
+If Home Assistant has an MQTT broker (the Mosquitto broker App is the usual
+one), this App publishes its own health as entities using MQTT discovery. There
+is nothing to configure and no credentials to copy: the broker details come from
+the Supervisor, so rotating them does not strand a copy here. Without a broker
+the App behaves exactly as before, and it keeps checking, so installing one
+later needs no restart.
+
+The point is to make the monitoring pipeline itself monitorable. These entities
+let an automation notice that telemetry stopped - which is precisely the failure
+that otherwise hides, because the thing that would have told you is the thing
+that broke.
+
+| Entity | Type | Meaning |
+| --- | --- | --- |
+| Ready | binary sensor | Alloy's `/-/ready` endpoint answers, so the pipeline is running. |
+| Healthy | binary sensor | Alloy's `/-/healthy` endpoint answers. Exposed as a problem sensor. |
+| Configuration loaded | binary sensor | Alloy's last configuration load succeeded. |
+| Alloy version | sensor | The running Alloy version, from its own build-info metric. |
+
+
+Entities appear under a device named after the App. They report `unavailable`
+when the App stops, through an MQTT last-will message, and an individual entity
+reads `unknown` when its value cannot currently be observed. `unknown` means
+this App could not measure the state - it is never a silent substitute for a
+real "off".
 
 ## Troubleshooting
 

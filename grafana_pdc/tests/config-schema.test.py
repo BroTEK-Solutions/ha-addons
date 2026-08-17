@@ -173,6 +173,18 @@ def main() -> int:
         is not None,
     )
     check("8090/tcp has no default host mapping", config.get("ports") == {"8090/tcp": None})
+    # The status page is read-only and Supervisor-ingress only. It must never
+    # gain a host port, which would publish internal topology to the network.
+    check("ingress serves the read-only status page", config.get("ingress") is True)
+    # 8099 is the Supervisor's default ingress_port and the App linter rejects
+    # the key when it restates a default, so the port is asserted through the
+    # things that actually have to agree with it instead.
+    check("ingress_port is left at the Supervisor default", "ingress_port" not in config)
+    check(
+        "the status server listens on the default ingress port",
+        'envOr("LISTEN_ADDR", "0.0.0.0:8099")' in (ADDON / "ui" / "main.go").read_text(),
+    )
+    check("status page has no host port mapping", "8099/tcp" not in (config.get("ports") or {}))
     for key in (
         "host_network",
         "host_pid",
@@ -195,7 +207,6 @@ def main() -> int:
         "audio",
         "gpio",
         "kernel_modules",
-        "ingress",
         "roles",
         "advanced",
         "apparmor",
@@ -259,6 +270,24 @@ def main() -> int:
             accepted == expected_valid,
             "" if accepted == expected_valid else f"expected {'accept' if expected_valid else 'reject'}",
         )
+
+    # The private key under /data/ssh is excluded from Home Assistant backups on
+    # purpose, so a restore has to be able to REBUILD it. That only works while
+    # signing_token stays an ordinary option: options are captured by the
+    # backup, so the agent finds its token, mints a fresh keypair and
+    # re-registers. Widen backup_exclude to /data and the restored App would
+    # come back with neither a key nor a way to earn a new one.
+    print("\n== a restored backup can rebuild the excluded keypair ==")
+    excluded = config.get("backup_exclude") or []
+    check("backups exclude the SSH material only", excluded == ["ssh/**"])
+    check(
+        "the signing token is a required option, so backups capture it",
+        "signing_token" in schema and "signing_token" in REQUIRED,
+    )
+    check(
+        "the signing token is not stored under the excluded path",
+        not any(entry.startswith("ssh") for entry in options),
+    )
 
     print("\n== English translations cover the UI ==")
     translations = yaml.safe_load(TRANSLATIONS.read_text())

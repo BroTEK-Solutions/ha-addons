@@ -62,19 +62,19 @@ configuration options**. That label is global Home Assistant UI text and cannot
 be renamed per App. These PDC controls use the upstream pdc-agent 0.0.63 defaults
 when omitted:
 
-| Field | Upstream default | Meaning |
-| --- | --- | --- |
-| Connections | `1` | Parallel reverse SSH tunnels. Go SSH requires exactly one. |
-| Use region endpoint format | off | Changes derived endpoint naming; enable only when Grafana instructs you. |
-| Grafana domain | `grafana.net` | Base suffix used to derive API and gateway names. |
-| API FQDN override | unset | Explicit signing API hostname; supersedes derivation. |
-| Gateway FQDN override | unset | Explicit SSH gateway hostname; supersedes derivation. |
-| Certificate expiry window | `5m` | How early certificate renewal starts. |
-| Certificate check interval | `1m` | Renewal check frequency; `0` checks only at startup. |
-| Maximum retries | `4` | Signing API retry limit. |
-| Parse OpenSSH connection metrics | on | Parses verbose OpenSSH output into PDC Prometheus connection/forwarding metrics. |
-| Use GoSSH | off | Experimental in-process SSH path with a narrower feature set. |
-| Connection timeout | `1` second | Limit for each SSH connection attempt. |
+| Field | Option key | Upstream default | Meaning |
+| --- | --- | --- | --- |
+| Connections | `connections` | `1` | Parallel reverse SSH tunnels. Go SSH requires exactly one. |
+| Use region endpoint format | `region_format` | off | Changes derived endpoint naming; enable only when Grafana instructs you. |
+| Grafana domain | `domain` | `grafana.net` | Base suffix used to derive API and gateway names. |
+| API FQDN override | `api_fqdn` | unset | Explicit signing API hostname; supersedes derivation. |
+| Gateway FQDN override | `gateway_fqdn` | unset | Explicit SSH gateway hostname; supersedes derivation. |
+| Certificate expiry window | `cert_expiry_window` | `5m` | How early certificate renewal starts. |
+| Certificate check interval | `cert_check_expiry_period` | `1m` | Renewal check frequency; `0` checks only at startup. |
+| Maximum retries | `retry_max` | `4` | Signing API retry limit. |
+| Parse OpenSSH connection metrics | `parse_metrics` | on | Parses verbose OpenSSH output into PDC Prometheus connection/forwarding metrics. |
+| Use GoSSH | `use_gossh` | off | Experimental in-process SSH path with a narrower feature set. |
+| Connection timeout | `connect_timeout_seconds` | `1` second | Limit for each SSH connection attempt. |
 
 `domain` is relevant only to automatically derived endpoints. If both explicit
 FQDN overrides are supplied, those values take precedence and the domain and
@@ -99,12 +99,97 @@ means the process answers HTTP; it does not prove the tunnel is registered or a
 data source is reachable. Use Grafana Cloud's PDC connection status and the App
 log for readiness.
 
+### Failure handling
+
+If the agent exits unexpectedly, or dies on any signal other than `SIGTERM`,
+this App **stops the whole container** and preserves the agent's exit code.
+That is deliberate: PDC has no other user-facing surface, so a silent restart
+loop would look identical to a working tunnel from the Home Assistant side. A
+stopped App is visible, and the Watchdog toggle then controls whether the
+Supervisor restarts it.
+
+This differs from the Grafana Alloy App, which keeps its container running when
+Alloy exits so its configuration Web UI stays reachable for repair. Alloy has a
+recovery surface worth preserving; PDC does not.
+
+## Status page
+
+Choose **Open Web UI** to see a read-only status page through Home Assistant
+ingress. It is deliberately read-only: PDC's settings live on the
+**Configuration** tab, where Home Assistant already validates them against the
+App schema, and a second place to set the same value is a second place for it to
+be wrong.
+
+The page answers the question the logs could not:
+
+- whether the agent process is responding on its local metrics port; and
+- whether each entry in `allowed_endpoints` can actually be reached from this
+  App, tested with a real TCP connection over the same path Grafana's traffic
+  takes.
+
+That second check matters because a misconfigured allowlist and a genuinely
+unreachable data source look identical from Grafana Cloud. The page distinguishes
+"hostname does not resolve" from "nothing is listening on that port" from "timed
+out", so the next step is obvious. Wildcard patterns and the `any`/`none`
+sentinels are policy rather than destinations, so they are reported as not
+tested.
+
+The page shows the connector identity - Hosted Grafana ID, cluster and endpoint
+overrides - but never the signing token, which is not read by the status service
+at all. It accepts Supervisor ingress traffic only and is not published on any
+host port.
+
+Agent liveness here still does not mean the tunnel is registered. That remains
+Grafana Cloud's view, under **Connections > Private data source connections**.
+
+## Home Assistant entities over MQTT
+
+If Home Assistant has an MQTT broker (the Mosquitto broker App is the usual
+one), this App publishes its own health as entities using MQTT discovery. There
+is nothing to configure and no credentials to copy: the broker details come from
+the Supervisor, so rotating them does not strand a copy here. Without a broker
+the App behaves exactly as before, and it keeps checking, so installing one
+later needs no restart.
+
+The point is to make the monitoring pipeline itself monitorable. These entities
+let an automation notice that telemetry stopped - which is precisely the failure
+that otherwise hides, because the thing that would have told you is the thing
+that broke.
+
+| Entity | Type | Meaning |
+| --- | --- | --- |
+| Agent responding | binary sensor | The PDC agent's metrics endpoint answers, so the process is alive. |
+
+This is deliberately one entity. Whether the tunnel is *registered* is Grafana
+Cloud's view, not something the local agent reports reliably, and the agent's
+own metric names are not a documented contract. An entity that silently started
+lying after an upstream rename would be worse than not having it. Continue to
+use Grafana Cloud's PDC connection status for tunnel readiness.
+
+
+Entities appear under a device named after the App. They report `unavailable`
+when the App stops, through an MQTT last-will message, and an individual entity
+reads `unknown` when its value cannot currently be observed. `unknown` means
+this App could not measure the state - it is never a silent substitute for a
+real "off".
+
 ## Persistent identity and upgrades
 
 The SSH private key and signed certificate live under `/data/ssh`. This location
-persists across normal restarts and updates and is included in Home Assistant App
-backups. Do not delete it as routine troubleshooting: deletion discards the
-connector identity and forces registration with a new key.
+persists across normal restarts and updates. Do not delete it as routine
+troubleshooting: deletion discards the connector identity and forces
+registration with a new key.
+
+`/data/ssh` is deliberately **excluded from Home Assistant backups**. A private
+key does not belong in an archive that is often unencrypted and copied off the
+device, and the material is reproducible: the signing token is an ordinary
+option and is captured by the backup, so the agent mints a fresh keypair and
+re-registers on its own.
+
+After restoring a backup, expect the connector to be briefly offline while it
+registers the new key. That first-boot delay is normal and needs no action. The
+connector appears in Grafana Cloud under the same Hosted Grafana ID and cluster;
+you do not need to re-copy the signing token or create a new PDC configuration.
 
 Uncommon fields are deliberately omitted from stored defaults. The runtime
 still supplies the matching pdc-agent defaults, so upgrading keeps existing

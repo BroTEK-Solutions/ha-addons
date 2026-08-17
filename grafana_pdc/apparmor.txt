@@ -17,8 +17,12 @@ profile grafana_pdc flags=(attach_disconnected,mediate_deleted) {
   /run/{s6,s6-rc*,service}/** ix,
   /package/** ix,
   /command/** ix,
-  # curl runs under this profile for the IPv4 loopback health probe.
+  # curl runs under this profile for the IPv4 loopback health probe. The status
+  # page and the MQTT reporter also run here: the page dials allowlisted
+  # destinations to test reachability, which may be IPv6, and the reporter
+  # connects to the Home Assistant broker.
   network inet stream,
+  network inet6 stream,
   /etc/services.d/** rwix,
   /etc/cont-init.d/** rwix,
   /etc/cont-finish.d/** rwix,

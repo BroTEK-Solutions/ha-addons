@@ -111,5 +111,52 @@ def main() -> None:
     if any(rule.get("automerge") is False for rule in rules):
         fail("package rules must not bypass green-CI automerge")
 
+    check_ignore_paths(config.get("ignorePaths", []))
+
+
+# The generated App copies must be ignored, because the synchronizers rewrite
+# them and would revert any Renovate PR. The modules those copies are generated
+# FROM must not be: a wildcard that swallows one takes the code every App
+# compiles from out of Renovate's reach, and the only symptom is a transitive
+# CVE that is never proposed.
+GENERATED_MODULES = (
+    "alloy/reporter",
+    "grafana_pdc/reporter",
+    "grafana_sm/reporter",
+    "grafana_sm/launcher",
+    "grafana_sm/ui",
+    "grafana_sm_browser/reporter",
+    "grafana_sm_browser/launcher",
+    "grafana_sm_browser/ui",
+)
+SOURCE_MODULES = (
+    "shared/reporter",
+    "synthetic_monitoring_shared/launcher",
+    "synthetic_monitoring_shared/ui",
+    "alloy/ui",
+    "grafana_pdc/ui",
+)
+
+
+def check_ignore_paths(patterns: list[str]) -> None:
+    from fnmatch import fnmatch
+
+    def ignored(module: str) -> bool:
+        # Renovate matches ignorePaths against the manifest path, not the
+        # directory, so test the file Renovate would actually extract from.
+        return any(fnmatch(f"{module}/go.mod", pattern) for pattern in patterns)
+
+    for module in GENERATED_MODULES:
+        if not (ROOT / module / "go.mod").exists():
+            fail(f"the generated module {module} no longer exists; update this test")
+        if not ignored(module):
+            fail(f"Renovate must ignore the generated copy {module}")
+    for module in SOURCE_MODULES:
+        if not (ROOT / module / "go.mod").exists():
+            fail(f"the source module {module} no longer exists; update this test")
+        if ignored(module):
+            fail(f"Renovate must keep managing the source module {module}")
+
+
 if __name__ == "__main__":
     main()

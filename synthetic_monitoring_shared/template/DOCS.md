@@ -69,11 +69,60 @@ Anyone who can change checks assigned to this probe can cause requests from the 
 network. Protect Grafana Cloud administrator access, and enable private k6 targets only when that
 trust boundary is acceptable.
 
+## Home Assistant entities over MQTT
+
+If Home Assistant has an MQTT broker (the Mosquitto broker App is the usual
+one), this App publishes its own health as entities using MQTT discovery. There
+is nothing to configure and no credentials to copy: the broker details come from
+the Supervisor, so rotating them does not strand a copy here. Without a broker
+the App behaves exactly as before, and it keeps checking, so installing one
+later needs no restart.
+
+The point is to make the monitoring pipeline itself monitorable. These entities
+let an automation notice that telemetry stopped - which is precisely the failure
+that otherwise hides, because the thing that would have told you is the thing
+that broke.
+
+| Entity | Type | Meaning |
+| --- | --- | --- |
+| Probe running | binary sensor | The agent's local HTTP server answers, so the process is alive. |
+| Connected to Grafana Cloud | binary sensor | The agent's `/ready` endpoint answers. It returns 503 until the probe has actually connected, which makes this the entity worth alerting on. |
+
+
+Entities appear under a device named after the App. They report `unavailable`
+when the App stops, through an MQTT last-will message, and an individual entity
+reads `unknown` when its value cannot currently be observed. `unknown` means
+this App could not measure the state - it is never a silent substitute for a
+real "off".
+
 ## Health and troubleshooting
+
+Open **Probe status** from the App page for read-only operational diagnostics. The ingress page
+shows local agent and Grafana Cloud connection state, performs a TCP reachability test to the
+configured gRPC endpoint from the App, and summarizes publishing totals and running checks by safe
+check type. It deliberately excludes the API token, check names and targets, tenant and probe IDs,
+and arbitrary metric labels. The page is available only through Home Assistant ingress; it does not
+publish a host port.
+
+Its counters cover the current agent process and reset when the App restarts. They are diagnostic
+totals, not a replacement for check results and dashboards in Grafana Cloud.
 
 The container health check calls the agent's local `/` endpoint, which proves the process and HTTP
 server are alive. It deliberately does not call `/ready`: `/ready` returns 503 until the probe is
 connected to Grafana Cloud, and an upstream outage must not create a restart loop.
+
+This App runs the agent as its only process rather than under a supervision tree, so if the agent
+exits, the container exits with the same code and the Supervisor's Watchdog toggle decides whether
+it restarts. The Grafana Alloy App behaves differently on purpose: it keeps running so its
+configuration Web UI stays available for repair, which this probe has no equivalent of.
+
+That choice has a consequence worth stating plainly: **the MQTT entities and the Probe status page
+are best-effort side channels.** Both are started once before the agent takes over the container,
+and nothing supervises them afterwards. If either exits, it stays down until the App is restarted -
+the MQTT entities go `unavailable` and the status page stops answering, while the probe itself
+carries on running checks normally. Restart the App to bring them back. A probe that is publishing
+results to Grafana Cloud while its Home Assistant entities read `unavailable` is this case, not a
+probe failure.
 
 If the probe stays offline:
 

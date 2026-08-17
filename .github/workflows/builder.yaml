@@ -10,7 +10,7 @@ on:
 permissions: {}
 
 env:
-  MONITORED_FILES: "config.json config.yaml config.yml Dockerfile launcher rootfs apparmor.txt"
+  MONITORED_FILES: "config.json config.yaml config.yml Dockerfile launcher reporter ui rootfs apparmor.txt"
 
 concurrency:
   group: build-apps-${{ github.workflow }}-${{ github.ref }}
@@ -61,29 +61,57 @@ jobs:
           path: "./grafana_sm_browser"
 
       - name: ShellCheck
+        # -x follows the `# shellcheck source=` directives into the shared
+        # validator library, and --source-path=SCRIPTDIR is what makes them
+        # resolve: without it those paths are read relative to the working
+        # directory rather than the sourcing script, every one misses, and
+        # SC1091 fails the step at info level.
         run: |
-          shellcheck \
+          shellcheck -x --source-path=SCRIPTDIR \
+            shared/lib/ha-validate.sh \
+            tests/shared_validate_lib_test.sh \
             alloy/rootfs/usr/share/alloy/generate-config.sh \
             alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run \
             alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run \
             alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish \
+            alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy-reporter/run \
+            alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy-reporter/finish \
             alloy/tests/generate-config.test.sh \
             alloy/tests/init-alloy.test.sh \
             grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run \
             grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run \
             grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish \
+            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-reporter/run \
+            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-reporter/finish \
+            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-ui/run \
+            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-ui/finish \
             grafana_pdc/tests/service.test.sh \
             grafana_pdc/tests/image-smoke.test.sh \
             grafana_pdc/tests/fixtures/bashio \
             grafana_pdc/tests/fixtures/fake-pdc
 
+      - name: Shared validator library tests
+        run: bash tests/shared_validate_lib_test.sh
+
+      - name: Set up Go for the shared MQTT reporter
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: shared/reporter/go.mod
+          cache: false
+
+      - name: Shared MQTT reporter tests
+        working-directory: shared/reporter
+        run: go test ./...
+
       - name: Repository contract tests
         run: |
           python3 tests/app_metadata_contract_test.py
+          python3 tests/app_contract_test.py
           python3 tests/app_version_changed_test.py
           python3 tests/renovate_config_contract_test.py
           python3 tests/repository_workflow_contract_test.py
           python3 tests/synthetic_monitoring_variants_test.py
+          python3 scripts/sync_shared_lib.py --check
 
   pdc-test:
     name: Grafana PDC tests
@@ -109,6 +137,16 @@ jobs:
         run: |
           python3 grafana_pdc/tests/config-schema.test.py
           python3 grafana_pdc/tests/image-contract.test.py
+
+      - name: Set up Go for the PDC status page
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: grafana_pdc/ui/go.mod
+          cache: false
+
+      - name: PDC status page tests
+        working-directory: grafana_pdc/ui
+        run: go test ./...
 
       - name: PDC service tests in the Home Assistant base
         run: |

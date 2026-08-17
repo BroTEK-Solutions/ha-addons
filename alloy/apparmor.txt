@@ -1,0 +1,101 @@
+#include <tunables/global>
+
+# Alloy is the most privileged App in this repository: it runs on the host
+# network, reads the host journal, and scrapes host-wide /proc and /sys through
+# prometheus.exporter.unix. Running it unconfined was the weakest posture here,
+# but a profile that constrains reads would break host metrics silently rather
+# than loudly, which is worse than no profile at all.
+#
+# So the shape of this profile is: reads stay broad, writes and capabilities are
+# tight. Alloy's only writable state is its own storage path, its generated
+# config, and the ingress settings store. Everything else is read-only.
+#
+# Recovery: if this profile blocks something it should not, the symptom is Alloy
+# failing to start or a metric family disappearing. Set `apparmor: false` in
+# alloy/config.yaml to fall back to unconfined while the gap is diagnosed, and
+# check `dmesg` on the host for the denied operation and path.
+profile alloy flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+  #include <abstractions/nameservice>
+
+  # Read and memory-map anywhere. A bare `file,` was here first, but that is
+  # shorthand for `/ rwmlk,` - it grants write, link and lock everywhere too,
+  # and AppArmor rules are cumulative, so no later path rule can take those
+  # back. Every write rule below was decorative while it was present.
+  #
+  # `rm` is the half that has to stay broad. Reads are what break silently: a
+  # denied read costs a metric family with no error anyone sees. `m` is not
+  # optional either - Go binaries memory-map their own executable segments at
+  # startup, and `ix` alone does not permit that.
+  /{,**} rm,
+  signal (send) set=(kill,term,int,hup,cont),
+  capability chown,
+  capability kill,
+  capability setgid,
+  capability setuid,
+  capability dac_override,
+  capability dac_read_search,
+
+  /init ix,
+  /bin/** ix,
+  /usr/bin/** ix,
+  /usr/local/bin/** ix,
+  /run/{s6,s6-rc*,service}/** ix,
+  /package/** ix,
+  /command/** ix,
+  /etc/s6-overlay/** rix,
+  /etc/services.d/** rwix,
+  /etc/cont-init.d/** rwix,
+  /etc/cont-finish.d/** rwix,
+  /run/{,**} rwk,
+  /dev/tty rw,
+  /dev/null rw,
+  /dev/urandom r,
+
+  # Bashio, jq and the shell helpers the S6 services run.
+  /usr/lib/bashio/** ix,
+  /usr/share/alloy/** rix,
+  /usr/share/ha-lib/** r,
+  /tmp/** rwk,
+
+  # The App's own network surface: outbound to Grafana Cloud, the loopback
+  # ingress listener, the Alloy HTTP server, and the optional OTLP receiver.
+  network inet stream,
+  network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
+  network netlink raw,
+
+  # Writable state. /data/alloy is the storage path, /data/settings.json is the
+  # ingress-owned settings store, and /etc/alloy holds the generated config.
+  /data/ rw,
+  /data/** rwk,
+  /etc/alloy/ rw,
+  /etc/alloy/** rwk,
+
+  # The systemd journal, read-only. Both locations are probed by init-alloy/run
+  # because a HAOS install may use either.
+  /var/log/journal/ r,
+  /var/log/journal/** r,
+  /run/log/journal/ r,
+  /run/log/journal/** r,
+  /etc/machine-id r,
+
+  # Host metrics. prometheus.exporter.unix walks these trees, and the precise
+  # set depends on which collectors the host supports, so they are granted as
+  # read-only subtrees rather than enumerated file by file.
+  @{PROC}/ r,
+  @{PROC}/** r,
+  /sys/ r,
+  /sys/** r,
+
+  # Certificate and resolver material for the outbound writers.
+  /etc/ssl/certs/** r,
+  /etc/ssl/openssl.cnf r,
+  /etc/ca-certificates/** r,
+  /usr/share/ca-certificates/** r,
+  /etc/passwd r,
+  /etc/group r,
+  /etc/hosts r,
+  /etc/resolv.conf r,
+}

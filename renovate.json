@@ -13,6 +13,20 @@
   "platformAutomerge": true,
   "rebaseWhen": "behind-base-branch",
   "internalChecksFilter": "strict",
+  "description": [
+    "ignorePaths lists generated copies only. Each path below is rewritten by scripts/sync_shared_lib.py or scripts/sync_synthetic_monitoring_variants.py, so a Renovate PR against one is reverted by the next sync.",
+    "The source modules shared/reporter, synthetic_monitoring_shared/launcher and synthetic_monitoring_shared/ui must stay managed. A wildcard */reporter/** also matched shared/reporter, which silently took the module every App compiles from out of Renovate's reach and let a transitive CVE sit unproposed."
+  ],
+  "ignorePaths": [
+    "alloy/reporter/**",
+    "grafana_pdc/reporter/**",
+    "grafana_sm/reporter/**",
+    "grafana_sm/launcher/**",
+    "grafana_sm/ui/**",
+    "grafana_sm_browser/reporter/**",
+    "grafana_sm_browser/launcher/**",
+    "grafana_sm_browser/ui/**"
+  ],
   "customManagers": [
     {
       "customType": "regex",
