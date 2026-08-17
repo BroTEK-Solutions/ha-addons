@@ -4,7 +4,7 @@ title: Finish BroTEK-Solutions onboarding to agent-docs drift detection
 status: To Do
 assignee: []
 created_date: '2026-08-17 12:11'
-updated_date: '2026-08-17 12:12'
+updated_date: '2026-08-17 12:36'
 labels: []
 dependencies: []
 ordinal: 1000
@@ -18,8 +18,8 @@ The fan-out protocol doc (doc-0001) is rendered and byte-correct, but this repo 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 OpenBao permission set agent-docs-drift-brotek-solutions exists, scoped to this repo alone with contents:read (ids are in the agent-docs commit, not here — this board is public)
-- [ ] #2 Policy gha-agent-docs-drift grants read on that permission set's token path
+- [x] #1 OpenBao permission set agent-docs-drift-brotek-solutions exists with contents:read and NO repositories enumeration — installation-scoped by design, matching the other three; do not tighten it
+- [x] #2 Policy gha-agent-docs-drift grants read on that permission set's token path
 - [ ] #3 The Backlog.md setup PR is merged to main, so doctor-remote can read backlog/docs through the API
 - [ ] #4 agent-docs branch feat/brotek-solutions-consumer merged to main and pushed
 - [ ] #5 gh workflow run drift.yml in agent-docs reports current, with this repo counted and no NO TOKEN or MISSING rows
