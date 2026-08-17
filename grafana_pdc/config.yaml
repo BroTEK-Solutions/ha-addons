@@ -28,7 +28,6 @@ services:
 # configuration surface and no secret, and it accepts Supervisor ingress traffic
 # only.
 ingress: true
-ingress_port: 8099
 panel_icon: mdi:lan-connect
 panel_title: PDC status
 ports:

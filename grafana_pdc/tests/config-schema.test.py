@@ -176,7 +176,14 @@ def main() -> int:
     # The status page is read-only and Supervisor-ingress only. It must never
     # gain a host port, which would publish internal topology to the network.
     check("ingress serves the read-only status page", config.get("ingress") is True)
-    check("ingress uses the internal status port", config.get("ingress_port") == 8099)
+    # 8099 is the Supervisor's default ingress_port and the App linter rejects
+    # the key when it restates a default, so the port is asserted through the
+    # things that actually have to agree with it instead.
+    check("ingress_port is left at the Supervisor default", "ingress_port" not in config)
+    check(
+        "the status server listens on the default ingress port",
+        'envOr("LISTEN_ADDR", "0.0.0.0:8099")' in (ADDON / "ui" / "main.go").read_text(),
+    )
     check("status page has no host port mapping", "8099/tcp" not in (config.get("ports") or {}))
     for key in (
         "host_network",
