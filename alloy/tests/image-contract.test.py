@@ -1,11 +1,26 @@
 #!/usr/bin/env python3
 """Check the Alloy image and S6 wiring needed by the ingress UI."""
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 dockerfile = (ROOT / "Dockerfile").read_text()
 alloy_run = (ROOT / "rootfs/etc/s6-overlay/s6-rc.d/alloy/run").read_text()
+init_run = (ROOT / "rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run").read_text()
+
+# init-alloy writes this as remotecfg's `id`; alloy/run exports it as
+# GCLOUD_FM_COLLECTOR_ID for the pipelines remotecfg fetches. The two are read in
+# separate s6 services from the same settings key, so the fallback is the only
+# part that can silently drift apart.
+init_fallback = re.search(
+    r"INSTANCE_NAME=\$\(config_or instance_name (\S+)\)", init_run
+)
+run_fallback = re.search(
+    r'GCLOUD_FM_COLLECTOR_ID=\$\(setting instance_name\)\s*\n'
+    r'\[ -n "\$\{GCLOUD_FM_COLLECTOR_ID\}" \] \|\| GCLOUD_FM_COLLECTOR_ID=(\S+)',
+    alloy_run,
+)
 ui_run = ROOT / "rootfs/etc/s6-overlay/s6-rc.d/alloy-ui/run"
 ui_type = ROOT / "rootfs/etc/s6-overlay/s6-rc.d/alloy-ui/type"
 ui_dependency = ROOT / "rootfs/etc/s6-overlay/s6-rc.d/alloy-ui/dependencies.d/alloy"
@@ -30,6 +45,17 @@ checks = {
     in alloy_run,
     "stability level is not read from the ingress settings store": "setting alloy_stability_level"
     not in alloy_run,
+    # Fleet Management's generated pipelines label every series with
+    # sys.env("GCLOUD_FM_COLLECTOR_ID") and the Collector Health view matches on
+    # it. remotecfg delivers those pipelines, so generate-config.sh cannot
+    # substitute the value and the process environment is the only route.
+    "collector ID is exported for Fleet-delivered pipelines": "export GCLOUD_FM_COLLECTOR_ID"
+    in alloy_run,
+    "collector ID comes from the instance_name setting": run_fallback is not None,
+    "collector ID falls back to the same name init-alloy gives remotecfg": init_fallback
+    is not None
+    and run_fallback is not None
+    and init_fallback.group(1) == run_fallback.group(1),
     "UI service run file exists": ui_run.is_file(),
     "UI service is a longrun": ui_type.is_file() and ui_type.read_text().strip() == "longrun",
     "UI starts independently of Alloy": not ui_dependency.exists(),

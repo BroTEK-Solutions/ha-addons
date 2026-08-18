@@ -21,6 +21,18 @@ PYROSCOPE_PASSWORD=$(setting pyroscope_password)
 export LOKI_PASSWORD PROMETHEUS_PASSWORD GCLOUD_RW_API_KEY
 export TEMPO_PASSWORD PYROSCOPE_PASSWORD
 
+# Fleet Management's own generated pipelines label their series with
+# sys.env("GCLOUD_FM_COLLECTOR_ID"), which is what the Collector Health view
+# matches on. Those pipelines arrive over remotecfg, so generate-config.sh never
+# sees them and cannot substitute the value; only the process environment can.
+# init-alloy is a separate s6 service, so exporting it there would not reach us.
+# The fallback must stay identical to the one init-alloy applies to
+# instance_name, because that is what it writes as remotecfg's id - a divergence
+# would file the collector's health under a name Fleet has never heard of.
+GCLOUD_FM_COLLECTOR_ID=$(setting instance_name)
+[ -n "${GCLOUD_FM_COLLECTOR_ID}" ] || GCLOUD_FM_COLLECTOR_ID=homeassistant
+export GCLOUD_FM_COLLECTOR_ID
+
 # Startup flags. The first four are fixed: ingress proxies the prefixed UI,
 # health and self-monitoring use the same listener, and the storage path is the
 # one excluded from backups.
