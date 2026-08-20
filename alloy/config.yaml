@@ -1,5 +1,5 @@
 name: Grafana Alloy
-version: 2.3.0
+version: 2.4.0
 slug: alloy
 description: >-
   Ship Home Assistant OS logs, metrics, traces and profiles with Grafana Alloy,
@@ -14,9 +14,6 @@ startup: services
 journald: true
 host_network: true
 homeassistant_api: true
-# Optional: when Home Assistant has an MQTT broker, the App publishes its own
-# health as entities so automations can react to a broken telemetry pipeline.
-# "want" rather than "need" - the App runs perfectly well without a broker.
 services:
   - mqtt:want
 ingress: true

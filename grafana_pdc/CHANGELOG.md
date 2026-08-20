@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.1.1...grafana-pdc-v1.2.0) (2026-08-20)
+
+
+### Features
+
+* publish App health over MQTT and add ingress status pages ([999b229](https://github.com/BroTEK-Solutions/ha-addons/commit/999b229f7d8d1e323a3272c426ec22d0dcec2c49))
+
+
+### Bug Fixes
+
+* **deps:** update ghcr.io/home-assistant/base:3.24 docker digest to 93ef607 ([#67](https://github.com/BroTEK-Solutions/ha-addons/issues/67)) ([966280c](https://github.com/BroTEK-Solutions/ha-addons/commit/966280c44631bd087923ca0bb1b3b5d37f35d7fb))
+
 ## [1.1.1](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.1.0...grafana-pdc-v1.1.1) (2026-08-01)
 
 

@@ -1,5 +1,5 @@
 name: Grafana Private Data Source Connect
-version: 1.1.1
+version: 1.2.0
 slug: grafana_pdc
 description: >-
   Connect a private network data source to Grafana Cloud without exposing it to
@@ -10,23 +10,10 @@ arch:
   - aarch64
   - amd64
 init: false
-# The connector's SSH private key lives in /data/ssh. It is reproducible - the
-# agent mints a new keypair and re-registers with the signing token, which is an
-# option and so is still captured - and a private key does not belong in a
-# backup archive that is frequently unencrypted and copied off the device.
 backup_exclude:
   - ssh/**
-# Optional: when Home Assistant has an MQTT broker, the App publishes its own
-# health as entities so automations can react to a broken telemetry pipeline.
-# "want" rather than "need" - the App runs perfectly well without a broker. This
-# grants only the MQTT service; it deliberately does not add hassio_api.
 services:
   - mqtt:want
-# A read-only status page. It reports whether the agent is answering and whether
-# each allowlisted destination can actually be reached from this App, which was
-# previously impossible to determine without guessing. It exposes no
-# configuration surface and no secret, and it accepts Supervisor ingress traffic
-# only.
 ingress: true
 panel_icon: mdi:lan-connect
 panel_title: PDC status

@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.4.0](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.3.0...alloy-v2.4.0) (2026-08-20)
+
+
+### Features
+
+* publish App health over MQTT and add ingress status pages ([999b229](https://github.com/BroTEK-Solutions/ha-addons/commit/999b229f7d8d1e323a3272c426ec22d0dcec2c49))
+
+
+### Bug Fixes
+
+* **alloy:** export GCLOUD_FM_COLLECTOR_ID for Fleet-delivered pipelines ([210f5f9](https://github.com/BroTEK-Solutions/ha-addons/commit/210f5f9d1ed62b3057a2e1add4be2ffee6ee99f5))
+* **deps:** update dependency grafana/alloy to v1.18.1 ([#48](https://github.com/BroTEK-Solutions/ha-addons/issues/48)) ([7976e25](https://github.com/BroTEK-Solutions/ha-addons/commit/7976e25869bb7a4e40911d28c4e6c4ffecc7bdf2))
+* **deps:** update ghcr.io/home-assistant/base-debian:bookworm docker digest to 60cd882 ([#68](https://github.com/BroTEK-Solutions/ha-addons/issues/68)) ([795a78f](https://github.com/BroTEK-Solutions/ha-addons/commit/795a78fb6a13c586721b0c0eeceb47d5d437f4b2))
+
 ## [2.3.0](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.2.0...alloy-v2.3.0) (2026-08-03)
 
 

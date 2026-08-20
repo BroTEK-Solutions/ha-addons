@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.0](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-sm-v1.1.0...grafana-sm-v1.2.0) (2026-08-20)
+
+
+### Features
+
+* publish App health over MQTT and add ingress status pages ([999b229](https://github.com/BroTEK-Solutions/ha-addons/commit/999b229f7d8d1e323a3272c426ec22d0dcec2c49))
+
+
+### Bug Fixes
+
+* **ci:** preserve generated config formatting in releases ([8336801](https://github.com/BroTEK-Solutions/ha-addons/commit/833680149f04767bfb1c781fbd90aaf29891c05f))
+* **deps:** update grafana/synthetic-monitoring-agent docker tag to v0.63.0 ([#52](https://github.com/BroTEK-Solutions/ha-addons/issues/52)) ([a339e34](https://github.com/BroTEK-Solutions/ha-addons/commit/a339e34c6ff1f4dd7b5ab46c28ef3679bc8639f6))
+
 ## [1.1.0](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-sm-v1.0.0...grafana-sm-v1.1.0) (2026-08-01)
 
 
