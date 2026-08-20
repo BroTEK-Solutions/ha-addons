@@ -8,6 +8,8 @@ ROOT = Path(__file__).resolve().parents[1]
 dockerfile = (ROOT / "Dockerfile").read_text()
 alloy_run = (ROOT / "rootfs/etc/s6-overlay/s6-rc.d/alloy/run").read_text()
 init_run = (ROOT / "rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run").read_text()
+go_builder_images = re.findall(r"^FROM (golang:\S+) AS \S+-builder$", dockerfile, re.MULTILINE)
+pinned_go_builder = re.compile(r"golang:\d+\.\d+(?:\.\d+)?-bookworm@sha256:[0-9a-f]{64}")
 
 # init-alloy writes this as remotecfg's `id`; alloy/run exports it as
 # GCLOUD_FM_COLLECTOR_ID for the pipelines remotecfg fetches. The two are read in
@@ -31,7 +33,9 @@ apparmor_rules = [line.strip() for line in apparmor.splitlines() if not line.lst
 checks = {
     "BUILD_FROM is declared before every build stage": dockerfile.index("ARG BUILD_FROM")
     < dockerfile.index("FROM golang:"),
-    "pinned Go builder": "FROM golang:1.26-bookworm@sha256:" in dockerfile,
+    "shared pinned Go builder": len(go_builder_images) == 2
+    and len(set(go_builder_images)) == 1
+    and pinned_go_builder.fullmatch(go_builder_images[0]) is not None,
     "UI is built from its module": "COPY ui/ ./" in dockerfile and "go build" in dockerfile,
     "UI binary is copied into runtime": "/usr/bin/alloy-ui" in dockerfile,
     "health checks the unprivileged ingress health endpoint": "127.0.0.1:8099/healthz" in dockerfile,
