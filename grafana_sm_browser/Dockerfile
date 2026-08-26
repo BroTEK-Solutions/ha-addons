@@ -28,7 +28,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /out/ha-reporter \
     .
 
-FROM grafana/synthetic-monitoring-agent:v0.63.0-browser@sha256:2678de4f78a317b6b7eecfec7c5e0a8800d1f95931653a51ec8577c57969bb36
+FROM grafana/synthetic-monitoring-agent:v0.64.2-browser@sha256:f541207a9b59345810541e82a9825458576d62afb64db4da82f5bb308f9b0e1d
 
 USER root
 COPY --from=launcher-builder --chown=0:0 --chmod=0500 \
