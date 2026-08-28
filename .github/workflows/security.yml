@@ -18,7 +18,7 @@ jobs:
   actionlint:
     permissions:
       contents: read
-    uses: rknightion/.github/.github/workflows/actionlint.yml@71aced73a92eed12a3483ebe8fb5e59877a119fb # v1.9.6
+    uses: rknightion/.github/.github/workflows/actionlint.yml@ff89dc29cee6fbe49128a19715ee3f60390be0dc # v1.9.7
 
   # Actions security audit: unpinned refs, over-broad permissions, credential
   # persistence. Guards against regressing the App build hardening.
@@ -27,7 +27,7 @@ jobs:
       contents: read
       security-events: write # Required to upload zizmor SARIF findings.
       actions: read # Required to read workflow metadata during the audit.
-    uses: rknightion/.github/.github/workflows/zizmor.yml@71aced73a92eed12a3483ebe8fb5e59877a119fb # v1.9.6
+    uses: rknightion/.github/.github/workflows/zizmor.yml@ff89dc29cee6fbe49128a19715ee3f60390be0dc # v1.9.7
 
   # hadolint + Trivy recursively cover both App Dockerfiles and their filesystems.
   # Fork PRs cannot be granted security-events: write, so their SARIF upload would
@@ -37,4 +37,4 @@ jobs:
     permissions:
       contents: read
       security-events: write # Required to upload Docker scan SARIF findings.
-    uses: rknightion/.github/.github/workflows/docker-security.yml@71aced73a92eed12a3483ebe8fb5e59877a119fb # v1.9.6
+    uses: rknightion/.github/.github/workflows/docker-security.yml@ff89dc29cee6fbe49128a19715ee3f60390be0dc # v1.9.7
