@@ -172,7 +172,11 @@ def main() -> None:
     for required in (
         "workflow_call:",
         release_action,
-        "token: ${{ secrets.RELEASE_PLEASE_TOKEN }}",
+        "token: ${{ steps.bao.outputs.token }}",
+        "rknightion/.github/.github/actions/broker-token@"
+        "79a72d215e806c12876526ff30fbd524250e1bf9 # v1.17.1",
+        "permission-set: release-please-ha-addons",
+        "id-token: write",
         "config-file: release-please-config.json",
         "manifest-file: .release-please-manifest.json",
         "contents: write",
@@ -371,12 +375,21 @@ def main() -> None:
         "publish: ${{ matrix.app.publish }}",
         "uses: ./.github/workflows/release.yaml",
         "issues: write",
-        "RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}",
+        "TS_WIF_CLIENT_ID: ${{ secrets.TS_WIF_CLIENT_ID }}",
+        "TS_WIF_AUDIENCE: ${{ secrets.TS_WIF_AUDIENCE }}",
     ):
         if required not in caller:
             fail(f"builder is missing immutable-release contract: {required}")
     if "secrets: inherit" in caller:
-        fail("the release workflow must receive only its named release token")
+        fail("the release workflow must receive only the identifiers it needs")
+    # The release credential is minted per run from the OpenBao broker on camden
+    # and scoped to this repository alone. RELEASE_PLEASE_TOKEN was revoked
+    # estate-wide and is unrecoverable, so a workflow reaching for it again does
+    # not fail loudly - release-please receives an empty token and the run dies
+    # somewhere less obvious. Pin its absence instead.
+    for workflow_text, label in ((caller, "builder"), (release_workflow, "release")):
+        if "RELEASE_PLEASE_TOKEN" in workflow_text:
+            fail(f"{label} workflow must mint a broker token, not read RELEASE_PLEASE_TOKEN")
     if 'EVENT_NAME: ${{ github.event_name }}' not in caller:
         fail("changed-App selection must receive the triggering event name")
     if '"$EVENT_NAME" == "workflow_dispatch"' not in caller:

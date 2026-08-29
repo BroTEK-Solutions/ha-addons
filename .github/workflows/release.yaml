@@ -4,7 +4,9 @@ name: Release Apps
 on:
   workflow_call:
     secrets:
-      RELEASE_PLEASE_TOKEN:
+      TS_WIF_CLIENT_ID:
+        required: true
+      TS_WIF_AUDIENCE:
         required: true
 
 permissions: {}
@@ -18,11 +20,30 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
+      id-token: write # Required for the OIDC token the broker exchanges; without it the mint step fails first.
     steps:
+      # No release credential is stored in this repository. The GitHub OIDC token
+      # is federated into an ephemeral tag:gha tailnet node, exchanged at OpenBao
+      # on camden for a short-lived token, and spent on a GitHub App installation
+      # token scoped to this repository alone. TS_WIF_CLIENT_ID and
+      # TS_WIF_AUDIENCE are identifiers, not credentials - neither grants anything
+      # without a GitHub-signed OIDC token whose claims match.
+      #
+      # This makes releases depend on camden being up, unsealed and on the
+      # tailnet. That is the accepted trade: a failure here is infrastructure,
+      # not a problem with the commit.
+      - name: Mint a scoped release token
+        id: bao
+        uses: rknightion/.github/.github/actions/broker-token@79a72d215e806c12876526ff30fbd524250e1bf9 # v1.17.1
+        with:
+          permission-set: release-please-ha-addons
+          tailscale-client-id: ${{ secrets.TS_WIF_CLIENT_ID }}
+          tailscale-audience: ${{ secrets.TS_WIF_AUDIENCE }}
+
       - name: Update release PR or publish releases
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          token: ${{ steps.bao.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           target-branch: main
