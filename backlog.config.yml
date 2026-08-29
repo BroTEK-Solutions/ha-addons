@@ -5,40 +5,10 @@ statuses: ["To Do", "In Progress", "Parked", "Done"]
 # .git/, so this file is linted by the repo's own gate. Each entry still resolves
 # to a single runnable command.
 definition_of_done:
-  - "yamllint --strict ."
+  - "just check"
   - >-
-    python3 tests/app_metadata_contract_test.py &&
-    python3 tests/app_version_changed_test.py &&
-    python3 tests/renovate_config_contract_test.py &&
-    python3 tests/repository_workflow_contract_test.py &&
-    python3 tests/synthetic_monitoring_variants_test.py
-  - >-
-    SHELL only: shellcheck
-    alloy/rootfs/usr/share/alloy/generate-config.sh
-    alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run
-    alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run
-    alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish
-    alloy/tests/generate-config.test.sh
-    alloy/tests/init-alloy.test.sh
-    grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run
-    grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run
-    grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish
-    grafana_pdc/tests/service.test.sh
-    grafana_pdc/tests/image-smoke.test.sh
-    grafana_pdc/tests/fixtures/bashio
-    grafana_pdc/tests/fixtures/fake-pdc
-  - >-
-    ALLOY only: python3 alloy/tests/config-schema.test.py &&
-    python3 alloy/tests/image-contract.test.py &&
-    bash alloy/tests/generate-config.test.sh &&
-    node alloy/tests/ui-static.test.mjs &&
-    (cd alloy/ui && go test ./...)
-  - >-
-    PDC only: python3 grafana_pdc/tests/config-schema.test.py &&
-    python3 grafana_pdc/tests/image-contract.test.py
-  - >-
-    SM only: python3 scripts/sync_synthetic_monitoring_variants.py &&
-    (cd synthetic_monitoring_shared/launcher && go test ./...)
+    Fast subset while iterating (not the gate):
+    just fmt-check && just lint && just gen-check && just test-repo
 labels: []
 date_format: yyyy-mm-dd
 max_column_width: 20

@@ -23,7 +23,7 @@ func TestProjectConfigInfersModesWithoutExposingSecrets(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-		got := projectConfig(test.options)
+			got := projectConfig(test.options)
 			if got.Mode != test.wantMode || got.LegacyHybrid != test.wantLegacy {
 				t.Fatalf("mode = %q legacy=%v, want %q legacy=%v", got.Mode, got.LegacyHybrid, test.wantMode, test.wantLegacy)
 			}

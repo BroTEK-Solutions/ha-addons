@@ -1,10 +1,10 @@
 ---
 id: HAB-0008
 title: Migrate the repo task surface to just and retire Makefiles and ad-hoc scripts
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-28 19:27'
-updated_date: '2026-08-29 10:42'
+updated_date: '2026-08-29 14:13'
 labels:
   - 'wave:2-fleet'
 dependencies: []
@@ -613,6 +613,25 @@ Do not touch, do not "improve while you are in there":
 - [ ] #5 PDC only: python3 grafana_pdc/tests/config-schema.test.py && python3 grafana_pdc/tests/image-contract.test.py
 - [ ] #6 SM only: python3 scripts/sync_synthetic_monitoring_variants.py && (cd synthetic_monitoring_shared/launcher && go test ./...)
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+1. Inventory the existing CI, task surface, hooks and working tree; preserve shared workflow calls and protected workflow contracts.
+2. Add the frozen justfile surface, keeping just check toolchain-only and adding documented Docker-required legs under just ci.
+3. Retarget builder.yaml and its contract test; update task-interface documentation and tracker definition of done.
+4. Run focused and full local gates, review the diff, then push through this repository's branch-and-PR policy and record final CI evidence.
+<!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Implemented the top-level justfile, retargeted the five builder jobs, added justfile workflow-contract coverage, updated the task interface and reformatted the existing Go drift.
+
+Validated: just --fmt --check, just --dump --dump-format json, just --list, just check (in an isolated environment matching CI Python packages), actionlint, and zizmor all pass. Local just ci reaches the Docker-backed PDC service leg but this host is denied access to the pinned base image; PR CI is the authoritative image-gate evidence.
+
+CodeRabbit completed with two minor findings: stdin redirection was added to every workflow just invocation and enforced by the contract test; the cloud bootstrap script remains outside just lint because this task explicitly keeps it unwrapped and deliberately unreferenced.
+<!-- SECTION:NOTES:END -->
 
 ## Comments
 
