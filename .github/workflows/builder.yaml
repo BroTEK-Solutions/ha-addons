@@ -80,6 +80,7 @@ jobs:
         with:
           go-version-file: shared/reporter/go.mod
           cache: true
+          cache-dependency-path: shared/reporter/go.mod
 
       - name: Check formatting
         run: just fmt-check </dev/null
@@ -119,6 +120,7 @@ jobs:
         with:
           go-version-file: grafana_pdc/ui/go.mod
           cache: true
+          cache-dependency-path: grafana_pdc/ui/go.mod
 
       - name: Run PDC toolchain tests
         run: just test-pdc </dev/null
@@ -167,6 +169,7 @@ jobs:
         with:
           go-version-file: alloy/ui/go.mod
           cache: true
+          cache-dependency-path: alloy/ui/go.mod
 
       - name: Run Alloy toolchain tests
         run: just test-alloy </dev/null
@@ -234,6 +237,7 @@ jobs:
         with:
           go-version-file: synthetic_monitoring_shared/launcher/go.mod
           cache: true
+          cache-dependency-path: synthetic_monitoring_shared/launcher/go.mod
 
       - name: Test the shared launcher
         run: just test-sm </dev/null

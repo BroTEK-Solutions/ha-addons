@@ -62,6 +62,9 @@ cache entry. Compiling the stdlib from cold costs 10-20s per module - measured a
 `grafana_pdc/ui`'s `go test` in CI against 0.65s warm - which is a quarter of that lane. Do not
 reason from "no external dependencies, so nothing to cache": that is true of the module cache and
 false of the build cache, and it is the mistake this note previously recorded.
+Every step also needs `cache-dependency-path` pointing at its own `go.mod`: `setup-go` globs for
+`go.mod` at the repository root, finds none because every module lives in a subdirectory, and then
+**warns and caches nothing** rather than failing. `cache: true` alone is inert here.
 
 **This repo is `BroTEK-Solutions` and takes no direct pushes to `main`.** Branch and PR, always —
 except for a tracker-only commit, which is covered by its own rule below and goes straight to `main`.
