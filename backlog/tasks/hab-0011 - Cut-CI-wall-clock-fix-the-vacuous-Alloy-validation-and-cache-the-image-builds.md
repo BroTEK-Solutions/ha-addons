@@ -1,10 +1,10 @@
 ---
 id: HAB-0011
 title: 'Cut CI wall clock: fix the vacuous Alloy validation and cache the image builds'
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-29 17:18'
-updated_date: '2026-08-29 18:19'
+updated_date: '2026-08-29 18:44'
 labels:
   - 'unit:alloy'
   - 'unit:repo'
@@ -168,4 +168,9 @@ assumed alloy was the sole target.
 All six acceptance criteria are checked. Status stays In Progress until PR #102 merges - the work is
 complete but unmerged. AC #4's branch-measurement clause was satisfied by a bounding argument rather
 than a branch run; see the earlier note.
+
+## Merged
+
+PR #102 squash-merged to main as e939901. Branch deleted. Final CI measurement on the updated branch
+was 136s, the third consecutive run at that figure (131s / 136s / 136s), against a 233-306s baseline.
 <!-- SECTION:NOTES:END -->
