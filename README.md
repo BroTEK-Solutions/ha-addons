@@ -30,8 +30,8 @@ tags and GitHub Releases:
 - Grafana Synthetic Monitoring: `grafana-sm-vX.Y.Z`
 - Grafana Synthetic Monitoring with browser checks: `grafana-sm-browser-vX.Y.Z`
 
-The two Synthetic Monitoring Apps are generated from `synthetic_monitoring_shared/`. Run
-`python3 scripts/sync_synthetic_monitoring_variants.py` after changing their shared launcher,
+The two Synthetic Monitoring Apps are generated from `synthetic_monitoring_shared/`. Run `just gen`
+after changing their shared launcher,
 configuration, user documentation, translations or branding. CI runs the same command in check
 mode and rejects drift. Dockerfiles remain variant-owned so Renovate can update Grafana's standard
 and `-browser` images independently; a contract test requires every other Dockerfile line to stay

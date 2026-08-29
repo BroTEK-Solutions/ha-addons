@@ -25,11 +25,15 @@ def main() -> None:
     release_workflow_path = ROOT / ".github/workflows/release.yaml"
     release_config_path = ROOT / "release-please-config.json"
     release_manifest_path = ROOT / ".release-please-manifest.json"
+    justfile_path = ROOT / "justfile"
     if not caller_path.exists():
         fail("the repository needs a changed-App builder workflow")
+    if not justfile_path.is_file():
+        fail("the repository needs a justfile task surface")
 
     caller = caller_path.read_text()
     reusable = reusable_path.read_text()
+    justfile = justfile_path.read_text()
     caller_config = yaml.safe_load(caller)
     jobs = caller_config["jobs"]
 
@@ -130,55 +134,96 @@ def main() -> None:
     def job_text(job_name: str) -> str:
         return json.dumps(jobs[job_name], sort_keys=True)
 
-    expected_commands = {
+    expected_recipes = {
         "quality": (
-            "python3 tests/app_metadata_contract_test.py",
-            "python3 tests/app_version_changed_test.py",
-            "python3 tests/renovate_config_contract_test.py",
-            "python3 tests/repository_workflow_contract_test.py",
-            "python3 tests/synthetic_monitoring_variants_test.py",
+            "just fmt-check",
+            "just lint",
+            "just gen-check",
+            "just test-repo",
         ),
         "pdc-test": (
-            "python3 grafana_pdc/tests/config-schema.test.py",
-            "python3 grafana_pdc/tests/image-contract.test.py",
-            "bash grafana_pdc/tests/service.test.sh",
-            "bash grafana_pdc/tests/image-smoke.test.sh",
+            "just test-pdc",
+            "just test-pdc-image",
         ),
         "alloy-generator-test": (
-            "python3 alloy/tests/config-schema.test.py",
-            "python3 alloy/tests/image-contract.test.py",
-            "bash alloy/tests/generate-config.test.sh",
-            "bash alloy/tests/image-smoke.test.sh",
-            "go test ./...",
+            "just test-alloy",
+            "just test-alloy-image",
         ),
-        "alloy-init-test": ("bash alloy/tests/init-alloy.test.sh",),
+        "alloy-init-test": ("just test-alloy-init",),
         "synthetic-monitoring-test": (
-            "go test ./...",
-            "docker build --tag local/ha-grafana-sm:smoke grafana_sm",
-            "docker build --tag local/ha-grafana-sm-browser:smoke grafana_sm_browser",
-            "python3 tests/synthetic_monitoring_image_smoke_test.py local/ha-grafana-sm:smoke standard",
-            "python3 tests/synthetic_monitoring_image_smoke_test.py local/ha-grafana-sm-browser:smoke browser",
+            "just test-sm",
+            "just test-sm-image",
         ),
     }
-    for job_name, commands in expected_commands.items():
+    for job_name, recipes in expected_recipes.items():
         lane = job_text(job_name)
-        for command in commands:
-            if command not in lane:
-                fail(f"{job_name} must run: {command}")
+        for recipe in recipes:
+            if recipe not in lane:
+                fail(f"{job_name} must run: {recipe}")
+        for step in jobs[job_name].get("steps", []):
+            run = step.get("run")
+            if isinstance(run, str) and run.startswith("just ") and not run.endswith(" </dev/null"):
+                fail(f"{job_name} must run just with stdin from /dev/null")
+
+    setup_just = (
+        "uses: extractions/setup-just@"
+        "53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4"
+    )
+    if caller.count(setup_just) != len(expected_recipes):
+        fail("each test lane must install the pinned just v4 action")
+    if caller.count("just-version: '1.58.0'") != len(expected_recipes):
+        fail("each test lane must pin just 1.58.0")
+
+    expected_justfile_commands = (
+        "yamllint --strict .",
+        "shellcheck -x --source-path=SCRIPTDIR",
+        "bash tests/shared_validate_lib_test.sh",
+        "(cd shared/reporter && go test ./...)",
+        "python3 tests/app_metadata_contract_test.py",
+        "python3 tests/app_contract_test.py",
+        "python3 tests/app_version_changed_test.py",
+        "python3 tests/renovate_config_contract_test.py",
+        "python3 tests/repository_workflow_contract_test.py",
+        "python3 tests/synthetic_monitoring_variants_test.py",
+        "python3 scripts/sync_shared_lib.py --check",
+        "python3 scripts/sync_synthetic_monitoring_variants.py --check",
+        "python3 grafana_pdc/tests/config-schema.test.py",
+        "python3 grafana_pdc/tests/image-contract.test.py",
+        "(cd grafana_pdc/ui && go test ./...)",
+        "bash grafana_pdc/tests/service.test.sh",
+        "docker build --tag local/ha-grafana-pdc:smoke grafana_pdc",
+        "bash grafana_pdc/tests/image-smoke.test.sh local/ha-grafana-pdc:smoke",
+        "python3 alloy/tests/config-schema.test.py",
+        "python3 alloy/tests/image-contract.test.py",
+        "(cd alloy/ui && go test ./...)",
+        "node alloy/tests/ui-static.test.mjs",
+        "bash alloy/tests/generate-config.test.sh",
+        "docker build --tag local/ha-alloy:smoke alloy",
+        "bash alloy/tests/image-smoke.test.sh local/ha-alloy:smoke",
+        "bash alloy/tests/init-alloy.test.sh",
+        "(cd synthetic_monitoring_shared/launcher && go test ./...)",
+        "docker build --tag local/ha-grafana-sm:smoke grafana_sm",
+        "docker build --tag local/ha-grafana-sm-browser:smoke grafana_sm_browser",
+        "python3 tests/synthetic_monitoring_image_smoke_test.py local/ha-grafana-sm:smoke standard",
+        "python3 tests/synthetic_monitoring_image_smoke_test.py local/ha-grafana-sm-browser:smoke browser",
+    )
+    for command in expected_justfile_commands:
+        if command not in justfile:
+            fail(f"justfile must run: {command}")
     for required in (
         "BASHIO_BIN=/usr/bin/bashio",
         "grafana_pdc/Dockerfile",
         r"ghcr.io\/home-assistant\/base:",
         '"$ha_base"',
     ):
-        if required not in caller:
+        if required not in justfile:
             fail("PDC service tests must derive the pinned HA base from the App Dockerfile")
     for required in (
         "alloy/Dockerfile",
         r"ARG BUILD_FROM=ghcr.io\/home-assistant\/base-debian:",
         '"$alloy_base"',
     ):
-        if required not in caller:
+        if required not in justfile:
             fail("Alloy initialization tests must derive the pinned HA base from the App Dockerfile")
     complete_test_gate = {"init", *test_lanes}
     if set(jobs["build-app"].get("needs", [])) != complete_test_gate:

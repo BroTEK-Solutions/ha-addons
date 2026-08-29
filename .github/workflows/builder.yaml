@@ -29,6 +29,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: '1.58.0'
+
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -37,8 +42,13 @@ jobs:
       - name: Install test dependencies
         run: python3 -m pip install --quiet pyyaml voluptuous yamllint
 
-      - name: YAMLLint
-        run: yamllint --strict .
+      # -x follows the `# shellcheck source=` directives into the shared
+      # validator library, and --source-path=SCRIPTDIR is what makes them
+      # resolve: without it those paths are read relative to the working
+      # directory rather than the sourcing script, every one misses, and
+      # SC1091 fails the step at info level.
+      - name: Lint repository
+        run: just lint </dev/null
 
       - name: Lint Alloy App metadata
         uses: frenck/action-addon-linter@b9cfd1bc62ba60d2c4fc96317b5f7ada5923f4a7 # v2.21.1
@@ -60,38 +70,8 @@ jobs:
         with:
           path: "./grafana_sm_browser"
 
-      - name: ShellCheck
-        # -x follows the `# shellcheck source=` directives into the shared
-        # validator library, and --source-path=SCRIPTDIR is what makes them
-        # resolve: without it those paths are read relative to the working
-        # directory rather than the sourcing script, every one misses, and
-        # SC1091 fails the step at info level.
-        run: |
-          shellcheck -x --source-path=SCRIPTDIR \
-            shared/lib/ha-validate.sh \
-            tests/shared_validate_lib_test.sh \
-            alloy/rootfs/usr/share/alloy/generate-config.sh \
-            alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run \
-            alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run \
-            alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish \
-            alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy-reporter/run \
-            alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy-reporter/finish \
-            alloy/tests/generate-config.test.sh \
-            alloy/tests/init-alloy.test.sh \
-            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run \
-            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run \
-            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish \
-            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-reporter/run \
-            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-reporter/finish \
-            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-ui/run \
-            grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-ui/finish \
-            grafana_pdc/tests/service.test.sh \
-            grafana_pdc/tests/image-smoke.test.sh \
-            grafana_pdc/tests/fixtures/bashio \
-            grafana_pdc/tests/fixtures/fake-pdc
-
-      - name: Shared validator library tests
-        run: bash tests/shared_validate_lib_test.sh
+      - name: Check generated copies
+        run: just gen-check </dev/null
 
       - name: Set up Go for the shared MQTT reporter
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -99,19 +79,11 @@ jobs:
           go-version-file: shared/reporter/go.mod
           cache: false
 
-      - name: Shared MQTT reporter tests
-        working-directory: shared/reporter
-        run: go test ./...
+      - name: Check formatting
+        run: just fmt-check </dev/null
 
-      - name: Repository contract tests
-        run: |
-          python3 tests/app_metadata_contract_test.py
-          python3 tests/app_contract_test.py
-          python3 tests/app_version_changed_test.py
-          python3 tests/renovate_config_contract_test.py
-          python3 tests/repository_workflow_contract_test.py
-          python3 tests/synthetic_monitoring_variants_test.py
-          python3 scripts/sync_shared_lib.py --check
+      - name: Run repository tests
+        run: just test-repo </dev/null
 
   pdc-test:
     name: Grafana PDC tests
@@ -125,6 +97,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: '1.58.0'
+
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -133,33 +110,17 @@ jobs:
       - name: Install test dependencies
         run: python3 -m pip install --quiet pyyaml voluptuous
 
-      - name: PDC schema and image contract tests
-        run: |
-          python3 grafana_pdc/tests/config-schema.test.py
-          python3 grafana_pdc/tests/image-contract.test.py
-
       - name: Set up Go for the PDC status page
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: grafana_pdc/ui/go.mod
           cache: false
 
-      - name: PDC status page tests
-        working-directory: grafana_pdc/ui
-        run: go test ./...
+      - name: Run PDC toolchain tests
+        run: just test-pdc </dev/null
 
-      - name: PDC service tests in the Home Assistant base
-        run: |
-          ha_base="$(awk '/^FROM ghcr.io\/home-assistant\/base:/ { print $2; exit }' grafana_pdc/Dockerfile)"
-          test -n "$ha_base"
-          docker run --rm -e BASHIO_BIN=/usr/bin/bashio -v "${PWD}:/w" -w /w \
-            "$ha_base" \
-            bash grafana_pdc/tests/service.test.sh
-
-      - name: PDC complete-image smoke test
-        run: |
-          docker build --tag local/ha-grafana-pdc:smoke grafana_pdc
-          bash grafana_pdc/tests/image-smoke.test.sh local/ha-grafana-pdc:smoke
+      - name: Run PDC Docker tests
+        run: just test-pdc-image </dev/null
 
   alloy-generator-test:
     name: Alloy schema and generator tests
@@ -172,6 +133,11 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Set up just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: '1.58.0'
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -187,25 +153,11 @@ jobs:
           go-version-file: alloy/ui/go.mod
           cache: false
 
-      - name: Alloy schema and image contract tests
-        run: |
-          python3 alloy/tests/config-schema.test.py
-          python3 alloy/tests/image-contract.test.py
+      - name: Run Alloy toolchain tests
+        run: just test-alloy </dev/null
 
-      - name: Alloy ingress UI tests
-        working-directory: alloy/ui
-        run: go test ./...
-
-      - name: Alloy browser state tests
-        run: node alloy/tests/ui-static.test.mjs
-
-      - name: Alloy generator tests
-        run: bash alloy/tests/generate-config.test.sh
-
-      - name: Alloy complete-image ingress smoke test
-        run: |
-          docker build --tag local/ha-alloy:smoke alloy
-          bash alloy/tests/image-smoke.test.sh local/ha-alloy:smoke
+      - name: Run Alloy Docker tests
+        run: just test-alloy-image </dev/null
 
   alloy-init-test:
     name: Alloy initialization tests
@@ -219,13 +171,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: '1.58.0'
+
       - name: Alloy initialization tests
-        run: |
-          alloy_base="$(awk -F= '/^ARG BUILD_FROM=ghcr.io\/home-assistant\/base-debian:/ { print $2; exit }' alloy/Dockerfile)"
-          test -n "$alloy_base"
-          docker run --rm -v "${PWD}:/w" -w /w \
-            "$alloy_base" \
-            bash alloy/tests/init-alloy.test.sh
+        run: just test-alloy-init </dev/null
 
   synthetic-monitoring-test:
     name: Synthetic Monitoring tests
@@ -239,6 +191,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Set up just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: '1.58.0'
+
       - name: Set up Go for the shared launcher
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
@@ -246,15 +203,10 @@ jobs:
           cache: false
 
       - name: Test the shared launcher
-        working-directory: synthetic_monitoring_shared/launcher
-        run: go test ./...
+        run: just test-sm </dev/null
 
       - name: Build and smoke-test both complete images
-        run: |
-          docker build --tag local/ha-grafana-sm:smoke grafana_sm
-          docker build --tag local/ha-grafana-sm-browser:smoke grafana_sm_browser
-          python3 tests/synthetic_monitoring_image_smoke_test.py local/ha-grafana-sm:smoke standard
-          python3 tests/synthetic_monitoring_image_smoke_test.py local/ha-grafana-sm-browser:smoke browser
+        run: just test-sm-image </dev/null
 
   init:
     name: Find changed Apps

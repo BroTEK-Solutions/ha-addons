@@ -7,49 +7,31 @@ description; this file is the contributor and agent contract.
 Claude Code and Codex both read this file. `CLAUDE.md` is a stub that imports it, so there is one
 canonical copy and the two cannot drift.
 
-## Commands
+## Task interface
 
-Everything below runs from the repository root and mirrors what `.github/workflows/builder.yaml`
-runs, so a local pass means CI passes.
+This repository's task surface is a `justfile`. Discover it instead of guessing:
 
-```bash
-# Repository gate — run for any change
-yamllint --strict .
-python3 tests/app_metadata_contract_test.py
-python3 tests/app_version_changed_test.py
-python3 tests/renovate_config_contract_test.py
-python3 tests/repository_workflow_contract_test.py
-python3 tests/synthetic_monitoring_variants_test.py
+    just --list                        # human-readable
+    just --dump --dump-format json     # machine-readable
+    just --show <recipe>               # what a recipe actually runs
 
-# Alloy
-python3 alloy/tests/config-schema.test.py
-python3 alloy/tests/image-contract.test.py
-bash alloy/tests/generate-config.test.sh
-node alloy/tests/ui-static.test.mjs
-(cd alloy/ui && go test ./...)
-
-# Grafana PDC
-python3 grafana_pdc/tests/config-schema.test.py
-python3 grafana_pdc/tests/image-contract.test.py
-
-# Synthetic Monitoring — regenerate both variants, then test the SHARED launcher.
-# `go test ./...` inside grafana_sm/launcher or grafana_sm_browser/launcher passes
-# vacuously: main_test.go is deliberately not copied into the variants.
-python3 scripts/sync_synthetic_monitoring_variants.py
-(cd synthetic_monitoring_shared/launcher && go test ./...)
-```
-
-ShellCheck covers a fixed file list — copy it from the `ShellCheck` step in
-`.github/workflows/builder.yaml` rather than globbing, because the s6 service scripts have no
-extension.
-
-Image smoke tests need a working Docker daemon and are the slowest gate; run them when the change
-touches a Dockerfile, rootfs or entrypoint.
+- `just check` is the toolchain-only pre-commit gate. It must pass before you commit.
+- `just ci` is the full local CI-equivalent gate and adds the Docker-backed test legs.
+- Prefer `just <recipe>` over an underlying tool. If you are typing `python3 tests/...`, use the
+  matching `just` recipe.
+- `just lint` owns the ShellCheck file list; the s6 service scripts have no extension so it cannot
+  be globbed.
+- Run `just` with stdin from `/dev/null`. Recipes marked `[confirm]` are destructive: stop and ask
+  before running one; never pass `--yes` or `JUST_YES=1`. This repository currently has none.
+- If a task needs a command that is not exposed, add a documented `[group(...)]` recipe rather than
+  invoking the underlying command directly.
+- `scripts/cloud-environment-setup.sh` stays the Codex and Claude Code cloud-provisioning command.
+  It is deliberately not a recipe because it uses sudo and installs tools globally.
 
 ## Rules that are easy to break by accident
 
 **`grafana_sm/` and `grafana_sm_browser/` are generated.** Edit `synthetic_monitoring_shared/` and
-run the sync script. Only `Dockerfile` and `CHANGELOG.md` are variant-owned. CI rejects drift.
+run `just gen`. Only `Dockerfile` and `CHANGELOG.md` are variant-owned. CI rejects drift.
 
 **Never hand-edit an App version.** `config.yaml` `version:` and `.release-please-manifest.json`
 belong to release-please, and the SM generator reads the version out of the manifest, so a hand edit
