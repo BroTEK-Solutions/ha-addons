@@ -292,7 +292,7 @@ def main() -> None:
     for required in (
         'if [ -n "${ACTIONS_RUNTIME_TOKEN:-}" ] && [ -n "${ACTIONS_RESULTS_URL:-}" ]; then',
         "--cache-from 'type=gha,scope={{ app }}'",
-        "--cache-to 'type=gha,mode=max,ignore-error=true,scope={{ app }}'",
+        "--cache-to 'type=gha,mode=min,ignore-error=true,scope={{ app }}'",
         "docker buildx build --load",
         "docker build --tag '{{ tag }}' '{{ app }}'",
     ):
