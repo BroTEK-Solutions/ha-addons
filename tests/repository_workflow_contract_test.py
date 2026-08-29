@@ -57,13 +57,20 @@ def check_python_invocation(justfile: str) -> None:
             fail(f"{relative} imports {sorted(imports)} without a PEP 723 header")
         if declared and not imports:
             fail(f"{relative} declares dependencies it does not import")
-        for module in imports:
-            wanted = "pyyaml" if module == "yaml" else module
-            if f'"{wanted}"' not in source.split("# ///")[1]:
-                fail(f"{relative} imports {module} without declaring {wanted}")
+        if declared:
+            # Only the text between the markers, so a dependency name that also
+            # appears in the body cannot stand in for a missing declaration.
+            header = source.split("# /// script", 1)[1].split("# ///", 1)[0]
+            for module in imports:
+                wanted = "pyyaml" if module == "yaml" else module
+                if f'"{wanted}"' not in header:
+                    fail(f"{relative} imports {module} without declaring {wanted}")
+            lock = script.with_name(script.name + ".lock")
+            if not lock.is_file():
+                fail(f"{relative} declares dependencies without a committed lockfile")
         if relative not in justfile:
             continue
-        wanted, unwanted = ("uv run", "python3") if imports else ("python3", "uv run")
+        wanted, unwanted = ("uv run --locked", "python3") if imports else ("python3", "uv run")
         if f"{wanted} {relative}" not in justfile:
             fail(f"the justfile must invoke {relative} with `{wanted}`")
         if f"{unwanted} {relative}" in justfile:
@@ -232,27 +239,31 @@ def main() -> None:
         fail("each test lane must install the pinned just v4 action")
     if caller.count("just-version: '1.58.0'") != len(expected_recipes):
         fail("each test lane must pin just 1.58.0")
+    setup_uv = "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d"
+    if caller.count(setup_uv) != caller.count("version: '0.12.7'"):
+        fail("every setup-uv step must pin an explicit uv version, or CI floats to latest")
 
     expected_justfile_commands = (
-        "uvx yamllint --strict .",
+        "uvx yamllint@{{ yamllint_version }} --strict .",
+        'yamllint_version := "1.38.0"',
         "shellcheck -x --source-path=SCRIPTDIR",
         "bash tests/shared_validate_lib_test.sh",
         "(cd shared/reporter && go test ./...)",
-        "uv run tests/app_metadata_contract_test.py",
-        "uv run tests/app_contract_test.py",
+        "uv run --locked tests/app_metadata_contract_test.py",
+        "uv run --locked tests/app_contract_test.py",
         "python3 tests/app_version_changed_test.py",
         "python3 tests/renovate_config_contract_test.py",
-        "uv run tests/repository_workflow_contract_test.py",
-        "uv run tests/synthetic_monitoring_variants_test.py",
+        "uv run --locked tests/repository_workflow_contract_test.py",
+        "uv run --locked tests/synthetic_monitoring_variants_test.py",
         "python3 scripts/sync_shared_lib.py --check",
         "python3 scripts/sync_synthetic_monitoring_variants.py --check",
-        "uv run grafana_pdc/tests/config-schema.test.py",
+        "uv run --locked grafana_pdc/tests/config-schema.test.py",
         "python3 grafana_pdc/tests/image-contract.test.py",
         "(cd grafana_pdc/ui && go test ./...)",
         "bash grafana_pdc/tests/service.test.sh",
         "docker build --tag local/ha-grafana-pdc:smoke grafana_pdc",
         "bash grafana_pdc/tests/image-smoke.test.sh local/ha-grafana-pdc:smoke",
-        "uv run alloy/tests/config-schema.test.py",
+        "uv run --locked alloy/tests/config-schema.test.py",
         "python3 alloy/tests/image-contract.test.py",
         "(cd alloy/ui && go test ./...)",
         "node alloy/tests/ui-static.test.mjs",
