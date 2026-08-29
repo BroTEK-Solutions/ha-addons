@@ -76,6 +76,10 @@ run_init() {
     mkdir -p "${slot}"
     printf 'init' >"${slot}/kind"
     printf '%s' "$1" >"${slot}/in.settings"
+    # $2 is an optional SAFE_MODE_OVERRIDE. Safe mode has to keep working when
+    # the settings file itself is what broke, so it needs to be reachable here
+    # without a Supervisor options cache.
+    printf '%s' "${2:-}" >"${slot}/in.safemode"
     # Placeholders: the recording pass evaluates the checks too, and its verdicts
     # are discarded. They only have to be well-formed enough not to abort it.
     RUN_RC=0
@@ -103,8 +107,11 @@ run_init_worker() {
   printf '%s' '{"safe_mode":false,"ui_log_level":"info"}' >"${tmp}/cache/addons.self.options.config.cache"
   printf '%s' '{"slug":"a141124a_alloy"}' >"${tmp}/cache/addons.self.info.cache"
   cp "${slot}/in.settings" "${tmp}/data/settings.json"
+  local safe_mode
+  safe_mode="$(cat "${slot}/in.safemode" 2>/dev/null || true)"
 
   out="$(
+    SAFE_MODE_OVERRIDE="${safe_mode}" \
     CACHE_DIR="${tmp}/cache" \
     CONFIG_DIR="${tmp}/etc" \
     DATA_DIR="${tmp}/data" \
@@ -292,6 +299,117 @@ else
 fi
 
 echo
+echo "== a broken settings file fails loudly, and safe mode still recovers =="
+# Reading every option in one batched pass means a single unparseable file now
+# affects every option at once. Two properties keep that from being a footgun:
+# it must fail loudly rather than silently defaulting, and safe mode - the one
+# lever a user has when the settings store is what broke - must not depend on
+# the file being readable at all.
+run_init '{"instance_name": '
+TESTS=$((TESTS + 1))
+if [ "${RUN_RC}" -eq 0 ]; then
+  fail "a truncated settings file must not start with silent defaults"
+  indent "${RUN_OUT}"
+elif grep -qF 'Could not parse' <<<"${RUN_OUT}"; then
+  pass "a truncated settings file fails with a diagnostic naming the file"
+else
+  fail "a truncated settings file must say what went wrong, got: ${RUN_OUT}"
+fi
+
+# A zero-byte file gets past the type precheck - jq exits 0 on empty input - so
+# this is what actually exercises the entry-count guard. Before the batch it was
+# worse than a hard failure: every option read back as an empty string rather
+# than its default.
+run_init ''
+TESTS=$((TESTS + 1))
+if [ "${RUN_RC}" -eq 0 ]; then
+  fail "an empty settings file must not start with every option blank"
+  indent "${RUN_OUT}"
+elif grep -qF 'were read' <<<"${RUN_OUT}"; then
+  pass "an empty settings file trips the entry-count guard"
+else
+  fail "an empty settings file must trip the entry-count guard, got: ${RUN_OUT}"
+fi
+
+run_init '{"instance_name": ' true
+TESTS=$((TESTS + 1))
+if [ "${RUN_RC}" -eq 0 ] && grep -qF 'logging' <<<"${RUN_CONFIG}"; then
+  pass "safe mode recovers from a settings file that cannot be parsed"
+else
+  fail "safe mode must not depend on the settings file being readable (rc=${RUN_RC})"
+  indent "${RUN_OUT}"
+fi
+
+run_init '{"a": 1}' true
+TESTS=$((TESTS + 1))
+if [ "${RUN_RC}" -eq 0 ] && grep -qF 'logging' <<<"${RUN_CONFIG}"; then
+  pass "safe mode ignores persisted settings"
+else
+  fail "safe mode must ignore persisted settings (rc=${RUN_RC})"
+fi
+
+echo "== hostile settings values cannot silently discard other options =="
+# The batch is NUL-separated, and a JSON string may legally contain NUL. An odd
+# number of them once shifted every later field by one while leaving the entry
+# count intact, so the desync guard agreed and every destination was lost with
+# exit 0. An unknown key reaches the file through the ingress save path, which
+# copies submitted keys verbatim.
+expect_ok "a NUL inside an unrelated key does not discard later settings" \
+  '{"aaa":"x\u0000y","instance_name":"myhome","prometheus_url":"http://prom:9090/api/v1/write"}' \
+  'replacement  = "myhome"' \
+  'prometheus.remote_write "metrics"'
+# An empty key is a bad array subscript in bash, which under set -e kills the
+# script before any diagnostic can be printed.
+expect_ok "an empty key does not abort the run" \
+  '{"":"zzz","instance_name":"kept","prometheus_url":"http://prom:9090/api/v1/write"}' \
+  'replacement  = "kept"'
+
+echo "== absent, null and empty options all fall back to their default =="
+# These three are the same case to config_or and must stay that way. Reading the
+# options in one batched jq pass rather than two jq calls per option is where
+# this can silently drift: a key dropped from the batch reads as its default,
+# which is how an optional loki_url once became mandatory.
+expect_ok "an explicitly null option falls back to its default" \
+  '{"prometheus_url":"http://prom:9090/api/v1/write","instance_name":null}' \
+  'replacement  = "homeassistant"'
+expect_ok "an explicitly null optional destination stays optional" \
+  '{"loki_url":null,"prometheus_url":"http://prom:9090/api/v1/write"}' \
+  'prometheus.remote_write "metrics"'
+# Asserted on the startup banner, not on the generated config: generate-config.sh
+# independently re-applies ${VAR:-default} for every one of these options, so an
+# empty value and an absent value render identically in the config and a config
+# assertion here cannot fail. The banner prints what config_or actually returned.
+run_init '{"prometheus_url":"http://prom:9090/api/v1/write","host_metrics":""}'
+TESTS=$((TESTS + 1))
+if grep -qF 'Metric sources: host=true' <<<"${RUN_OUT}"; then
+  pass "an empty option falls back to its default"
+else
+  fail "an empty option must fall back to its default, not stay empty"
+  indent "${RUN_OUT}"
+fi
+# A false boolean is a real value, not an absent one: it must beat a true
+# default rather than falling through to it.
+expect_ok "a false boolean overrides a defaulted-true option" \
+  '{"prometheus_url":"http://prom:9090/api/v1/write","host_metrics":false}' \
+  'prometheus.remote_write "metrics"'
+run_init '{"prometheus_url":"http://prom:9090/api/v1/write","host_metrics":false}'
+TESTS=$((TESTS + 1))
+if grep -qF 'prometheus.exporter.unix' <<<"${RUN_CONFIG}"; then
+  fail "host_metrics=false must switch the host exporter off"
+else
+  pass "host_metrics=false must switch the host exporter off"
+fi
+# Free text survives the batch intact. The dump is NUL-separated precisely
+# because these two options can contain newlines.
+run_init '{"prometheus_url":"http://prom:9090/api/v1/write","additional_config":"// first\n// second\n"}'
+TESTS=$((TESTS + 1))
+if grep -qF '// first' <<<"${RUN_CONFIG}" && grep -qF '// second' <<<"${RUN_CONFIG}"; then
+  pass "a multi-line additional_config round-trips through the settings batch"
+else
+  fail "a multi-line additional_config round-trips through the settings batch"
+  indent "${RUN_CONFIG}"
+fi
+
 echo "== defaults are applied when an option is absent =="
 expect_ok "instance_name default" "{${PROM}}" 'replacement  = "homeassistant"'
 expect_ok "poll frequency default" "{${FLEET}}" 'poll_frequency = "1m"'
