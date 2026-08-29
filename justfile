@@ -7,6 +7,17 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 # reports every finding twice and is reverted by the next `just gen`.
 go_source_modules := "alloy/ui grafana_pdc/ui shared/reporter synthetic_monitoring_shared/launcher synthetic_monitoring_shared/ui"
 
+# Python is invoked two ways, and which one a script gets is decided by the
+# script, not by taste. A script that imports anything outside the standard
+# library declares it in a PEP 723 `# /// script` header and is run with
+# `uv run`, so it carries its own environment and nothing has to be installed
+# ahead of it. A pure-stdlib script stays on bare `python3` because it needs no
+# environment at all. Adding a third-party import to a `python3` script means
+# adding the header and moving it to `uv run` in the same change - otherwise it
+# silently depends on whatever the machine happens to have, which is the failure
+# this split exists to prevent. `uvx` covers Python CLI tools: yamllint is the
+# only one, and it is deliberately not installed on the host.
+
 # Show the task surface.
 default:
     @just --list
@@ -19,10 +30,9 @@ setup:
         (cd "$module" && go mod download)
     done
     missing=()
-    for tool in python3 node go gofmt yamllint shellcheck; do
+    for tool in python3 node go gofmt uv shellcheck; do
         command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
     done
-    python3 -c 'import voluptuous, yaml' >/dev/null 2>&1 || missing+=("python3 modules pyyaml+voluptuous")
     if ((${#missing[@]})); then
         printf 'setup: missing from this machine: %s\n' "${missing[*]}" >&2
         printf 'setup: cloud agents run `bash scripts/cloud-environment-setup.sh` instead\n' >&2
@@ -47,7 +57,7 @@ fmt-check:
 [group('check')]
 [no-exit-message]
 lint:
-    yamllint --strict .
+    uvx yamllint --strict .
     shellcheck -x --source-path=SCRIPTDIR \
         shared/lib/ha-validate.sh \
         tests/shared_validate_lib_test.sh \
@@ -94,18 +104,18 @@ test: test-repo test-pdc test-alloy test-sm
 test-repo:
     bash tests/shared_validate_lib_test.sh
     (cd shared/reporter && go test ./...)
-    python3 tests/app_metadata_contract_test.py
-    python3 tests/app_contract_test.py
+    uv run tests/app_metadata_contract_test.py
+    uv run tests/app_contract_test.py
     python3 tests/app_version_changed_test.py
     python3 tests/renovate_config_contract_test.py
-    python3 tests/repository_workflow_contract_test.py
-    python3 tests/synthetic_monitoring_variants_test.py
+    uv run tests/repository_workflow_contract_test.py
+    uv run tests/synthetic_monitoring_variants_test.py
 
 # Run Grafana PDC's schema, image-contract, and status-page tests.
 [group('check')]
 [no-exit-message]
 test-pdc:
-    python3 grafana_pdc/tests/config-schema.test.py
+    uv run grafana_pdc/tests/config-schema.test.py
     python3 grafana_pdc/tests/image-contract.test.py
     (cd grafana_pdc/ui && go test ./...)
 
@@ -124,7 +134,7 @@ test-pdc-image:
 [group('check')]
 [no-exit-message]
 test-alloy:
-    python3 alloy/tests/config-schema.test.py
+    uv run alloy/tests/config-schema.test.py
     python3 alloy/tests/image-contract.test.py
     (cd alloy/ui && go test ./...)
     node alloy/tests/ui-static.test.mjs
