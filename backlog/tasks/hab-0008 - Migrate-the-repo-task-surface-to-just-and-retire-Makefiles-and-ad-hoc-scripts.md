@@ -1,10 +1,10 @@
 ---
 id: HAB-0008
 title: Migrate the repo task surface to just and retire Makefiles and ad-hoc scripts
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-28 19:27'
-updated_date: '2026-08-29 14:13'
+updated_date: '2026-08-29 14:36'
 labels:
   - 'wave:2-fleet'
 dependencies: []
@@ -592,26 +592,26 @@ Do not touch, do not "improve while you are in there":
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A top-level justfile defines all seven mandatory recipes (default, setup, fmt, fmt-check, lint, test, check) plus gen, gen-check, build, image and clean, and just --dump --dump-format json exits 0
-- [ ] #2 just --list shows a # doc comment and a [group(...)] drawn from check/build/dev/gen for every public recipe, with only default and setup ungrouped
-- [ ] #3 just --fmt --check exits 0, with [group(...)] written above [no-exit-message] on every recipe that stacks both
-- [ ] #4 just check passes locally with a running Docker daemon and its --dry-run expansion is exactly the command set the five builder.yaml lanes run today: fmt-check, lint, gen-check, test-repo, test-pdc, test-alloy, test-alloy-init, test-sm
-- [ ] #5 gofmt -l over alloy/ui, grafana_pdc/ui, shared/reporter, synthetic_monitoring_shared/launcher and synthetic_monitoring_shared/ui reports nothing (alloy/ui/config_test.go reformatted), and no generated module under alloy/reporter, grafana_pdc/reporter, grafana_sm or grafana_sm_browser is formatted or linted
-- [ ] #6 There is no Makefile or GNUmakefile in the repository and none was introduced; no script file is deleted by this task
-- [ ] #7 Each of the five builder.yaml test jobs carries uses: extractions/setup-just@<40-hex SHA> # v4 with just-version: '1.58.0' and runs only just lint / just test-* lines, while ci-success's name and needs list, the release job's needs and if, every permissions, concurrency and persist-credentials setting, and every other SHA-pinned uses: are unchanged
-- [ ] #8 tests/repository_workflow_contract_test.py asserts the just recipe names in builder.yaml AND asserts the moved literals (the four docker build --tag local/ha-* lines, both synthetic_monitoring_image_smoke_test.py invocations, and both awk base-image expressions) against the justfile, and just test-repo passes
-- [ ] #9 Every KEEP script is reachable through a recipe - shared/lib/ha-validate.sh, the s6 run/finish scripts, alloy/rootfs/usr/share/alloy/generate-config.sh and the pdc fixtures via just lint; the six shell test suites via just test-repo/test-pdc/test-alloy/test-alloy-init; both sync scripts via just gen and just gen-check - while scripts/cloud-environment-setup.sh deliberately has no recipe and stays documented in README.md
-- [ ] #10 AGENTS.md's Commands block is replaced by the Task interface section with no per-recipe list pasted in, README.md tells the reader to run just gen instead of the sync script, and backlog.config.yml's definition_of_done names just check while yamllint --strict . still passes
+- [x] #1 A top-level justfile defines all seven mandatory recipes (default, setup, fmt, fmt-check, lint, test, check) plus gen, gen-check, build, image and clean, and just --dump --dump-format json exits 0
+- [x] #2 just --list shows a # doc comment and a [group(...)] drawn from check/build/dev/gen for every public recipe, with only default and setup ungrouped
+- [x] #3 just --fmt --check exits 0, with [group(...)] written above [no-exit-message] on every recipe that stacks both
+- [x] #4 just check passes locally with the language toolchain; just ci is check plus the Docker-daemon-required test-pdc-image, test-alloy-image, test-alloy-init, and test-sm-image legs. Their --dry-run expansions together match the five builder.yaml lanes, and those lanes pass in GitHub Actions.
+- [x] #5 gofmt -l over alloy/ui, grafana_pdc/ui, shared/reporter, synthetic_monitoring_shared/launcher and synthetic_monitoring_shared/ui reports nothing (alloy/ui/config_test.go reformatted), and no generated module under alloy/reporter, grafana_pdc/reporter, grafana_sm or grafana_sm_browser is formatted or linted
+- [x] #6 There is no Makefile or GNUmakefile in the repository and none was introduced; no script file is deleted by this task
+- [x] #7 Each of the five builder.yaml test jobs carries uses: extractions/setup-just@<40-hex SHA> # v4 with just-version: '1.58.0' and runs only just lint / just test-* lines, while ci-success's name and needs list, the release job's needs and if, every permissions, concurrency and persist-credentials setting, and every other SHA-pinned uses: are unchanged
+- [x] #8 tests/repository_workflow_contract_test.py asserts the just recipe names in builder.yaml AND asserts the moved literals (the four docker build --tag local/ha-* lines, both synthetic_monitoring_image_smoke_test.py invocations, and both awk base-image expressions) against the justfile, and just test-repo passes
+- [x] #9 Every KEEP script is reachable through a recipe - shared/lib/ha-validate.sh, the s6 run/finish scripts, alloy/rootfs/usr/share/alloy/generate-config.sh and the pdc fixtures via just lint; the six shell test suites via just test-repo/test-pdc/test-alloy/test-alloy-init; both sync scripts via just gen and just gen-check - while scripts/cloud-environment-setup.sh deliberately has no recipe and stays documented in README.md
+- [x] #10 AGENTS.md's Commands block is replaced by the Task interface section with no per-recipe list pasted in, README.md tells the reader to run just gen instead of the sync script, and backlog.config.yml's definition_of_done names just check while yamllint --strict . still passes
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 yamllint --strict .
-- [ ] #2 python3 tests/app_metadata_contract_test.py && python3 tests/app_version_changed_test.py && python3 tests/renovate_config_contract_test.py && python3 tests/repository_workflow_contract_test.py && python3 tests/synthetic_monitoring_variants_test.py
-- [ ] #3 SHELL only: shellcheck alloy/rootfs/usr/share/alloy/generate-config.sh alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish alloy/tests/generate-config.test.sh alloy/tests/init-alloy.test.sh grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish grafana_pdc/tests/service.test.sh grafana_pdc/tests/image-smoke.test.sh grafana_pdc/tests/fixtures/bashio grafana_pdc/tests/fixtures/fake-pdc
-- [ ] #4 ALLOY only: python3 alloy/tests/config-schema.test.py && python3 alloy/tests/image-contract.test.py && bash alloy/tests/generate-config.test.sh && node alloy/tests/ui-static.test.mjs && (cd alloy/ui && go test ./...)
-- [ ] #5 PDC only: python3 grafana_pdc/tests/config-schema.test.py && python3 grafana_pdc/tests/image-contract.test.py
-- [ ] #6 SM only: python3 scripts/sync_synthetic_monitoring_variants.py && (cd synthetic_monitoring_shared/launcher && go test ./...)
+- [x] #1 yamllint --strict .
+- [x] #2 python3 tests/app_metadata_contract_test.py && python3 tests/app_version_changed_test.py && python3 tests/renovate_config_contract_test.py && python3 tests/repository_workflow_contract_test.py && python3 tests/synthetic_monitoring_variants_test.py
+- [x] #3 SHELL only: shellcheck alloy/rootfs/usr/share/alloy/generate-config.sh alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish alloy/tests/generate-config.test.sh alloy/tests/init-alloy.test.sh grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish grafana_pdc/tests/service.test.sh grafana_pdc/tests/image-smoke.test.sh grafana_pdc/tests/fixtures/bashio grafana_pdc/tests/fixtures/fake-pdc
+- [x] #4 ALLOY only: python3 alloy/tests/config-schema.test.py && python3 alloy/tests/image-contract.test.py && bash alloy/tests/generate-config.test.sh && node alloy/tests/ui-static.test.mjs && (cd alloy/ui && go test ./...)
+- [x] #5 PDC only: python3 grafana_pdc/tests/config-schema.test.py && python3 grafana_pdc/tests/image-contract.test.py
+- [x] #6 SM only: python3 scripts/sync_synthetic_monitoring_variants.py && (cd synthetic_monitoring_shared/launcher && go test ./...)
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -631,6 +631,8 @@ Implemented the top-level justfile, retargeted the five builder jobs, added just
 Validated: just --fmt --check, just --dump --dump-format json, just --list, just check (in an isolated environment matching CI Python packages), actionlint, and zizmor all pass. Local just ci reaches the Docker-backed PDC service leg but this host is denied access to the pinned base image; PR CI is the authoritative image-gate evidence.
 
 CodeRabbit completed with two minor findings: stdin redirection was added to every workflow just invocation and enforced by the contract test; the cloud bootstrap script remains outside just lint because this task explicitly keeps it unwrapped and deliberately unreferenced.
+
+Final verification: implementation PR #96 squash-merged as 347ffdaf53bc1844d5ee611bce4b66188d72c289. Build Apps run 33257700020 completed successfully at that exact main SHA, including all five test lanes, all image builds, and ci-success. Fresh isolated just --dry-run check and just --dry-run ci confirmed the toolchain-only and Docker-required recipe split.
 <!-- SECTION:NOTES:END -->
 
 ## Comments
@@ -676,3 +678,9 @@ Eleven of the 42 lanes arrived at this shape independently before it was ratifie
 **If this repo has no such legs, it has no `ci` recipe at all** and `check` is the whole gate. Do not add an empty one.
 ---
 <!-- COMMENTS:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Migrated the repository task surface to just and finalized the ratified check/ci split. Verified by Build Apps run 33257700020 succeeding at implementation merge SHA 347ffdaf53bc1844d5ee611bce4b66188d72c289, plus local just structural checks and isolated check/ci dry-run evidence.
+<!-- SECTION:FINAL_SUMMARY:END -->
