@@ -32,6 +32,8 @@ assert.match(html, /id="wizard-mode-next"/, "mode selection must have an explici
 assert.match(css, /\[hidden\] \{ display:none !important; \}/, "wizard-hidden steps must override component display rules");
 assert.match(css, /\.mode-cards input \{[^}]*pointer-events:none;/, "hidden mode radios must not overlap and intercept the other card");
 assert.match(appSource, /function showWizardStep\(step\)/, "wizard navigation must activate one step at a time");
+assert.match(appSource, /for \(let node = section; node; node = node\.parentElement\)/, "a nested section must inherit its container's inactive state");
+assert.match(html, /<div data-mode="fleet"[\s\S]*?name="fleet_url"[^>]*required/, "the required Fleet URL must sit inside the Fleet mode container");
 assert.match(appSource, /function reportSavedFormValidity\(\)/, "starter controls must be excluded from saved-form validation");
 assert.match(appSource, /let safeMode = false;/, "Fleet starter visibility must track Safe mode");
 assert.match(appSource, /configApplied && !safeMode && alloyReady && alloyHealthy/, "Fleet starter must stay hidden during Safe mode");
@@ -62,7 +64,8 @@ const form = {
   },
   querySelectorAll(selector) {
     if (selector === "[name]:not([disabled]):not([data-secret])") {
-      return [logLevelField, additionalArgsField, additionalConfigField].filter((field) => !field.disabled);
+      return [logLevelField, additionalArgsField, additionalConfigField, fleetUrlField, fleetUsernameField]
+        .filter((field) => !field.disabled);
     }
     return [];
   },
@@ -101,6 +104,24 @@ const advancedSection = {
 };
 const logLevelWrapper = { dataset: { mode: "local fleet" }, hidden: true, querySelectorAll() { return [logLevelField]; } };
 const additionalConfigWrapper = { dataset: { mode: "local" }, hidden: true, querySelectorAll() { return [additionalConfigField]; } };
+// The Fleet container and the card nested inside it, exactly as the page nests
+// them: the container carries the mode, the card carries only the wizard step.
+// Reading the card on its own re-enables required Fleet fields while Local
+// configuration is selected, which is what silently broke every Save.
+const fleetUrlField = { name: "fleet_url", value: "", disabled: false, required: true, dataset: {} };
+const fleetUsernameField = { name: "fleet_username", value: "", disabled: false, required: true, dataset: {} };
+const fleetContainer = {
+  dataset: { mode: "fleet" },
+  hidden: true,
+  parentElement: null,
+  querySelectorAll() { return [fleetUrlField, fleetUsernameField]; },
+};
+const fleetCard = {
+  dataset: { wizardStep: "config" },
+  hidden: true,
+  parentElement: fleetContainer,
+  querySelectorAll() { return [fleetUrlField, fleetUsernameField]; },
+};
 const requests = [];
 let saveAndRestart;
 const saveRestartButton = { addEventListener(_event, listener) { saveAndRestart = listener; } };
@@ -151,8 +172,20 @@ globalThis.document = {
   },
   querySelectorAll(selector) {
     if (selector === "[data-secret]") return [secretField];
-    if (selector === "[data-mode]") return [manualSection, advancedSection, logLevelWrapper, additionalConfigWrapper];
-    if (selector === "[data-wizard-step]") return [modeStep, configHeading, manualSection, advancedSection];
+    // Document order, as the real querySelectorAll returns it: a container
+    // always precedes the section nested inside it.
+    if (selector === "[data-mode],[data-wizard-step]") {
+      return [
+        modeStep,
+        configHeading,
+        fleetContainer,
+        fleetCard,
+        advancedSection,
+        logLevelWrapper,
+        additionalConfigWrapper,
+        manualSection,
+      ];
+    }
     return [];
   },
   createElement() { return downloadLink; },
@@ -351,6 +384,39 @@ assert.equal(manualToggle.checked, false, "choosing a mode must leave the manual
 assert.equal(logLevelField.disabled, false, "returning to Local must restore the generated log level");
 assert.equal(additionalConfigField.disabled, false, "returning to Local must restore appended River blocks");
 
+// The Fleet card is nested inside the Fleet mode container and carries only a
+// wizard step of its own. Reading each section in isolation let it re-enable
+// fleet_url and fleet_username after the container had disabled them, leaving
+// two required controls enabled inside a hidden container: native constraint
+// validation then failed on fields it could not focus, so Save and Save &
+// restart aborted with no request and no message.
+assert.equal(fleetUrlField.disabled, true, "Local configuration must disable the nested Fleet card's required URL");
+assert.equal(fleetUsernameField.disabled, true, "Local configuration must disable the nested Fleet card's required username");
+assert.equal(fleetCard.hidden, true, "a card inside a hidden mode container must stay hidden");
+
+// The same leak also submitted the inactive mode's fields, so a Local save wrote
+// whatever the hidden Fleet inputs held over the stored Fleet configuration.
+const configSaves = () => requests.filter(({ url, method }) => url === "api/config" && method === "POST");
+// Earlier saves are still in `requests`, so count them first and pin that this
+// submit issued its own POST rather than reading the previous one back.
+const savesBeforeLocal = configSaves().length;
+formListeners.submit({ preventDefault() {} });
+await new Promise((resolve) => setTimeout(resolve, 0));
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(configSaves().length, savesBeforeLocal + 1, "the Local save must reach the server");
+const localOptions = JSON.parse(configSaves().pop().body).options;
+assert.ok(!("fleet_url" in localOptions), "a Local save must not submit the inactive Fleet URL");
+assert.ok(!("fleet_username" in localOptions), "a Local save must not submit the inactive Fleet username");
+
+// Inheriting the container's state must not strand Fleet mode itself.
+modeSelect.value = "fleet";
+modeSelect.checked = true;
+modeListeners.change();
+assert.equal(fleetCard.hidden, false, "choosing Fleet must reveal its configuration card");
+assert.equal(fleetUrlField.disabled, false, "choosing Fleet must restore its required URL");
+assert.equal(fleetUsernameField.disabled, false, "choosing Fleet must restore its required username");
+
 console.log("PASS: configuration reload resets secret controls");
 console.log("PASS: a restart that stops this App is not reported as a failure");
 console.log("PASS: startup flags stay editable during a manual override");
+console.log("PASS: a nested Fleet card cannot re-enable its required fields in Local configuration");

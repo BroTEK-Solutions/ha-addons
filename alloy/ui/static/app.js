@@ -83,23 +83,43 @@ function scheduleFleetHealthPoll() {
   }, 2000);
 }
 
+// Whether a section applies, reading its own mode and step and ignoring where it
+// sits. The manual override is its own mode for visibility purposes. Sections
+// that list only local or fleet stay hidden exactly as they did when this was
+// "", but a section can opt in to break-glass mode with a "manual" token - which
+// the Alloy startup flags need, because they apply to a manual configuration
+// just as much as to a generated one.
+function sectionSelfActive(section, selectedMode) {
+  const isManualControl = section.dataset.manualControl !== undefined;
+  const modeActive = section.dataset.mode === undefined
+    || (isManualControl ? manualToggle.checked || selectedMode === "local" : section.dataset.mode.split(/\s+/).includes(selectedMode));
+  const stepActive = section.dataset.wizardStep === undefined || section.dataset.wizardStep === wizardStep;
+  return modeActive && stepActive;
+}
+
+// A section nested inside an inactive one is inactive too, whatever its own mode
+// and step say. Reading each section in isolation was a silent trap: the Fleet
+// card carries only data-wizard-step, so with Local selected it claimed the
+// configuration step, re-enabled fleet_url and fleet_username after their
+// data-mode="fleet" container had disabled them, and left two required controls
+// enabled inside a hidden container. Native constraint validation then failed on
+// fields it could not focus, so reportValidity() rejected the form and every
+// Save and Save & restart no-opped with nothing shown to the operator.
+//
+// Sections are still walked in document order, so a narrower inactive wrapper
+// disables the field its active ancestor has just enabled.
 function refreshWizardVisibility() {
-  // The manual override is its own mode for visibility purposes. Sections that
-  // list only local or fleet stay hidden exactly as they did when this was "",
-  // but a section can now opt in to break-glass mode with a "manual" token -
-  // which the Alloy startup flags need, because they apply to a manual
-  // configuration just as much as to a generated one.
   const selectedMode = manualToggle.checked ? "manual" : modeSelect.value;
-  const sections = new Set([
-    ...document.querySelectorAll("[data-mode]"),
-    ...document.querySelectorAll("[data-wizard-step]"),
-  ]);
+  const sections = Array.from(document.querySelectorAll("[data-mode],[data-wizard-step]"));
+  const selfActive = new Map(sections.map((section) => [section, sectionSelfActive(section, selectedMode)]));
   sections.forEach((section) => {
-    const isManualControl = section.dataset.manualControl !== undefined;
-    const modeActive = section.dataset.mode === undefined
-      || (isManualControl ? manualToggle.checked || selectedMode === "local" : section.dataset.mode.split(/\s+/).includes(selectedMode));
-    const stepActive = section.dataset.wizardStep === undefined || section.dataset.wizardStep === wizardStep;
-    const active = modeActive && stepActive;
+    let active = true;
+    for (let node = section; node; node = node.parentElement) {
+      if (selfActive.get(node) === false) {
+        active = false;
+        break;
+      }
+    }
     section.hidden = !active;
     section.querySelectorAll("input,select,textarea").forEach((field) => { field.disabled = !active; });
   });
