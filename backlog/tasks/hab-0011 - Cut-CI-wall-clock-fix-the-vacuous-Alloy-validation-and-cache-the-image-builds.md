@@ -1,10 +1,10 @@
 ---
 id: HAB-0011
 title: 'Cut CI wall clock: fix the vacuous Alloy validation and cache the image builds'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-08-29 17:18'
-updated_date: '2026-08-29 17:18'
+updated_date: '2026-08-29 17:29'
 labels:
   - 'unit:alloy'
   - 'unit:repo'
@@ -70,4 +70,13 @@ PR #99 (uv provisioning) touches `.github/workflows/builder.yaml` and must merge
 ## Baseline for the acceptance check
 
 Measured PR runs before any change: 33264214115 = 233s, 33263500768 = 306s, 33263049511 = 271s, 33262200294 = wall not captured, alloy lane 182s. Use `gh api repos/BroTEK-Solutions/ha-addons/actions/runs/<id> --jq '(.updated_at|fromdateiso8601) - (.run_started_at|fromdateiso8601)'` for the after figure.
+
+## Kickoff 2026-08-29
+
+Branch `perf/ci-wall-clock` off main (84ca51e). PR #99 merged as 9f42ad0, so the builder.yaml sequencing conflict is cleared.
+
+Three parallel lanes dispatched, disjoint file ownership:
+- Lane A owns `alloy/tests/generate-config.test.sh` - the vacuous validation fix plus fixture concurrency (AC 1-3).
+- Lane B is read-only - the setup-go cache measurement (AC 4).
+- Lane C owns `justfile`, `.github/workflows/builder.yaml`, `tests/repository_workflow_contract_test.py` - buildx layer cache (AC 5).
 <!-- SECTION:NOTES:END -->
