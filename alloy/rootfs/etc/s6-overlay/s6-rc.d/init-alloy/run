@@ -43,16 +43,23 @@ exec {SETTINGS_LOCK_FD}>"${SETTINGS_FILE}.lock"
 chmod 0600 "${SETTINGS_FILE}.lock"
 flock -x "${SETTINGS_LOCK_FD}"
 
+# Populated in one jq pass further down, after the safe-mode branch. Declared
+# here so the two accessors below can be defined next to each other.
+declare -A SETTINGS_CACHE=()
+settings_read=0
+
+# True when the option holds a value that is neither null nor empty once
+# stringified. Matches the jq predicate it replaces: the cache only holds
+# non-null keys, and stores each value already stringified.
 settings_has_value() {
-    jq -e --arg key "${1}" \
-        '.[$key] != null and ((.[$key] | tostring) | length) > 0' \
-        "${SETTINGS_FILE}" >/dev/null
+    [ -n "${SETTINGS_CACHE[${1}]-}" ]
 }
 
+# The option's value, or nothing when it is absent or null. Callers read this
+# through $(...), which strips the trailing newline jq -r used to add, so
+# printing without one is equivalent.
 settings_get() {
-    jq -r --arg key "${1}" \
-        'if has($key) and .[$key] != null then .[$key] else empty end' \
-        "${SETTINGS_FILE}"
+    printf '%s' "${SETTINGS_CACHE[${1}]-}"
 }
 
 mark_settings_applied() {
@@ -76,6 +83,69 @@ if [ "${safe_mode}" = true ]; then
     printf '%s\n' 'logging { level = "info" }' >"${CONFIG_FILE}"
     exit 0
 fi
+
+# Read every persisted setting in one jq pass, populating SETTINGS_CACHE for the
+# two accessors defined above. This used to be two jq processes per option
+# lookup, and config_or performs one lookup for each of 31 options, so a single
+# run spawned 46 jq processes and spent about 1.4s in process startup - on every
+# App start, not just in tests.
+#
+# This deliberately runs AFTER the safe-mode branch. Safe mode exists so a user
+# can always recover through ingress, which means it must not depend on the
+# settings file being readable - reading it earlier makes a corrupt file
+# unrecoverable in exactly the situation safe mode is for.
+#
+# Credentials are cached as a presence marker rather than their value. Nothing
+# reads one by value - the checks below only ask whether each is set - and the
+# jq-per-lookup design this replaces kept every secret inside a short-lived
+# process. Storing the marker keeps that property: a stray `set -x` cannot dump
+# them out of a long-lived shell variable. Keep this list in step with
+# secretOptionNames in alloy/ui/config.go.
+#
+# Three properties the batch has to preserve, each of which is a silent
+# data-loss bug if it is lost:
+#
+#   - The file must be a single JSON object. jq can emit a complete first object
+#     and then fail on trailing garbage, so the exit status has to be checked
+#     before the values are trusted; a process substitution would discard it.
+#   - Values are NUL-separated because manual_config and additional_config are
+#     free text containing newlines. A JSON string may legally contain NUL, and
+#     an odd number of them shifts every later field by one while leaving the
+#     entry count intact - the guard below agrees and the settings are silently
+#     lost. Stripping NUL matches the old behaviour, where $( ) dropped it.
+#   - An empty key is `bad array subscript` in bash, which under `set -e` kills
+#     the script before the guard can report anything. The old code never looked
+#     one up, so dropping it here is behaviour-preserving.
+#
+# jq emits the entry count first and the loop counts what it reads, so a
+# truncated or desynchronised stream aborts loudly rather than yielding an empty
+# cache - which would turn every option into its default.
+SETTINGS_SECRET_KEYS='["loki_password","prometheus_password","tempo_password","pyroscope_password","gcloud_rw_api_key","fleet_password"]'
+if ! jq -e 'type == "object"' "${SETTINGS_FILE}" >/dev/null 2>&1; then
+    bashio::log.fatal "Could not parse ${SETTINGS_FILE}; it is not a readable JSON object."
+    bashio::exit.nok
+fi
+{
+    IFS= read -r -d '' settings_expected || settings_expected=""
+    while IFS= read -r -d '' settings_key && IFS= read -r -d '' settings_value; do
+        SETTINGS_CACHE["${settings_key}"]="${settings_value}"
+        settings_read=$((settings_read + 1))
+    done
+} < <(jq -j --argjson secrets "${SETTINGS_SECRET_KEYS}" '
+    def scrub: tostring | gsub("\u0000"; "");
+    [to_entries[] | select(.value != null) | select(.key != "")]
+    | (length | tostring), "\u0000",
+      (.[]
+       | .key, "\u0000",
+         (if (.key | IN($secrets[]))
+          then (if (.value | scrub | length) > 0 then "set" else "" end)
+          else (.value | scrub) end), "\u0000")
+' "${SETTINGS_FILE}")
+if [ "${settings_expected}" != "${settings_read}" ]; then
+    bashio::log.fatal "Could not read ${SETTINGS_FILE}: it declared ${settings_expected:-no} settings but ${settings_read} were read."
+    bashio::exit.nok
+fi
+unset settings_key settings_value settings_expected settings_read
 
 # The supported break-glass full configuration is stored through ingress. It
 # replaces generated pipelines while keeping secrets available through env.
@@ -103,7 +173,8 @@ config_or() {
 }
 
 # Passwords are deliberately NOT read here - they are exported by the alloy
-# service and referenced from the generated config via sys.env().
+# service and referenced from the generated config via sys.env(). SETTINGS_CACHE
+# holds only a presence marker for them, never the value.
 LOKI_URL=$(config_or loki_url)
 LOKI_USERNAME=$(config_or loki_username)
 LOGS_SYSTEM=$(config_or logs_system true)
