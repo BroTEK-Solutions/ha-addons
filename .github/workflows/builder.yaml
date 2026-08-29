@@ -229,6 +229,16 @@ jobs:
       - name: Test the shared launcher
         run: just test-sm </dev/null
 
+      # Same pair as the Alloy lane, and needed for the same reason: the two
+      # Actions cache variables reach `uses:` steps only, and the default docker
+      # driver cannot export every cache backend. This lane builds two images, so
+      # it is the larger of the two cache wins.
+      - name: Expose the Actions cache service to BuildKit
+        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+
+      - name: Set up a cache-capable Docker builder
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
       - name: Build and smoke-test both complete images
         run: just test-sm-image </dev/null
 

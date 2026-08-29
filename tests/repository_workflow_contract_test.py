@@ -307,29 +307,39 @@ def main() -> None:
     # reachable from a `run:` step at all, and the docker-container builder is
     # what makes the cache exportable. Both must sit in the lane that builds the
     # Alloy image, ahead of the build step, or the cache is silently skipped.
-    alloy_lane_steps = jobs["alloy-generator-test"]["steps"]
     cache_actions = (
         "crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0",
         "docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0",
     )
-    build_step = next(
-        index
-        for index, step in enumerate(alloy_lane_steps)
-        if str(step.get("run", "")).startswith("just test-alloy-image")
-    )
     for pinned in cache_actions:
         if pinned not in caller:
             fail(f"the Actions layer cache must stay pinned to {pinned}")
-        action = pinned.split(" #", 1)[0]
-        positions = [
+    # Every lane listed here builds images through the `image` recipe and is
+    # expected to cache them. A lane that loses either action still goes green,
+    # it just silently builds uncached, so the pair is asserted per lane rather
+    # than once for the file. pdc-test is deliberately absent - it builds one
+    # small image and has not been measured as worth a cache entry.
+    for job_id, build_command in (
+        ("alloy-generator-test", "just test-alloy-image"),
+        ("synthetic-monitoring-test", "just test-sm-image"),
+    ):
+        lane_steps = jobs[job_id]["steps"]
+        build_step = next(
             index
-            for index, step in enumerate(alloy_lane_steps)
-            if step.get("uses") == action
-        ]
-        if not positions:
-            fail(f"{action} must run in the lane that builds the Alloy image")
-        elif positions[0] > build_step:
-            fail(f"{action} must run before the Alloy image build, not after it")
+            for index, step in enumerate(lane_steps)
+            if str(step.get("run", "")).startswith(build_command)
+        )
+        for pinned in cache_actions:
+            action = pinned.split(" #", 1)[0]
+            positions = [
+                index
+                for index, step in enumerate(lane_steps)
+                if step.get("uses") == action
+            ]
+            if not positions:
+                fail(f"{action} must run in {job_id}")
+            elif positions[0] > build_step:
+                fail(f"{action} must run before {build_command}, not after it")
 
     for required in (
         "BASHIO_BIN=/usr/bin/bashio",
