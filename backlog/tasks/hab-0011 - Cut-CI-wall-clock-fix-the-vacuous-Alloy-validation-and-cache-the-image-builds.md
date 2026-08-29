@@ -4,11 +4,13 @@ title: 'Cut CI wall clock: fix the vacuous Alloy validation and cache the image 
 status: In Progress
 assignee: []
 created_date: '2026-08-29 17:18'
-updated_date: '2026-08-29 17:29'
+updated_date: '2026-08-29 18:04'
 labels:
   - 'unit:alloy'
   - 'unit:repo'
 dependencies: []
+references:
+  - 'https://github.com/BroTEK-Solutions/ha-addons/pull/102'
 priority: high
 type: chore
 ordinal: 11000
@@ -79,4 +81,58 @@ Three parallel lanes dispatched, disjoint file ownership:
 - Lane A owns `alloy/tests/generate-config.test.sh` - the vacuous validation fix plus fixture concurrency (AC 1-3).
 - Lane B is read-only - the setup-go cache measurement (AC 4).
 - Lane C owns `justfile`, `.github/workflows/builder.yaml`, `tests/repository_workflow_contract_test.py` - buildx layer cache (AC 5).
+
+## Implementation landed on PR #102 (branch perf/ci-wall-clock)
+
+All three lanes complete. PR #102 carries the full detail; the load-bearing facts:
+
+**AC #1 wording is superseded, deliberately not rewritten.** It says "validates semantics against a
+concrete listen address". The pinned Alloy image turned out to have an `alloy validate` subcommand
+that loads and type-checks a config without starting any component, so the verdict is its exit
+status and no `alloy run` is involved at all. That is strictly better than the concrete-port
+approach the AC assumed, and it satisfies the AC's actual intent (exit-code verdict, no stderr
+allowlist). The original wording is left in place so the superseded assumption stays visible.
+
+**`alloy validate` coverage, verified directly:** unknown components, unrecognized attributes, and
+unknown functions all exit 1; a good config exits 0.
+
+**All 24 fixtures pass real validation.** The stop-and-report condition never triggered - the config
+generator needed no change.
+
+**Timings:** generate-config.test.sh 144.3s -> 24.1s, 188/188. Alloy image build 52.2s cold ->
+11.0s on a local cache hit, less ~10.4s for setup-buildx-action to pull moby/buildkit, so expect
+25-30s net on the lane.
+
+**AC #4 answered NO, on measurement.** setup-go keeps `cache: false`. Only shared/reporter has a
+go.sum; the other three Go modules are stdlib-only so the module cache has nothing to restore.
+Cold-to-warm delta caps at 11-13s per module against four cache entries each paying restore and
+upload. Recorded in AGENTS.md. Note the AC asked for hit rate and upload cost measured on a branch -
+that was NOT done, because the bounding argument made the experiment unnecessary. Flagged to Rob.
+
+**CodeRabbit:** one minor finding on the combined diff, applied - `ignore-error=true` on the gha
+cache export, so a cache-write failure cannot fail a build that otherwise succeeded.
+
+**Still open:** no CI cache hit has been observed. First run populates, second should show CACHED.
+AC #6 needs the after-figure from a PR run.
+
+## Environment defect found, not fixed
+
+This laptop cannot pull from ghcr.io: `docker pull ghcr.io/home-assistant/base:3.24` returns
+`error from registry: denied`. config.json has credsStore osxkeychain and a ghcr.io auths entry, so
+a stale credential is sent on every pull and rejected. It breaks test-pdc-image, test-alloy-image,
+test-sm-image and `just ci` on this machine regardless of this change. Work around with a throwaway
+DOCKER_CONFIG (symlink cli-plugins, buildx and contexts into it, or buildx vanishes). Left for Rob:
+the fix is `docker logout ghcr.io` or a fresh login, which mutates his keychain.
+
+## Deferred decision for Rob: the SM lane is the bigger cache prize
+
+Only the Alloy lane is wired. Measured cold vs warm per image: alloy 52.2/11.0s (531MB cache),
+grafana_pdc 50.6/7.0s (152MB), grafana_sm 60.3/16.2s (228MB), grafana_sm_browser 112.8/48.1s
+(611MB). The SM lane builds both SM images: 173.1s -> 64.3s, a ~109s saving, over 2.5x alloy's. Its
+`timeout-minutes: 20` versus 10 elsewhere corroborates that it is already the known slow lane. The
+justfile change already covers it - enabling it is the same two `uses:` steps in
+synthetic-monitoring-test. Not done because all four lanes cached is 1.52GB per branch scope against
+a 10GB LRU budget, so roughly six concurrent Renovate branches would start evicting main's entry.
+Mitigations if taken: `mode=min`, or gate `--cache-to` on refs/heads/main so PR branches read
+without writing. It is off the critical path, so it buys runner minutes, not wall clock.
 <!-- SECTION:NOTES:END -->
