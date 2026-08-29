@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.4.1](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.4.0...alloy-v2.4.1) (2026-08-29)
+
+
+### Bug Fixes
+
+* **alloy:** stop the hidden Fleet card re-enabling its required fields ([72e1432](https://github.com/BroTEK-Solutions/ha-addons/commit/72e1432e515c2d6f38e4e024c4eb1ffae38822e5)), closes [#85](https://github.com/BroTEK-Solutions/ha-addons/issues/85)
+* **deps:** update dependency grafana/alloy to v1.19.0 ([#75](https://github.com/BroTEK-Solutions/ha-addons/issues/75)) ([6cf69da](https://github.com/BroTEK-Solutions/ha-addons/commit/6cf69da4e0c5929377c0d72f9cae33160f4c3152))
+* **deps:** update dependency grafana/alloy to v1.19.2 ([#83](https://github.com/BroTEK-Solutions/ha-addons/issues/83)) ([b3d2146](https://github.com/BroTEK-Solutions/ha-addons/commit/b3d2146eee9c72f30e9c19eecf30b539033d5dd1))
+
 ## [2.4.0](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.3.0...alloy-v2.4.0) (2026-08-20)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-sm-browser-v1.2.0...grafana-sm-browser-v1.2.1) (2026-08-29)
+
+
+### Bug Fixes
+
+* **deps:** update grafana/synthetic-monitoring-agent docker tag to v0.64.2 ([#82](https://github.com/BroTEK-Solutions/ha-addons/issues/82)) ([6a605d7](https://github.com/BroTEK-Solutions/ha-addons/commit/6a605d783e2da8cca3444e4fe7839fb20a140aca))
+
 ## [1.2.0](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-sm-browser-v1.1.0...grafana-sm-browser-v1.2.0) (2026-08-20)
 
 

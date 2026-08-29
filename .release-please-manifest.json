@@ -1,6 +1,6 @@
 {
-  "alloy": "2.4.0",
+  "alloy": "2.4.1",
   "grafana_pdc": "1.2.0",
-  "grafana_sm": "1.2.0",
-  "grafana_sm_browser": "1.2.0"
+  "grafana_sm": "1.2.1",
+  "grafana_sm_browser": "1.2.1"
 }
