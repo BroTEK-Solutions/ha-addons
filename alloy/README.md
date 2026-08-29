@@ -15,6 +15,12 @@ page and the proxied Alloy component graph.
   Assistant/Alloy metric pipelines, OTLP trace forwarding and Alloy
   self-profiling.
 
+Other Alloy add-ons run the collector with a fixed configuration that forwards
+Home Assistant metrics to Grafana Cloud. This App treats Alloy as a managed
+collector instead: Fleet Management mode hands pipeline control to Grafana
+Cloud, and Local mode assembles log, metric, trace and profiling pipelines from
+the ingress UI without hand-written Alloy configuration.
+
 Alloy's UI and port 12345 are available only through Home Assistant ingress.
 OTLP ports 4317 and 4318 remain loopback-only unless network access is
 explicitly enabled for trusted senders.
