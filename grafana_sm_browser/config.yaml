@@ -1,5 +1,5 @@
 name: Grafana Synthetic Monitoring Probe with Browser Checks
-version: 1.2.0 # x-release-please-version
+version: 1.2.1 # x-release-please-version
 slug: grafana_sm_browser
 description: >-
   Run a browser-capable private Grafana Cloud Synthetic Monitoring probe from Home Assistant.
