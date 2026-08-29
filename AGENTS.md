@@ -4,8 +4,8 @@ Home Assistant App repository for BroTEK Solutions. Four Apps published as signe
 `alloy/`, `grafana_pdc/`, `grafana_sm/`, `grafana_sm_browser/`. `README.md` is the user-facing
 description; this file is the contributor and agent contract.
 
-Claude Code and Codex both read this file. `CLAUDE.md` is a stub that imports it, so there is one
-canonical copy and the two cannot drift.
+Claude Code and Codex both read this file. `CLAUDE.md` is a symlink to it, so there is one canonical
+copy and the two cannot drift. Edit `AGENTS.md`; never replace the symlink with a real file.
 
 ## Task interface
 
@@ -46,7 +46,8 @@ linted, tooling config included.
 **Reusable workflows are pinned to a release SHA with the version in a trailing comment.** zizmor
 fails a floating `@main`; the pin and the comment move together.
 
-**This repo is `BroTEK-Solutions` and takes no direct pushes to `main`.** Branch and PR, always.
+**This repo is `BroTEK-Solutions` and takes no direct pushes to `main`.** Branch and PR, always —
+except for a tracker-only commit, which is covered by its own rule below and goes straight to `main`.
 
 ## Task tracking — Backlog.md
 
@@ -86,6 +87,31 @@ on demand with `backlog doc view <id> --plain`, so a long one costs nothing unti
   exclude mechanism. `backlog/docs/` must stay where it is, so the config is what moves.
 - **Statuses are `To Do`, `In Progress`, `Parked`, `Done`.** `Parked` means attempted, blocked, and
   left with a concrete resume boundary — it is not `To Do`.
+- **A tracker-only commit goes straight to `main`. No branch, no PR, no review.** It applies when
+  *every* path in the commit is under `backlog/` or is `backlog.config.yml`: nothing ships, no build
+  can break, and a PR round-trip only delays the queue that other sessions read to decide what to
+  work on. Push it immediately — a tracker write left unpushed is invisible to every other session.
+  One source file in the same commit forfeits the exception; split it instead. This is the only
+  override of the branch-and-PR rule above, and it needs the admin bypass, so the successful push
+  reporting that it bypassed the ruleset is expected and not worth surfacing.
+- **Every task carries a `unit:` label naming the work unit it belongs to.** Four published Apps come
+  from three independent units, so the unit is not derivable from the title and the queue is
+  otherwise unfilterable. Backlog.md has no custom fields and milestones are already the wave, so
+  labels are the only axis left:
+
+  | Label | Covers |
+  |---|---|
+  | `unit:alloy` | `alloy/` |
+  | `unit:grafana-pdc` | `grafana_pdc/` |
+  | `unit:sm-shared` | `synthetic_monitoring_shared/` and both generated variants |
+  | `unit:repo` | CI, `renovate.json`, `.yamllint`, `trivy.yaml`, `tests/`, `scripts/`, the tracker |
+
+  There is deliberately no `unit:grafana-sm` or `unit:grafana-sm-browser`: the variants are generated
+  and are never a lane of their own. A task that genuinely spans units carries one label per unit —
+  repeat `-l` *inside a single call*, because a second `backlog task edit --label` replaces the
+  first's labels and `--add-label` is the additive form. Filter with
+  `backlog task list -l unit:alloy --plain`; `-l a,b` requires *both*, so query one unit at a time.
+  Labels are free-form, so a typo is accepted silently — copy the label, do not retype it.
 
 <!-- BACKLOG.MD GUIDELINES START -->
 <!-- backlog.md-instructions-version: 1.50.1 -->
