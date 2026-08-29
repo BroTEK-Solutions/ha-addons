@@ -292,7 +292,7 @@ def main() -> None:
     for required in (
         'if [ -n "${ACTIONS_RUNTIME_TOKEN:-}" ] && [ -n "${ACTIONS_RESULTS_URL:-}" ]; then',
         "--cache-from 'type=gha,scope={{ app }}'",
-        "--cache-to 'type=gha,mode=max,ignore-error=true,scope={{ app }}'",
+        "--cache-to 'type=gha,mode=min,ignore-error=true,scope={{ app }}'",
         "docker buildx build --load",
         "docker build --tag '{{ tag }}' '{{ app }}'",
     ):
@@ -314,14 +314,13 @@ def main() -> None:
     for pinned in cache_actions:
         if pinned not in caller:
             fail(f"the Actions layer cache must stay pinned to {pinned}")
-    # Every lane listed here builds images through the `image` recipe and is
-    # expected to cache them. A lane that loses either action still goes green,
-    # it just silently builds uncached, so the pair is asserted per lane rather
-    # than once for the file. pdc-test is deliberately absent - it builds one
-    # small image and has not been measured as worth a cache entry.
+    # Every lane that builds an image through the `image` recipe caches it. A
+    # lane that loses either action still goes green, it just silently builds
+    # uncached, so the pair is asserted per lane rather than once for the file.
     for job_id, build_command in (
         ("alloy-generator-test", "just test-alloy-image"),
         ("synthetic-monitoring-test", "just test-sm-image"),
+        ("pdc-test", "just test-pdc-image"),
     ):
         lane_steps = jobs[job_id]["steps"]
         build_step = next(

@@ -55,12 +55,16 @@ host. `tests/repository_workflow_contract_test.py` enforces all of this, includi
 **Reusable workflows are pinned to a release SHA with the version in a trailing comment.** zizmor
 fails a floating `@main`; the pin and the comment move together.
 
-**`actions/setup-go` keeps `cache: false` on all four steps deliberately.** Only `shared/reporter`
-has a `go.sum`; `grafana_pdc/ui`, `alloy/ui` and `synthetic_monitoring_shared/launcher` are
-stdlib-only, so the module cache has nothing to restore. Measured cold-to-warm compile delta is
-11-13s per module, against four separate cache entries each paying a restore and an upload every
-run, and `alloy-generator-test` - the only lane on CI's critical path - spends most of its ~130s
-step on uv, Python, Node and bash rather than Go. Re-measure before flipping it.
+**`actions/setup-go` runs with `cache: true` on all four steps.** The valuable half is `GOCACHE`,
+not the module cache: `setup-go` caches both (`go env GOMODCACHE`, `go env GOCACHE`) and falls back
+to hashing `go.mod` when a module has no `go.sum`, so a stdlib-only module still gets a working
+cache entry. Compiling the stdlib from cold costs 10-20s per module - measured at 19.65s for
+`grafana_pdc/ui`'s `go test` in CI against 0.65s warm - which is a quarter of that lane. Do not
+reason from "no external dependencies, so nothing to cache": that is true of the module cache and
+false of the build cache, and it is the mistake this note previously recorded.
+Every step also needs `cache-dependency-path` pointing at its own `go.mod`: `setup-go` globs for
+`go.mod` at the repository root, finds none because every module lives in a subdirectory, and then
+**warns and caches nothing** rather than failing. `cache: true` alone is inert here.
 
 **This repo is `BroTEK-Solutions` and takes no direct pushes to `main`.** Branch and PR, always —
 except for a tracker-only commit, which is covered by its own rule below and goes straight to `main`.

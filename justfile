@@ -220,6 +220,12 @@ build:
 # otherwise succeeded. The Actions cache is a shared 10GB budget evicted LRU, so
 # a write can fail for reasons that have nothing to do with this image.
 #
+# `mode=min` rather than `mode=max`: max also caches every intermediate stage,
+# which for the Synthetic Monitoring images produced a 487MB cache blob that
+# took 26.8s to download on a run where every layer was already CACHED. The
+# download is paid on every run; the extra reuse max buys only pays off on a
+# partial rebuild.
+#
 # `just --list` shows only the last line of a comment block, so the recipe's own
 # description has to be the line directly above it.
 
@@ -231,7 +237,7 @@ image app tag="local/ha-dev:smoke":
     if [ -n "${ACTIONS_RUNTIME_TOKEN:-}" ] && [ -n "${ACTIONS_RESULTS_URL:-}" ]; then
         docker buildx build --load \
             --cache-from 'type=gha,scope={{ app }}' \
-            --cache-to 'type=gha,mode=max,ignore-error=true,scope={{ app }}' \
+            --cache-to 'type=gha,mode=min,ignore-error=true,scope={{ app }}' \
             --tag '{{ tag }}' '{{ app }}'
     else
         docker build --tag '{{ tag }}' '{{ app }}'
