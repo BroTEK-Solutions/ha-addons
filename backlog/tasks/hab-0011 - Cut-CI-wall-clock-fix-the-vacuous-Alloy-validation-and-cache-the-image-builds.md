@@ -4,7 +4,7 @@ title: 'Cut CI wall clock: fix the vacuous Alloy validation and cache the image 
 status: Done
 assignee: []
 created_date: '2026-08-29 17:18'
-updated_date: '2026-08-29 18:59'
+updated_date: '2026-08-29 21:33'
 labels:
   - 'unit:alloy'
   - 'unit:repo'
@@ -198,4 +198,36 @@ image smoke tests are cache-insensitive and the --load export plus builder pull 
 **Critical path has moved again.** Warm run: alloy-init 76s, PDC 76s, alloy 66s, SM 53s. The SM lane
 is now the FASTEST of the four. alloy-init and pdc-test are joint slowest and NEITHER HAS BEEN
 PROFILED. Any further CI wall-clock work starts by measuring those two, not by adding more caching.
+
+## The test-repo 21s gap: resolved, do not re-investigate (PR #107)
+
+The earlier note recorded `just test-repo` as ~3s locally vs 21s in CI with the gap unexplained.
+Instrumented in PR #107 (merged 5699cc4) and the gap was **already closed by this task's own work**.
+
+`Run repository tests` is now **5s**, and the per-leg timings account for 5.0s of it:
+
+```
+timing  3761ms  go test shared/reporter
+timing   545ms  app_version_changed
+timing   218ms  repository_workflow_contract
+timing   176ms  synthetic_monitoring_variants
+timing   111ms  app_metadata_contract
+timing   127ms  app_contract
+timing    60ms  shared validator library
+timing    32ms  renovate_config_contract
+timing  5049ms  TOTAL
+```
+
+The 21s was cold Go compilation. `shared/reporter` is the only module with external dependencies and
+setup-go's cache was inert until `cache-dependency-path` was added. The `quality` job is 28s, down
+from 47s.
+
+**A plausible-sounding rule that is WRONG here:** fork-heavy work is not slower on GitHub runners.
+`app_version_changed_test.py` creates a temp git repo per case and shells out to git repeatedly, and
+it measures **545ms in CI against 2702ms on the macOS laptop** - five times faster on the Linux
+runner. macOS process spawn is the slow side. Do not optimise a test on the assumption that CI
+punishes subprocess churn.
+
+Nothing further to do in this lane: 28s against a ~117s critical path, three quarters of it a single
+already-cached Go compile. The per-leg timings stay in the justfile as drift visibility.
 <!-- SECTION:NOTES:END -->
