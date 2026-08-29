@@ -4,7 +4,7 @@ title: 'Cut CI wall clock: fix the vacuous Alloy validation and cache the image 
 status: Done
 assignee: []
 created_date: '2026-08-29 17:18'
-updated_date: '2026-08-29 18:44'
+updated_date: '2026-08-29 18:59'
 labels:
   - 'unit:alloy'
   - 'unit:repo'
@@ -173,4 +173,29 @@ than a branch run; see the earlier note.
 
 PR #102 squash-merged to main as e939901. Branch deleted. Final CI measurement on the updated branch
 was 136s, the third consecutive run at that figure (131s / 136s / 136s), against a 233-306s baseline.
+
+## Follow-on: SM lane cached (PR #103, merged)
+
+The deferred SM decision above is resolved. Merged as part of #103.
+
+| | before | cold | warm |
+|---|---|---|---|
+| SM lane | 72-84s | 171s | **53s** |
+| Wall clock | 136s | 272s | **124s** |
+
+**The cache-budget reasoning recorded above was WRONG.** It assumed a 10GB budget with headroom. The
+repository was already at **14.7GB across 918 entries** before any of this work, and `buildkit-blob`
+entries date to 1 August - the Home Assistant builder action has been caching through BuildKit all
+along (its `index-amd64`/`index-aarch64` manifest indexes sit beside them). Breakdown:
+buildkit-blob 13,651MB/734 entries, cache-trivy 1,002MB/13, everything else ~70MB/171. So the repo
+has been in the LRU-eviction regime for weeks and marginal cache size was never the real constraint.
+The real risk is eviction before reuse. Do not re-derive the budget objection.
+
+**The lane saving is smaller than the local build numbers implied** - locally the two SM builds go
+173.1s to 64.3s (~109s), but the lane only moves 72-84s to 53s, because `just test-sm` and both
+image smoke tests are cache-insensitive and the --load export plus builder pull are paid every run.
+
+**Critical path has moved again.** Warm run: alloy-init 76s, PDC 76s, alloy 66s, SM 53s. The SM lane
+is now the FASTEST of the four. alloy-init and pdc-test are joint slowest and NEITHER HAS BEEN
+PROFILED. Any further CI wall-clock work starts by measuring those two, not by adding more caching.
 <!-- SECTION:NOTES:END -->
