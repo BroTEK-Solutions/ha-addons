@@ -43,6 +43,15 @@ on `main`, so the title needs the prefix. Scope by App: `fix(alloy):`, `feat(all
 **`.yamllint` caps lines at 120 and ignores only `.git/`** — every YAML file anywhere in the tree is
 linted, tooling config included.
 
+**Python dependencies come from uv, never pip.** A script that imports outside the standard library
+declares it in a PEP 723 `# /// script` header and is run with `uv run`; a pure-stdlib script stays
+on bare `python3`. Adding a third-party import means adding the header and switching the justfile
+invocation in the same change, or the script silently depends on whatever the machine happens to
+have — and `pip install --user` cannot rescue it on macOS, where PEP 668 refuses it outright.
+`uvx` covers Python CLI tools; `yamllint` is the only one and is deliberately not installed on the
+host. `tests/repository_workflow_contract_test.py` enforces all of this, including that no
+`pip install` returns to the justfile, the builder workflow or the cloud provisioning script.
+
 **Reusable workflows are pinned to a release SHA with the version in a trailing comment.** zizmor
 fails a floating `@main`; the pin and the comment move together.
 

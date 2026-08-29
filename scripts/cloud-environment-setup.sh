@@ -65,12 +65,20 @@ install_os_tools() {
     apt-get install --yes --no-install-recommends "${missing[@]}"
 }
 
-install_python_tools() {
-  log "installing Python validation dependencies"
-  python3 -m pip install --user --disable-pip-version-check --quiet \
-    pyyaml \
-    voluptuous \
-    yamllint
+# Nothing is pip-installed. The six scripts that need a third-party import carry
+# a PEP 723 header and are run with `uv run`; yamllint is run with `uvx`. Both
+# resolve on first use, so this only has to prove uv is present and warm its
+# cache while the network is known good, rather than failing mid-gate later.
+verify_uv() {
+  command -v uv >/dev/null 2>&1 || {
+    log "uv is not installed; enable it in the cloud environment image"
+    return 1
+  }
+
+  log "warming the uv cache for the gate's Python dependencies"
+  uv run tests/app_contract_test.py >/dev/null
+  uv run alloy/tests/config-schema.test.py >/dev/null
+  uvx yamllint --version >/dev/null
 }
 
 install_backlog() {
@@ -96,8 +104,8 @@ download_go_modules() {
 
 verify_tools() {
   log "verifying toolchain"
-  python3 -c 'import voluptuous, yaml'
-  yamllint --version
+  uv --version
+  uvx yamllint --version
   shellcheck --version | head -n 1
   node --version
   go version
@@ -118,7 +126,7 @@ main() {
   cd "$(git rev-parse --show-toplevel)"
   persist_user_path
   install_os_tools
-  install_python_tools
+  verify_uv
   install_backlog
   download_go_modules
   verify_tools

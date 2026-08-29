@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["pyyaml"]
+# ///
 """Regression checks for the published Home Assistant App image contract."""
 
 from __future__ import annotations

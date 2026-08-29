@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["pyyaml"]
+# ///
 """The contract every published App in this repository has to satisfy.
 
 app_metadata_contract_test.py covers the Alloy build and release plumbing in

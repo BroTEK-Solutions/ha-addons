@@ -36,6 +36,14 @@
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+ALLOY_VERSION=\"(?<currentValue>[^\"]+)\""
       ],
       "extractVersionTemplate": "^v?(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the yamllint release `just lint` runs through uvx. Unpinned, uvx caches whatever was latest on first use, so lint behaviour drifts between a developer machine, a cloud agent and CI.",
+      "managerFilePatterns": ["/^justfile$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+yamllint_version := \"(?<currentValue>[^\"]+)\""
+      ]
     }
   ],
   "packageRules": [

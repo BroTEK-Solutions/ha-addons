@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["pyyaml", "voluptuous"]
+# ///
 """Contract test for the Grafana Private Data Source Connect App schema."""
 
 from __future__ import annotations
