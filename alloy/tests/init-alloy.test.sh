@@ -29,10 +29,72 @@ pass() { echo "  ✓ $1"; }
 # check list. Parameter expansion rather than sed, per ShellCheck SC2001.
 indent() { echo "      ${1//$'\n'/$'\n'      }"; }
 
+# --- how the slow half of this suite is made parallel -------------------------
+# Every check below needs the result of one init-alloy/run or alloy/finish
+# invocation, and the checks themselves are string comparisons that cost
+# nothing. A single init-alloy/run costs ~1.4s, effectively all of it process
+# startup: it reads one settings key per `jq` and starts 46 of them. Seventy-odd
+# invocations back to back is the whole runtime of this suite.
+#
+# So the suite body runs twice. The recording pass writes each invocation's
+# input into a numbered slot instead of executing it; the recorded slots are
+# then drained through a bounded pool of parallel workers; the reporting pass
+# replays the same body and each run_init/run_finish reads back the result its
+# slot already holds. Every check runs exactly once, in the same order, against
+# the same bytes - the only difference is that the slow part already happened.
+#
+# A counter incremented inside a backgrounded subshell is lost at the subshell
+# boundary, so a worker cannot touch TESTS or FAILS. It writes into its own slot
+# directory and the reporting pass tallies in queue order, which is also what
+# keeps the output ordered rather than interleaved. Same shape as
+# generate-config.test.sh's Alloy validation queue.
+#
+# The body is re-entered by re-executing this file rather than by wrapping it in
+# a function, so the checks below stay exactly where they were and a reviewer can
+# see that none of them changed.
+INIT_JOBS="${INIT_JOBS:-6}"
+SUITE_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/${BASH_SOURCE[0]##*/}"
+SLOT=0
+
+# Both passes walk the slots in the same order. A slot that is missing, of the
+# wrong kind, or was never executed means the two passes disagreed about the
+# sequence of invocations, which would silently mis-attribute every later
+# result. Fail loudly instead.
+slot_ready() {
+  if [ ! -f "${1}/rc" ] || [ "$(cat "${1}/kind")" != "${2}" ]; then
+    echo "FATAL: queue slot ${1} is missing, empty or not a ${2} result." >&2
+    exit 1
+  fi
+}
+
 # Run init-alloy/run against a given settings.json.
 # $1 = settings JSON. Sets RUN_RC, RUN_OUT, RUN_CONFIG and RUN_SETTINGS.
 run_init() {
-  local tmp
+  local slot="${QUEUE}/${SLOT}"
+  SLOT=$((SLOT + 1))
+  if [ "${SUITE_PHASE}" = record ]; then
+    mkdir -p "${slot}"
+    printf 'init' >"${slot}/kind"
+    printf '%s' "$1" >"${slot}/in.settings"
+    # Placeholders: the recording pass evaluates the checks too, and its verdicts
+    # are discarded. They only have to be well-formed enough not to abort it.
+    RUN_RC=0
+    RUN_OUT=""
+    RUN_CONFIG=""
+    RUN_SETTINGS="{}"
+    return 0
+  fi
+  slot_ready "${slot}" init
+  RUN_RC="$(cat "${slot}/rc")"
+  RUN_OUT="$(cat "${slot}/out")"
+  RUN_CONFIG="$(cat "${slot}/config")"
+  RUN_SETTINGS="$(cat "${slot}/settings")"
+}
+
+# Execute one recorded init-alloy/run. Runs backgrounded, so it reports through
+# files in its own slot; it cannot reach TESTS/FAILS in the parent.
+run_init_worker() {
+  local slot="$1" tmp out rc
   tmp="$(mktemp -d)"
   # bashio reads its cached Supervisor response from $CACHE_DIR, and insists the
   # directory is owner-only.
@@ -40,9 +102,9 @@ run_init() {
   chmod 0700 "${tmp}/cache"
   printf '%s' '{"safe_mode":false,"ui_log_level":"info"}' >"${tmp}/cache/addons.self.options.config.cache"
   printf '%s' '{"slug":"a141124a_alloy"}' >"${tmp}/cache/addons.self.info.cache"
-  printf '%s' "$1" >"${tmp}/data/settings.json"
+  cp "${slot}/in.settings" "${tmp}/data/settings.json"
 
-  RUN_OUT="$(
+  out="$(
     CACHE_DIR="${tmp}/cache" \
     CONFIG_DIR="${tmp}/etc" \
     DATA_DIR="${tmp}/data" \
@@ -51,12 +113,104 @@ run_init() {
     GENERATOR="${GENERATOR}" \
       "${BASHIO_BIN}" "${INIT}" 2>&1
   )"
-  RUN_RC=$?
-  RUN_CONFIG=""
-  [ -f "${tmp}/etc/config.alloy" ] && RUN_CONFIG="$(cat "${tmp}/etc/config.alloy")"
-  RUN_SETTINGS="$(cat "${tmp}/data/settings.json")"
+  rc=$?
+  printf '%s' "${out}" >"${slot}/out"
+  : >"${slot}/config"
+  [ -f "${tmp}/etc/config.alloy" ] && cat "${tmp}/etc/config.alloy" >"${slot}/config"
+  cat "${tmp}/data/settings.json" >"${slot}/settings"
   rm -rf "${tmp}"
+  # rc is written last: its presence is what marks the slot complete.
+  printf '%s' "${rc}" >"${slot}/rc"
 }
+
+# Run alloy/finish with s6's two arguments.
+# Sets FINISH_RC, FINISH_OUT, FINISH_HALTED and FINISH_EXIT_CODE.
+run_finish() {
+  local slot="${QUEUE}/${SLOT}"
+  SLOT=$((SLOT + 1))
+  if [ "${SUITE_PHASE}" = record ]; then
+    mkdir -p "${slot}"
+    printf 'finish' >"${slot}/kind"
+    printf '%s' "$1" >"${slot}/in.exit"
+    printf '%s' "$2" >"${slot}/in.signal"
+    FINISH_RC=0
+    FINISH_OUT=""
+    FINISH_HALTED=false
+    FINISH_EXIT_CODE=""
+    return 0
+  fi
+  slot_ready "${slot}" finish
+  FINISH_RC="$(cat "${slot}/rc")"
+  FINISH_OUT="$(cat "${slot}/out")"
+  FINISH_HALTED="$(cat "${slot}/halted")"
+  FINISH_EXIT_CODE="$(cat "${slot}/exitcode")"
+}
+
+# Execute one recorded alloy/finish. Backgrounded, same slot contract as above.
+run_finish_worker() {
+  local slot="$1" tmp out rc
+  tmp="$(mktemp -d)"
+  mkdir -p "${tmp}/results"
+  # The generated helper expands ALLOY_TEST_HALT when it runs, not here.
+  # shellcheck disable=SC2016
+  printf '#!/usr/bin/env bash\nprintf halted >"${ALLOY_TEST_HALT}"\n' >"${tmp}/halt"
+  chmod +x "${tmp}/halt"
+  out="$(
+    ALLOY_TEST_HALT="${tmp}/halted" \
+    S6_RESULTS_DIR="${tmp}/results" \
+    S6_HALT="${tmp}/halt" \
+      "${BASHIO_BIN}" "${FINISH}" "$(cat "${slot}/in.exit")" "$(cat "${slot}/in.signal")" 2>&1
+  )"
+  rc=$?
+  printf '%s' "${out}" >"${slot}/out"
+  if [ -e "${tmp}/halted" ]; then printf 'true' >"${slot}/halted"; else printf 'false' >"${slot}/halted"; fi
+  cat "${tmp}/results/exitcode" >"${slot}/exitcode" 2>/dev/null || : >"${slot}/exitcode"
+  rm -rf "${tmp}"
+  printf '%s' "${rc}" >"${slot}/rc"
+}
+
+execute_slot() {
+  case "$(cat "${1}/kind")" in
+    init) run_init_worker "${1}" ;;
+    finish) run_finish_worker "${1}" ;;
+    *)
+      echo "FATAL: queue slot ${1} has no recognised kind." >&2
+      exit 1
+      ;;
+  esac
+}
+
+# Drain the recorded queue INIT_JOBS at a time. Batch-and-wait rather than
+# `wait -n`, which macOS's bash 3.2 does not have.
+drain_queue() {
+  local i=0 running=0
+  while [ "${i}" -lt "${SLOT}" ]; do
+    execute_slot "${QUEUE}/${i}" &
+    running=$((running + 1))
+    i=$((i + 1))
+    if [ "${running}" -ge "${INIT_JOBS}" ]; then wait; running=0; fi
+  done
+  wait
+}
+
+# SUITE_PHASE is set only on the two child passes, so the outermost invocation is
+# the one that orchestrates them.
+if [ -z "${SUITE_PHASE:-}" ]; then
+  QUEUE="$(mktemp -d)"
+  export QUEUE
+  trap 'rm -rf "${QUEUE}"' EXIT
+  # The recording pass prints its placeholder verdicts; they are discarded. Only
+  # the queue it leaves behind is used, and a non-zero exit from it means nothing.
+  SUITE_PHASE=record bash "${SUITE_SELF}" >/dev/null 2>&1
+  while [ -d "${QUEUE}/${SLOT}" ]; do SLOT=$((SLOT + 1)); done
+  if [ "${SLOT}" -eq 0 ]; then
+    echo "FATAL: the recording pass queued no invocations." >&2
+    exit 1
+  fi
+  drain_queue
+  SUITE_PHASE=report bash "${SUITE_SELF}"
+  exit $?
+fi
 
 # $1 = description, $2 = options JSON, $3 = expected substring of the output.
 expect_fatal() {
@@ -405,27 +559,6 @@ fi
 
 echo
 echo "== finish distinguishes shutdown signals from crashes =="
-run_finish() {
-  local tmp
-  tmp="$(mktemp -d)"
-  mkdir -p "${tmp}/results"
-  # The generated helper expands ALLOY_TEST_HALT when it runs, not here.
-  # shellcheck disable=SC2016
-  printf '#!/usr/bin/env bash\nprintf halted >"${ALLOY_TEST_HALT}"\n' >"${tmp}/halt"
-  chmod +x "${tmp}/halt"
-  FINISH_OUT="$(
-    ALLOY_TEST_HALT="${tmp}/halted" \
-    S6_RESULTS_DIR="${tmp}/results" \
-    S6_HALT="${tmp}/halt" \
-      "${BASHIO_BIN}" "${FINISH}" "$@" 2>&1
-  )"
-  FINISH_RC=$?
-  FINISH_HALTED=false
-  [ -e "${tmp}/halted" ] && FINISH_HALTED=true
-  FINISH_EXIT_CODE="$(cat "${tmp}/results/exitcode" 2>/dev/null || true)"
-  rm -rf "${tmp}"
-}
-
 TESTS=$((TESTS + 1))
 run_finish 256 15
 if [ "${FINISH_RC}" -eq 0 ] && [ "${FINISH_HALTED}" = false ] && [ -z "${FINISH_EXIT_CODE}" ]; then
