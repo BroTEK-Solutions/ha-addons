@@ -162,6 +162,24 @@ jobs:
       - name: Run Alloy toolchain tests
         run: just test-alloy </dev/null
 
+      # BuildKit's `type=gha` cache backend authenticates to the v2 Actions
+      # cache service with ACTIONS_RESULTS_URL and ACTIONS_RUNTIME_TOKEN. GitHub
+      # injects both into `uses:` steps and into neither `run:` steps nor the job
+      # environment, so without this action the `image` recipe below sees no
+      # credentials and silently falls back to an uncached build. It has to run
+      # before the build step: it publishes the variables through GITHUB_ENV,
+      # which only later steps read.
+      - name: Expose the Actions cache service to BuildKit
+        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+
+      # The default `docker` driver does not support every cache export backend,
+      # so the lane provisions its own docker-container builder rather than
+      # depending on whatever the runner image ships. This makes it current,
+      # which is the builder `docker buildx build --load` in the `image` recipe
+      # then picks up.
+      - name: Set up a cache-capable Docker builder
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
       - name: Run Alloy Docker tests
         run: just test-alloy-image </dev/null
 

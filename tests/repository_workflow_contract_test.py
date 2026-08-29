@@ -261,19 +261,19 @@ def main() -> None:
         "python3 grafana_pdc/tests/image-contract.test.py",
         "(cd grafana_pdc/ui && go test ./...)",
         "bash grafana_pdc/tests/service.test.sh",
-        "docker build --tag local/ha-grafana-pdc:smoke grafana_pdc",
+        "just image grafana_pdc local/ha-grafana-pdc:smoke",
         "bash grafana_pdc/tests/image-smoke.test.sh local/ha-grafana-pdc:smoke",
         "uv run --locked alloy/tests/config-schema.test.py",
         "python3 alloy/tests/image-contract.test.py",
         "(cd alloy/ui && go test ./...)",
         "node alloy/tests/ui-static.test.mjs",
         "bash alloy/tests/generate-config.test.sh",
-        "docker build --tag local/ha-alloy:smoke alloy",
+        "just image alloy local/ha-alloy:smoke",
         "bash alloy/tests/image-smoke.test.sh local/ha-alloy:smoke",
         "bash alloy/tests/init-alloy.test.sh",
         "(cd synthetic_monitoring_shared/launcher && go test ./...)",
-        "docker build --tag local/ha-grafana-sm:smoke grafana_sm",
-        "docker build --tag local/ha-grafana-sm-browser:smoke grafana_sm_browser",
+        "just image grafana_sm local/ha-grafana-sm:smoke",
+        "just image grafana_sm_browser local/ha-grafana-sm-browser:smoke",
         "python3 tests/synthetic_monitoring_image_smoke_test.py local/ha-grafana-sm:smoke standard",
         "python3 tests/synthetic_monitoring_image_smoke_test.py local/ha-grafana-sm-browser:smoke browser",
     )
@@ -281,6 +281,56 @@ def main() -> None:
         if command not in justfile:
             fail(f"justfile must run: {command}")
     check_python_invocation(justfile)
+
+    # Every image build routes through the `image` recipe, which is the only
+    # place the layer cache is configured. Both halves of it are load-bearing.
+    # The buildx half needs a docker-container builder and the two Actions cache
+    # variables, none of which exist on a developer laptop; the `docker build`
+    # half is what that laptop runs, and it must not acquire a buildx dependency.
+    # Losing either one fails silently - an uncached CI build is still green, and
+    # so is a laptop that happens to have buildx installed.
+    for required in (
+        'if [ -n "${ACTIONS_RUNTIME_TOKEN:-}" ] && [ -n "${ACTIONS_RESULTS_URL:-}" ]; then',
+        "--cache-from 'type=gha,scope={{ app }}'",
+        "--cache-to 'type=gha,mode=max,ignore-error=true,scope={{ app }}'",
+        "docker buildx build --load",
+        "docker build --tag '{{ tag }}' '{{ app }}'",
+    ):
+        if required not in justfile:
+            fail(f"the cached `image` recipe must keep: {required}")
+    # Line-anchored so a comment mentioning docker build cannot trip this.
+    if len(re.findall(r"^\s+docker (?:buildx )?build ", justfile, re.MULTILINE)) != 2:
+        fail("image builds must go through the `image` recipe, not a second docker build")
+
+    # ACTIONS_RESULTS_URL and ACTIONS_RUNTIME_TOKEN reach `uses:` steps only, so
+    # the action exporting them into GITHUB_ENV is what makes `type=gha`
+    # reachable from a `run:` step at all, and the docker-container builder is
+    # what makes the cache exportable. Both must sit in the lane that builds the
+    # Alloy image, ahead of the build step, or the cache is silently skipped.
+    alloy_lane_steps = jobs["alloy-generator-test"]["steps"]
+    cache_actions = (
+        "crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0",
+        "docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0",
+    )
+    build_step = next(
+        index
+        for index, step in enumerate(alloy_lane_steps)
+        if str(step.get("run", "")).startswith("just test-alloy-image")
+    )
+    for pinned in cache_actions:
+        if pinned not in caller:
+            fail(f"the Actions layer cache must stay pinned to {pinned}")
+        action = pinned.split(" #", 1)[0]
+        positions = [
+            index
+            for index, step in enumerate(alloy_lane_steps)
+            if step.get("uses") == action
+        ]
+        if not positions:
+            fail(f"{action} must run in the lane that builds the Alloy image")
+        elif positions[0] > build_step:
+            fail(f"{action} must run before the Alloy image build, not after it")
+
     for required in (
         "BASHIO_BIN=/usr/bin/bashio",
         "grafana_pdc/Dockerfile",

@@ -30,32 +30,103 @@ gen() { env "$@" bash "$GEN"; }
 # brace in column 0. Used to assert a secret is referenced in the right block only.
 block() { awk -v start="$2" 'index($0,start)==1{f=1} f{print} f&&/^}$/{exit}' <<<"$1"; }
 
-# Validate Alloy config syntax+semantics via Docker, if available.
+# --- Alloy config validation --------------------------------------------------
+# Every fixture's generated config is queued here and validated in one bounded
+# parallel batch at the end of the run.
+#
+# `alloy validate` loads and type-checks a config without starting a single
+# component, so the verdict is its exit status. The check it replaces ran
+# `alloy run --server.http.listen-addr=0.0.0.0:0`: port 0 makes memberlist abort
+# with "missing real listen port" ~0.5s in, before the config is ever read, and
+# that string was absent from the stderr allowlist the check keyed off - so every
+# fixture "passed" without being loaded, including one naming a component that
+# does not exist. An exit status needs no allowlist kept in step with Alloy's
+# error strings, and cannot pass a config that was never parsed.
+#
+# Nothing starts, so nothing dials the network: the fleet fixtures point at an
+# unresolvable .invalid host on purpose and validate never resolves it. The grep
+# that used to drop DNS and connection noise went with the probe.
+#
+# `--stability.level` is left at its default of generally-available to match the
+# App's own default in s6-rc.d/alloy/run. A config the shipped default would
+# refuse to load must not pass here.
+#
+# Docker dominates the runtime, so fixtures run concurrently. A counter
+# incremented inside a backgrounded subshell is lost at the subshell boundary, so
+# each worker writes its verdicts into its own slot directory and the parent
+# tallies them in queue order after every worker has finished - which is also what
+# keeps the output ordered rather than interleaved.
+VALIDATE_JOBS="${VALIDATE_JOBS:-6}"
+VALIDATE_QUEUE="$(mktemp -d)"
+VALIDATE_COUNT=0
+trap 'rm -rf "$VALIDATE_QUEUE"' EXIT
+HAVE_DOCKER=1
+command -v docker >/dev/null 2>&1 || HAVE_DOCKER=0
+
+# Queue one generated config for validation: `validate_alloy "$OUT" <name>`.
 validate_alloy() {
-  local cfg="$1" name="$2"
-  if ! command -v docker >/dev/null 2>&1; then echo "  ⚠ docker absent — skipping Alloy validation for $name"; return 0; fi
-  local tmp; tmp="$(mktemp -d)"; printf '%s\n' "$cfg" > "$tmp/config.alloy"
-  TESTS=$((TESTS+1))
-  # `alloy fmt` parses River grammar; non-zero on syntax error.
-  if docker run --rm -v "$tmp:/c:ro" "$ALLOY_IMAGE" fmt /c/config.alloy >/dev/null 2>"$tmp/err"; then
-    pass "alloy fmt OK ($name)"
-  else
-    fail "alloy fmt FAILED ($name): $(cat "$tmp/err")"
+  if [ "$HAVE_DOCKER" -eq 0 ]; then
+    echo "  ⚠ docker absent — skipping Alloy validation for $2"
+    return 0
   fi
-  # `alloy run` for ~4s catches semantic errors (unknown component/arg/function).
-  # Expect it NOT to print a config load error; the timeout itself is success.
-  TESTS=$((TESTS+1))
-  local out
-  out="$(docker run --rm -v "$tmp:/c:ro" "$ALLOY_IMAGE" run --server.http.listen-addr=0.0.0.0:0 --storage.path=/tmp/d /c/config.alloy 2>&1 & p=$!; sleep 4; kill $p 2>/dev/null; wait $p 2>/dev/null)"
-  # Drop network noise: the fleet cases deliberately point at an unresolvable host, so
-  # remotecfg polling fails. Config errors are reported at load time without these strings.
-  out="$(grep -viE 'no such host|connection refused|dial tcp|context deadline exceeded' <<<"$out" || true)"
-  if grep -qiE 'error during the initial|could not perform|failed to (build|load)|unrecognized|parse error|expected .* but got|invalid (argument|expression)' <<<"$out"; then
-    fail "alloy run reported config error ($name): $(grep -iE 'error|expected|invalid' <<<"$out" | head -3)"
+  local slot="$VALIDATE_QUEUE/$VALIDATE_COUNT"
+  mkdir -p "$slot"
+  printf '%s\n' "$1" >"$slot/config.alloy"
+  printf '%s\n' "$2" >"$slot/name"
+  VALIDATE_COUNT=$((VALIDATE_COUNT + 1))
+}
+
+# Validate one queued fixture. Runs backgrounded, so it reports through files in
+# its own slot; it cannot reach TESTS/FAILS in the parent.
+validate_alloy_worker() {
+  local slot="$1"
+  # `alloy fmt` parses River grammar; non-zero on a syntax error.
+  if docker run --rm -v "$slot:/c:ro" "$ALLOY_IMAGE" fmt /c/config.alloy >/dev/null 2>"$slot/fmt.err"; then
+    echo ok >"$slot/fmt.verdict"
   else
-    pass "alloy run loaded config ($name)"
+    echo fail >"$slot/fmt.verdict"
   fi
-  rm -rf "$tmp"
+  # `alloy validate` additionally resolves every component, argument and function.
+  if docker run --rm -v "$slot:/c:ro" "$ALLOY_IMAGE" validate /c/config.alloy >"$slot/validate.err" 2>&1; then
+    echo ok >"$slot/validate.verdict"
+  else
+    echo fail >"$slot/validate.verdict"
+  fi
+}
+
+# Drain the queue VALIDATE_JOBS at a time, then report the verdicts in queue order.
+run_queued_validations() {
+  [ "$VALIDATE_COUNT" -gt 0 ] || return 0
+  echo ""
+  echo "== Alloy config validation ($VALIDATE_COUNT fixtures, $VALIDATE_JOBS in parallel) =="
+  local i=0 running=0
+  while [ "$i" -lt "$VALIDATE_COUNT" ]; do
+    validate_alloy_worker "$VALIDATE_QUEUE/$i" &
+    running=$((running + 1))
+    i=$((i + 1))
+    if [ "$running" -ge "$VALIDATE_JOBS" ]; then wait; running=0; fi
+  done
+  wait
+  i=0
+  while [ "$i" -lt "$VALIDATE_COUNT" ]; do
+    local slot="$VALIDATE_QUEUE/$i" name
+    name="$(cat "$slot/name")"
+    TESTS=$((TESTS + 1))
+    if [ "$(cat "$slot/fmt.verdict" 2>/dev/null)" = ok ]; then
+      pass "alloy fmt OK ($name)"
+    else
+      fail "alloy fmt FAILED ($name):"
+      sed 's/^/      /' "$slot/fmt.err"
+    fi
+    TESTS=$((TESTS + 1))
+    if [ "$(cat "$slot/validate.verdict" 2>/dev/null)" = ok ]; then
+      pass "alloy validate OK ($name)"
+    else
+      fail "alloy validate FAILED ($name):"
+      sed 's/^/      /' "$slot/validate.err"
+    fi
+    i=$((i + 1))
+  done
 }
 
 echo "== generator shebang (must NOT be with-contenv: it resets env, wiping exported options) =="
@@ -354,6 +425,8 @@ OUT="$(gen LOG_LEVEL=info LOKI_URL=https://logs.example.net/loki/api/v1/push LOK
 check_absent "$OUT" 'SENTINELLOKISECRET'
 check_absent "$OUT" 'SENTINELPROMSECRET'
 check_absent "$OUT" 'SENTINELFLEETSECRET'
+
+run_queued_validations
 
 echo ""
 echo "== RESULTS: $((TESTS-FAILS))/$TESTS checks passed =="
