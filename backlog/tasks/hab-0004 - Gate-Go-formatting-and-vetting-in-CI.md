@@ -4,7 +4,9 @@ title: Gate Go formatting and vetting in CI
 status: To Do
 assignee: []
 created_date: '2026-08-17 14:19'
-labels: []
+updated_date: '2026-08-29 14:54'
+labels:
+  - 'unit:repo'
 dependencies: []
 priority: medium
 type: chore

@@ -6,10 +6,9 @@ title: >-
 status: Done
 assignee: []
 created_date: '2026-08-18 16:58'
-updated_date: '2026-08-18 17:12'
+updated_date: '2026-08-29 14:54'
 labels:
-  - alloy
-  - fleet
+  - 'unit:alloy'
 dependencies: []
 priority: medium
 type: bug

@@ -9,7 +9,17 @@ definition_of_done:
   - >-
     Fast subset while iterating (not the gate):
     just fmt-check && just lint && just gen-check && just test-repo
-labels: []
+# Backlog.md has no custom fields, and milestones are already the wave, so the
+# `unit:` labels are how a task says which of the three work units owns it. They
+# are a declared vocabulary, not a constraint: the CLI accepts any label, so a
+# typo lands silently. Deliberately no unit:grafana-sm - both Synthetic
+# Monitoring variants are generated and belong to unit:sm-shared.
+labels:
+  - "unit:alloy"
+  - "unit:grafana-pdc"
+  - "unit:sm-shared"
+  - "unit:repo"
+  - "needs-triage"
 date_format: yyyy-mm-dd
 max_column_width: 20
 auto_open_browser: true

@@ -4,8 +4,9 @@ title: Finish BroTEK-Solutions onboarding to agent-docs drift detection
 status: Done
 assignee: []
 created_date: '2026-08-17 12:11'
-updated_date: '2026-08-17 13:10'
-labels: []
+updated_date: '2026-08-29 14:54'
+labels:
+  - 'unit:repo'
 dependencies: []
 ordinal: 1000
 ---

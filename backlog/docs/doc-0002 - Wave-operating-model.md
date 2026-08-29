@@ -3,7 +3,7 @@ id: doc-0002
 title: Wave operating model
 type: guide
 created_date: '2026-08-17 12:03'
-updated_date: '2026-08-17 12:45'
+updated_date: '2026-08-29 14:54'
 ---
 # Wave operating model — ha-addons
 
@@ -155,3 +155,10 @@ protocol's run-end contract, this repo's specifics:
 - A task discovered mid-run gets the `needs-triage` label. An Alloy task additionally gets a label
   naming the configuration modes it touches, because that is what the next lane needs to know before
   it can scope its own acceptance criteria.
+- **Every task carries a `unit:` label** — `unit:alloy`, `unit:grafana-pdc`, `unit:sm-shared`,
+  `unit:repo` — matching the ownership map above, so a lane's queue is
+  `backlog task list -l unit:<unit> -s "To Do" --plain`. There is no label for either generated
+  Synthetic Monitoring variant, for the same reason neither is ever a lane. `AGENTS.md` holds the
+  full rule.
+- A task that spans units carries one label per unit, set by repeating `-l` inside a single
+  `backlog task edit` call. A second call replaces what the first set; `--add-label` appends.

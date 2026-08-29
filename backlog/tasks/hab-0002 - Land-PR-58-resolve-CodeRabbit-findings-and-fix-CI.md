@@ -4,8 +4,12 @@ title: 'Land PR #58: resolve CodeRabbit findings and fix CI'
 status: Done
 assignee: []
 created_date: '2026-08-17 13:24'
-updated_date: '2026-08-17 13:56'
-labels: []
+updated_date: '2026-08-29 14:54'
+labels:
+  - 'unit:alloy'
+  - 'unit:grafana-pdc'
+  - 'unit:sm-shared'
+  - 'unit:repo'
 dependencies: []
 ordinal: 2000
 ---

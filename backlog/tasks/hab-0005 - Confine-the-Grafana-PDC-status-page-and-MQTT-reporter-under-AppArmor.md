@@ -4,7 +4,9 @@ title: Confine the Grafana PDC status page and MQTT reporter under AppArmor
 status: To Do
 assignee: []
 created_date: '2026-08-17 14:20'
-labels: []
+updated_date: '2026-08-29 14:54'
+labels:
+  - 'unit:grafana-pdc'
 dependencies: []
 priority: high
 type: enhancement

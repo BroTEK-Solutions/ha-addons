@@ -4,7 +4,9 @@ title: Report every App linter failure in one Repository quality run
 status: To Do
 assignee: []
 created_date: '2026-08-17 14:20'
-labels: []
+updated_date: '2026-08-29 14:54'
+labels:
+  - 'unit:repo'
 dependencies: []
 priority: low
 type: chore

@@ -4,9 +4,9 @@ title: Migrate the repo task surface to just and retire Makefiles and ad-hoc scr
 status: Done
 assignee: []
 created_date: '2026-08-28 19:27'
-updated_date: '2026-08-29 14:36'
+updated_date: '2026-08-29 14:54'
 labels:
-  - 'wave:2-fleet'
+  - 'unit:repo'
 dependencies: []
 priority: medium
 type: chore
