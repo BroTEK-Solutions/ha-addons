@@ -111,18 +111,46 @@ gen-check:
 [group('check')]
 test: test-repo test-pdc test-alloy test-sm
 
+# Every leg is timed because this recipe measures ~3s locally and ~21s in CI,
+# and the recipe is one workflow step so GitHub reports no breakdown inside it.
+# The timings go to stderr, one line per leg plus a total, so a leg that starts
+# costing real time is visible without anyone having to go looking.
+#
+# `date +%s%N` is GNU-only; BSD date leaves the literal N, which is what the
+# case below detects so this reports whole seconds on macOS rather than garbage.
+
 # Run repository contract tests, the shared validator library, and the MQTT reporter.
 [group('check')]
 [no-exit-message]
+[script('bash')]
 test-repo:
-    bash tests/shared_validate_lib_test.sh
-    (cd shared/reporter && go test ./...)
-    uv run --locked tests/app_metadata_contract_test.py
-    uv run --locked tests/app_contract_test.py
-    python3 tests/app_version_changed_test.py
-    python3 tests/renovate_config_contract_test.py
-    uv run --locked tests/repository_workflow_contract_test.py
-    uv run --locked tests/synthetic_monitoring_variants_test.py
+    set -euo pipefail
+    now_ms() {
+        local t
+        t="$(date +%s%N 2>/dev/null || true)"
+        case "${t}" in
+            ''|*N) echo $(( $(date +%s) * 1000 )) ;;
+            *) echo $(( t / 1000000 )) ;;
+        esac
+    }
+    started="$(now_ms)"
+    step() {
+        local begin label
+        label="$1"
+        shift
+        begin="$(now_ms)"
+        "$@"
+        printf 'timing %6sms  %s\n' "$(( $(now_ms) - begin ))" "${label}" >&2
+    }
+    step 'shared validator library' bash tests/shared_validate_lib_test.sh
+    step 'go test shared/reporter' bash -c '(cd shared/reporter && go test ./...)'
+    step 'app_metadata_contract' uv run --locked tests/app_metadata_contract_test.py
+    step 'app_contract' uv run --locked tests/app_contract_test.py
+    step 'app_version_changed' python3 tests/app_version_changed_test.py
+    step 'renovate_config_contract' python3 tests/renovate_config_contract_test.py
+    step 'repository_workflow_contract' uv run --locked tests/repository_workflow_contract_test.py
+    step 'synthetic_monitoring_variants' uv run --locked tests/synthetic_monitoring_variants_test.py
+    printf 'timing %6sms  TOTAL test-repo\n' "$(( $(now_ms) - started ))" >&2
 
 # Run Grafana PDC's schema, image-contract, and status-page tests.
 [group('check')]
