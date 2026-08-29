@@ -140,7 +140,7 @@ test-pdc-image:
         test -n "$ha_base"; \
         docker run --rm -e BASHIO_BIN=/usr/bin/bashio -v "${PWD}:/w" -w /w \
         "$ha_base" bash grafana_pdc/tests/service.test.sh
-    docker build --tag local/ha-grafana-pdc:smoke grafana_pdc
+    just image grafana_pdc local/ha-grafana-pdc:smoke
     bash grafana_pdc/tests/image-smoke.test.sh local/ha-grafana-pdc:smoke
 
 # Run Alloy's schema, image-contract, UI, browser-state, and generator tests.
@@ -157,7 +157,7 @@ test-alloy:
 [group('check')]
 [no-exit-message]
 test-alloy-image:
-    docker build --tag local/ha-alloy:smoke alloy
+    just image alloy local/ha-alloy:smoke
     bash alloy/tests/image-smoke.test.sh local/ha-alloy:smoke
 
 # Run Alloy's initialization-service test inside its pinned base image.
@@ -179,8 +179,8 @@ test-sm:
 [group('check')]
 [no-exit-message]
 test-sm-image:
-    docker build --tag local/ha-grafana-sm:smoke grafana_sm
-    docker build --tag local/ha-grafana-sm-browser:smoke grafana_sm_browser
+    just image grafana_sm local/ha-grafana-sm:smoke
+    just image grafana_sm_browser local/ha-grafana-sm-browser:smoke
     python3 tests/synthetic_monitoring_image_smoke_test.py local/ha-grafana-sm:smoke standard
     python3 tests/synthetic_monitoring_image_smoke_test.py local/ha-grafana-sm-browser:smoke browser
 
@@ -198,10 +198,44 @@ ci: check test-pdc-image test-alloy-image test-alloy-init test-sm-image
 build:
     for module in {{ go_source_modules }}; do (cd "$module" && go build ./...); done
 
-# Build one App's complete image locally.
+# Every image build in this file goes through the recipe below, so the layer
+# cache is configured in exactly one place.
+#
+# BuildKit's `type=gha` cache backend reads the Actions cache service endpoint
+# and credentials out of ACTIONS_RESULTS_URL and ACTIONS_RUNTIME_TOKEN. GitHub
+# injects those into `uses:` steps only, never into a `run:` step, so
+# .github/workflows/builder.yaml exports them with crazy-max/ghaction-github-runtime
+# and supplies a docker-container builder with docker/setup-buildx-action, because
+# the default `docker` driver does not support every cache export backend.
+# Neither variable exists on a developer laptop, so when either one is missing
+# this runs the same plain `docker build` it always has. Do not collapse the two
+# branches into one buildx call: the fallback must not depend on the buildx
+# plugin being installed.
+#
+# `--load` is what puts the result in the daemon's image store. Without it a
+# docker-container build exports to the cache only and every smoke test that
+# follows fails on a missing image.
+#
+# `ignore-error=true` keeps a cache-export failure from failing a build that
+# otherwise succeeded. The Actions cache is a shared 10GB budget evicted LRU, so
+# a write can fail for reasons that have nothing to do with this image.
+#
+# `just --list` shows only the last line of a comment block, so the recipe's own
+# description has to be the line directly above it.
+
+# Build one App's complete image locally, through the CI cache when CI offers one.
 [group('build')]
+[script('bash')]
 image app tag="local/ha-dev:smoke":
-    docker build --tag '{{ tag }}' '{{ app }}'
+    set -euo pipefail
+    if [ -n "${ACTIONS_RUNTIME_TOKEN:-}" ] && [ -n "${ACTIONS_RESULTS_URL:-}" ]; then
+        docker buildx build --load \
+            --cache-from 'type=gha,scope={{ app }}' \
+            --cache-to 'type=gha,mode=max,ignore-error=true,scope={{ app }}' \
+            --tag '{{ tag }}' '{{ app }}'
+    else
+        docker build --tag '{{ tag }}' '{{ app }}'
+    fi
 
 # Delete the local `go build` outputs listed in .gitignore.
 [group('dev')]
