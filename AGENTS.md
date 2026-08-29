@@ -122,6 +122,19 @@ on demand with `backlog doc view <id> --plain`, so a long one costs nothing unti
   | `unit:sm-shared` | `synthetic_monitoring_shared/` and both generated variants |
   | `unit:repo` | CI, `renovate.json`, `.yamllint`, `trivy.yaml`, `tests/`, `scripts/`, the tracker |
 
+  **Prospective units are tracked here but most do not ship here.** Only `unit:openbao-secrets`
+  becomes a directory in this repo; every other row below is a HACS custom integration delivered
+  from its own new repository, so picking one up never means adding a directory here:
+
+  | Label | Deliverable | Ships as |
+  |---|---|---|
+  | `unit:openbao-secrets` | OpenBao/Vault secrets renderer (HAB-0013) | an App in this repo |
+  | `unit:grafana-irm` | Grafana IRM / OnCall (HAB-0012) | its own HACS repository |
+  | `unit:poly-phone` | Poly Edge E / VVX phones (HAB-0014) | its own HACS repository |
+  | `unit:arcane` | Arcane container management (HAB-0017) | its own HACS repository |
+  | `unit:traefik` | Traefik router and service state (HAB-0016) | its own HACS repository |
+  | `unit:ntp` | NTP appliance observability (HAB-0015) | its own HACS repository |
+
   There is deliberately no `unit:grafana-sm` or `unit:grafana-sm-browser`: the variants are generated
   and are never a lane of their own. A task that genuinely spans units carries one label per unit —
   repeat `-l` *inside a single call*, because a second `backlog task edit --label` replaces the
