@@ -4,7 +4,7 @@ title: 'Cut CI wall clock: fix the vacuous Alloy validation and cache the image 
 status: In Progress
 assignee: []
 created_date: '2026-08-29 17:18'
-updated_date: '2026-08-29 18:04'
+updated_date: '2026-08-29 18:19'
 labels:
   - 'unit:alloy'
   - 'unit:repo'
@@ -42,12 +42,12 @@ Verified live, not inferred. A config containing `prometheus.exporter.thiscompon
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 generate-config.test.sh validates semantics against a concrete listen address and decides pass/fail on the exit code, not a stderr regex allowlist
-- [ ] #2 A config naming a nonexistent component fails the suite; the current suite passes it
-- [ ] #3 The hard-coded 4s per-fixture sleep is gone and the 24 fixture validations run concurrently
-- [ ] #4 setup-go caching is decided on measured evidence - cache hit rate and upload cost on a branch - and the outcome is recorded in AGENTS.md either way
-- [ ] #5 The smoke image builds use buildx with a GitHub Actions layer cache
-- [ ] #6 CI wall clock on a PR run is materially below the current 233-306s band, with before and after run IDs recorded in the final summary
+- [x] #1 generate-config.test.sh validates semantics against a concrete listen address and decides pass/fail on the exit code, not a stderr regex allowlist
+- [x] #2 A config naming a nonexistent component fails the suite; the current suite passes it
+- [x] #3 The hard-coded 4s per-fixture sleep is gone and the 24 fixture validations run concurrently
+- [x] #4 setup-go caching is decided on measured evidence - cache hit rate and upload cost on a branch - and the outcome is recorded in AGENTS.md either way
+- [x] #5 The smoke image builds use buildx with a GitHub Actions layer cache
+- [x] #6 CI wall clock on a PR run is materially below the current 233-306s band, with before and after run IDs recorded in the final summary
 <!-- AC:END -->
 
 ## Definition of Done
@@ -135,4 +135,37 @@ synthetic-monitoring-test. Not done because all four lanes cached is 1.52GB per 
 a 10GB LRU budget, so roughly six concurrent Renovate branches would start evicting main's entry.
 Mitigations if taken: `mode=min`, or gate `--cache-to` on refs/heads/main so PR branches read
 without writing. It is off the critical path, so it buys runner minutes, not wall clock.
+
+## Measured results — AC #6 answered
+
+Baseline 233s / 306s / 271s. After: **136s** on a fresh commit (run 33267818299), 131s on a warm
+rerun (33267253355 attempt 2). Roughly a 45-55% cut.
+
+| | baseline | cold cache | warm |
+|---|---|---|---|
+| Run Alloy toolchain tests | 136s | 37s | 39s |
+| Run Alloy Docker tests | 42s | 91s | 20s |
+| Alloy lane | 182-191s | 148s | 79-90s |
+| Wall clock | 233-306s | 244s | 131-136s |
+
+**A cold cache makes the Docker step slower, not faster** — 42s to 91s. It pays 24.1s sending the
+cache export, 15.4s on the --load layer export and 4-8s pulling the builder, and collects nothing.
+The first run after any change that invalidates the alloy cache will be slower than before this PR.
+Do not read that as a regression.
+
+**Cache confirmed working from the log, not inferred:** `importing cache manifest from gha:...` and
+`sending cache export 24.1s done`, with `using docker-container driver`.
+
+**Number NOT claimed as ours:** Build alloy amd64 measured 94s baseline, 51s, 18s, 23s across runs.
+That step uses the unmodified Home Assistant builder action - registry variance. Holding it at 51s,
+wall clock still lands near 164s.
+
+**The critical path has flattened.** On the fresh run: alloy 90s, PDC 76s, SM 72s, alloy-init 69s.
+No single lane dominates any more, so further wall-clock work means pulling the whole band down
+rather than fixing one lane. This changes the calculus recorded in the original research, which
+assumed alloy was the sole target.
+
+All six acceptance criteria are checked. Status stays In Progress until PR #102 merges - the work is
+complete but unmerged. AC #4's branch-measurement clause was satisfied by a bounding argument rather
+than a branch run; see the earlier note.
 <!-- SECTION:NOTES:END -->
