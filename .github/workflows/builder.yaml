@@ -415,6 +415,8 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
+      id-token: write # Passed to the reusable workflow so it can mint a broker token.
     uses: ./.github/workflows/release.yaml
     secrets:
-      RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+      TS_WIF_CLIENT_ID: ${{ secrets.TS_WIF_CLIENT_ID }}
+      TS_WIF_AUDIENCE: ${{ secrets.TS_WIF_AUDIENCE }}
