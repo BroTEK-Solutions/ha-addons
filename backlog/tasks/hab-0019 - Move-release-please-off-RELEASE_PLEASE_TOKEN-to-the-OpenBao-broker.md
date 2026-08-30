@@ -1,10 +1,10 @@
 ---
 id: HAB-0019
 title: Move release-please off RELEASE_PLEASE_TOKEN to the OpenBao broker
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-08-29 23:19'
-updated_date: '2026-08-30 08:01'
+updated_date: '2026-08-30 08:18'
 labels:
   - 'unit:repo'
 dependencies: []
@@ -83,4 +83,32 @@ values matched on `^[A-Z_]*=` while the file uses `export NAME=`, so the fallbac
 full. **TS_API_KEY, TS_OAUTH_CLIENT_SECRET and GC_OTLP_TOKEN reached the terminal** and therefore the
 session transcript, which is committed to chat-personal. Rotation is Rob's call and is NOT done.
 Lesson: redact by construction (`grep -o '^[^=]*='`) rather than by a pattern that fails open.
+
+## DONE end to end (2026-08-30)
+
+PR #108 merged as 5d15990. Proven on the first push to main, run 33301024423, from the mint step's
+own output:
+
+    minted for repositories: ['ha-addons']
+    ✔ Building candidate release pull request for path: alloy
+
+The broker minted a repo-scoped token and release-please authenticated with it.
+`RELEASE_PLEASE_TOKEN` is deleted; the repo now holds only `TS_WIF_CLIENT_ID` and
+`TS_WIF_AUDIENCE`, which are identifiers. An org-wide sweep found no other copy.
+
+**The policy I had transcribed was WRONG and the self-verifying step caught it.** I wrote
+`capabilities = ["read"]`; every working consumer uses `["create", "read", "update"]`. Reading
+`gha-release-please-autopi-ha` before writing the new policy is what found it. Per the runbook this
+would have failed as a permission error rather than a not-found, reading like a broken policy rather
+than a wrong capability list.
+
+Both new objects were structurally diffed against `release-please-autopi-ha`, with **non-empty reads
+asserted before diffing** - the runbook records a false pass from diffing two empty outputs.
+
+Live values for a future session: permission set `release-please-ha-addons`, policy
+`gha-release-please-ha-addons`, role `release-please-ha-addons`, installation 152180795, owner
+311350022, repo 1318146054, Tailscale credential TBkeySVEB121CNTRL-kfnHs5W6z321CNTRL.
+
+**Still open, Rob's call:** rotate `TS_API_KEY`, `TS_OAUTH_CLIENT_SECRET` and `GC_OTLP_TOKEN` after
+the transcript exposure recorded above. Not done.
 <!-- SECTION:NOTES:END -->
