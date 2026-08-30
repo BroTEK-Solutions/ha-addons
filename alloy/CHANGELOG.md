@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.4.2](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.4.1...alloy-v2.4.2) (2026-08-30)
+
+
+### Performance Improvements
+
+* **alloy:** read every setting in one jq pass ([#106](https://github.com/BroTEK-Solutions/ha-addons/issues/106)) ([98a677e](https://github.com/BroTEK-Solutions/ha-addons/commit/98a677e851067e8a06e6973daaa555dc4f41526f))
+* **ci:** cut the two slowest lanes and cache Go builds ([#104](https://github.com/BroTEK-Solutions/ha-addons/issues/104)) ([b47dad4](https://github.com/BroTEK-Solutions/ha-addons/commit/b47dad433df20a77b0ad8d072a856cd88f3cd583))
+
 ## [2.4.1](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.4.0...alloy-v2.4.1) (2026-08-29)
 
 

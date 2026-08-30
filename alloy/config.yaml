@@ -1,5 +1,5 @@
 name: Grafana Alloy
-version: 2.4.1
+version: 2.4.2
 slug: alloy
 description: >-
   Ship Home Assistant OS logs, metrics, traces and profiles with Grafana Alloy,

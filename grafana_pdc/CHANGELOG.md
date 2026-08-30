@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.2.0...grafana-pdc-v1.2.1) (2026-08-30)
+
+
+### Performance Improvements
+
+* **ci:** cut the two slowest lanes and cache Go builds ([#104](https://github.com/BroTEK-Solutions/ha-addons/issues/104)) ([b47dad4](https://github.com/BroTEK-Solutions/ha-addons/commit/b47dad433df20a77b0ad8d072a856cd88f3cd583))
+
 ## [1.2.0](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.1.1...grafana-pdc-v1.2.0) (2026-08-20)
 
 
