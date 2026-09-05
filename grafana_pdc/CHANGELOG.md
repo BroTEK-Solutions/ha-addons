@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.2.1...grafana-pdc-v1.2.2) (2026-09-05)
+
+
+### Bug Fixes
+
+* **deps:** update grafana/pdc-agent docker tag to v0.0.64 ([#112](https://github.com/BroTEK-Solutions/ha-addons/issues/112)) ([f211d83](https://github.com/BroTEK-Solutions/ha-addons/commit/f211d838c3baf403bff3a7add44fb7ce68cb0838))
+
 ## [1.2.1](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.2.0...grafana-pdc-v1.2.1) (2026-08-30)
 
 
