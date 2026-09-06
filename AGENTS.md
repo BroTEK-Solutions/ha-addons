@@ -11,6 +11,8 @@ CI-equivalent gate and adds the Docker-backed test legs. Discover recipes with `
 `just --show <recipe>` shows what one actually runs.
 
 - Prefer `just <recipe>` over an underlying tool. Run `just` with stdin from `/dev/null`.
+- A recipe marked `[confirm]` is destructive: ask before running one, and never pass `--yes` or
+  `JUST_YES=1`.
 - `just lint` owns the ShellCheck file list explicitly: the s6 service scripts have no extension, so
   they cannot be globbed. A new shell script must be added to that list by hand.
 - A command that is not exposed gets a documented `[group(...)]` recipe rather than a direct
