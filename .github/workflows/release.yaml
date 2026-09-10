@@ -34,7 +34,7 @@ jobs:
       # not a problem with the commit.
       - name: Mint a scoped release token
         id: bao
-        uses: rknightion/.github/.github/actions/broker-token@79a72d215e806c12876526ff30fbd524250e1bf9 # v1.17.1
+        uses: rknightion/.github/.github/actions/broker-token@81fc55183265da0b21e92e690f70d679b20ed822 # v1.21.0
         with:
           permission-set: release-please-ha-addons
           tailscale-client-id: ${{ secrets.TS_WIF_CLIENT_ID }}
