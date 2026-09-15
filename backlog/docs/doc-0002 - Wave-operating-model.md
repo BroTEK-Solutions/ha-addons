@@ -3,7 +3,7 @@ id: doc-0002
 title: Wave operating model
 type: guide
 created_date: '2026-08-17 12:03'
-updated_date: '2026-08-29 14:54'
+updated_date: '2026-09-15 12:10'
 ---
 # Wave operating model — ha-addons
 
@@ -126,10 +126,12 @@ that file it will re-flatten them, and the gate will fail — reapply the foldin
 fails a reintroduced floating `@main`, and the pin and the comment must move together or Renovate's
 update flow breaks. `.github/workflows/security.yml` is the reference.
 
-**This repository is `BroTEK-Solutions`, which is outside the org list that gets direct pushes to
-`main`.** Every change lands as a branch and a pull request, no exceptions — the standing "push
-straight to main on Rob's own repos" rule does not reach here. Branch naming follows the existing
-history: `feat/`, `fix/`, `chore/`, or `codex/<topic>` for agent work.
+**This repository is `BroTEK-Solutions`, which is outside the general direct-push owner list.**
+Code and mixed changes use a branch and pull request. The repository's `AGENTS.md` explicitly allows
+a tracker-only commit straight to `main`: every path must be under `backlog/` or be
+`backlog.config.yml`. Preserve that narrow exception; one source file in the commit requires the
+normal branch/PR flow. Branch naming follows the existing history: `feat/`, `fix/`, `chore/`, or
+`codex/<topic>` for agent work.
 
 ## Exclusive resources
 
