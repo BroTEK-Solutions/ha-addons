@@ -14,7 +14,9 @@
 # The per-arch packages (amd64-app-*, aarch64-app-*) are listed deliberately.
 # They are SEPARATE packages, not children of the merged index, so the action
 # cannot reach them via the merged package and they would otherwise never be
-# swept at all.
+# swept at all. amd64-addon-alloy/aarch64-addon-alloy are the pre-rename
+# (addon- -> app-) strays, still linked to this repo; both carry protected
+# semver tags so nothing of theirs is deletable, but they join the orphan sweep.
 name: ghcr-cleanup
 
 on:
@@ -42,6 +44,6 @@ jobs:
       packages: write # delete package versions
     uses: rknightion/.github/.github/workflows/ghcr-cleanup.yml@e6d074e42fed0c74b1e9936637b7e2fb21403779 # v1.22.0
     with:
-      packages: "app-alloy,amd64-app-alloy,aarch64-app-alloy,app-grafana-pdc,amd64-app-grafana-pdc,aarch64-app-grafana-pdc,app-grafana-sm,amd64-app-grafana-sm,aarch64-app-grafana-sm,app-grafana-sm-browser,amd64-app-grafana-sm-browser,aarch64-app-grafana-sm-browser"
+      packages: "app-alloy,amd64-addon-alloy,aarch64-addon-alloy,amd64-app-alloy,aarch64-app-alloy,app-grafana-pdc,amd64-app-grafana-pdc,aarch64-app-grafana-pdc,app-grafana-sm,amd64-app-grafana-sm,aarch64-app-grafana-sm,app-grafana-sm-browser,amd64-app-grafana-sm-browser,aarch64-app-grafana-sm-browser"
       # Scheduled runs prune for real; a manual dispatch defaults to dry-run.
       dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run || false }}
