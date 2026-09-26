@@ -42,7 +42,7 @@ jobs:
     permissions:
       contents: read
       packages: write # delete package versions
-    uses: rknightion/.github/.github/workflows/ghcr-cleanup.yml@e6d074e42fed0c74b1e9936637b7e2fb21403779 # v1.22.0
+    uses: rknightion/.github/.github/workflows/ghcr-cleanup.yml@8d14adaa295c4a7670b1d4e744b070955b710598 # v1.24.0
     with:
       packages: "app-alloy,amd64-addon-alloy,aarch64-addon-alloy,amd64-app-alloy,aarch64-app-alloy,app-grafana-pdc,amd64-app-grafana-pdc,aarch64-app-grafana-pdc,app-grafana-sm,amd64-app-grafana-sm,aarch64-app-grafana-sm,app-grafana-sm-browser,amd64-app-grafana-sm-browser,aarch64-app-grafana-sm-browser"
       # Scheduled runs prune for real; a manual dispatch defaults to dry-run.
