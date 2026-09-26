@@ -260,7 +260,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read # Required by changed-files for pull request diffs.
     outputs:
       changed: ${{ steps.filter.outputs.changed }}
       changed_apps: ${{ steps.filter.outputs.changed_apps }}
@@ -271,9 +270,29 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # Plain git, no third-party action: tj-actions/changed-files is off the fleet
+      # Actions allowlist (compromised March 2025). Same space-separated shape as its
+      # all_changed_files output. A PR diffs against its merge base; a push against
+      # the previous tip, or lists every file when there is none (a new branch).
       - name: Read changed files
         id: changed_files
-        uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62 # v47
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            files=$(git diff --name-only "${PR_BASE_SHA}...${PR_HEAD_SHA}")
+          elif [[ -n "$BEFORE_SHA" && ! "$BEFORE_SHA" =~ ^0+$ ]] && git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+            files=$(git diff --name-only "$BEFORE_SHA" "$HEAD_SHA")
+          else
+            files=$(git ls-files)
+          fi
+          echo "all_changed_files=$(echo "$files" | tr '\n' ' ' | sed 's/ *$//')" >> "$GITHUB_OUTPUT"
 
       - name: Find App directories
         id: apps
