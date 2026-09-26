@@ -3,10 +3,10 @@ id: HAB-0021
 title: >-
   Replace tj-actions/changed-files in builder.yaml before the fleet Actions
   allowlist lands
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-26 15:37'
-updated_date: '2026-09-26 15:37'
+updated_date: '2026-09-26 18:49'
 labels:
   - 'unit:repo'
 dependencies: []
@@ -32,7 +32,7 @@ This is a BroTEK-Solutions repo, so it lands via a branch and PR, not a push to 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 builder.yaml has no tj-actions reference and zizmor/actionlint pass
+- [x] #1 builder.yaml has no tj-actions reference and zizmor/actionlint pass
 - [ ] #2 A PR that touches exactly one App builds only that App; a push to main behaves as before
 <!-- AC:END -->
 
@@ -41,3 +41,9 @@ This is a BroTEK-Solutions repo, so it lands via a branch and PR, not a push to 
 - [ ] #1 just check
 - [ ] #2 Fast subset while iterating (not the gate): just fmt-check && just lint && just gen-check && just test-repo
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Landed via PR #122 (squash 7d01a4d): Read changed files is a plain git diff step; init drops pull-requests: read. PR run built every App as expected for a builder.yaml change. AC #2's one-App PR path is still to be seen on the next single-App PR.
+<!-- SECTION:NOTES:END -->
