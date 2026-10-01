@@ -10,7 +10,7 @@ WORKDIR /src
 COPY ui/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -buildid=" -o /out/grafana-pdc-ui .
 
-FROM grafana/pdc-agent:0.0.65@sha256:ce14c6c3d7eb1b288e538c0a590730914c2fea97d6fe54a18f32b417e7b56297 AS pdc-source
+FROM grafana/pdc-agent:0.0.66@sha256:768a5dba4d6472a5bcadd009860ac8f723a865e3562e388b402207164962e2ef AS pdc-source
 
 FROM ghcr.io/home-assistant/base:3.24@sha256:93ef607824e3f27e868f11b10938283a98bf880ed57bcf8eaa81c6c2d521f6f5
 
