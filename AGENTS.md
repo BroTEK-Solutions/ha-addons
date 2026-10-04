@@ -7,16 +7,10 @@ user-facing description; this file is the contributor contract.
 ## Task interface
 
 `just check` is the toolchain-only pre-commit gate and must pass before you commit. `just ci` is the
-CI-equivalent gate and adds the Docker-backed test legs. Discover recipes with `just --list`;
-`just --show <recipe>` shows what one actually runs.
+CI-equivalent gate and adds the Docker-backed test legs.
 
-- Prefer `just <recipe>` over an underlying tool. Run `just` with stdin from `/dev/null`.
-- A recipe marked `[confirm]` is destructive: ask before running one, and never pass `--yes` or
-  `JUST_YES=1`.
 - `just lint` owns the ShellCheck file list explicitly: the s6 service scripts have no extension, so
   they cannot be globbed. A new shell script must be added to that list by hand.
-- A command that is not exposed gets a documented `[group(...)]` recipe rather than a direct
-  invocation.
 - `scripts/cloud-environment-setup.sh` is the cloud-provisioning command and is deliberately not a
   recipe: it uses sudo and installs tools globally.
 
@@ -44,13 +38,9 @@ covers Python CLI tools; `yamllint` is the only one and is deliberately not inst
 `tests/repository_workflow_contract_test.py` enforces all of this, including that no `pip install`
 returns to the justfile, the builder workflow or the cloud provisioning script.
 
-**Reusable workflows are pinned to a release SHA with the version in a trailing comment.** zizmor
-fails a floating `@main`; the pin and the comment move together.
-
 **`actions/setup-go` needs both `cache: true` and its own `cache-dependency-path`.** The valuable
-half is `GOCACHE`, not the module cache - compiling the stdlib cold costs 10-20s per module (measured
-19.65s for `grafana_pdc/ui`'s `go test` cold against 0.65s warm), so "no external dependencies, so
-nothing to cache" is true of the module cache and false of the build cache. `cache: true` alone is
+half is `GOCACHE`, not the module cache - compiling the stdlib cold costs 10-20s per module, so "no external
+dependencies, so nothing to cache" is true of the module cache and false of the build cache. `cache: true` alone is
 inert here: `setup-go` globs for `go.mod` at the repository root, finds none because every module
 lives in a subdirectory, and then **warns and caches nothing** rather than failing. Every step points
 `cache-dependency-path` at its own `go.mod`.
@@ -72,19 +62,6 @@ model** doc for this project's lane, ownership and defect conventions.
   usernames, account IDs, device or host names, addresses, coordinates, or Grafana Cloud stack and
   tenant IDs. Write the shape, not the instance: `<stack>/<tenant>`, "the browser variant's probe
   token". Aggregate counts, timings and structural findings are fine.
-- **Never use the bare form of any flag that has an `--append-*` variant.** `--notes`, `--plan` and
-  `--final-summary` *silently replace* the whole section, destroying another session's writes at exit
-  0. This is an open upstream bug. Check `--help` for the append variant before using any
-  field-setting flag; a new one is covered by this rule on sight.
-- **A second `backlog task edit` on the same task with `--dep`, `--label`, `--assignee`, `--ref`,
-  `--acceptance-criteria` or `--modified-file` REPLACES what the first set.** Repeating the flag
-  *inside* one call is additive and correct; a second call is not.
-- **Finalize in one call**, so an interrupted agent cannot leave finished work looking unfinished:
-  `backlog task edit hab-0007 --check-ac 1 --check-ac 2 -s Done`.
-- **Never hand-edit task, doc or decision markdown.** Section boundaries are HTML-comment markers;
-  breaking one drops the section silently on read and makes the file unwritable by the CLI, with no
-  repair command. `backlog.config.yml` is the one file edited by hand, because list-valued keys
-  cannot be set through `backlog config set`.
 - **A tracker-only commit goes straight to `main`. No branch, no PR, no review.** It applies when
   *every* path in the commit is under `backlog/` or is `backlog.config.yml`: nothing ships, no build
   can break, and a PR round-trip only delays the queue other sessions read to decide what to work on.
