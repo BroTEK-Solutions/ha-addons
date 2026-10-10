@@ -174,7 +174,7 @@ def main() -> None:
         release_action,
         "token: ${{ steps.bao.outputs.token }}",
         "rknightion/.github/.github/actions/broker-token@"
-        "79a72d215e806c12876526ff30fbd524250e1bf9 # v1.17.1",
+        "f32275a4a7641f34db5cb005d270db961b54a680 # v1.25.3",
         "permission-set: release-please-ha-addons",
         "id-token: write",
         "config-file: release-please-config.json",
