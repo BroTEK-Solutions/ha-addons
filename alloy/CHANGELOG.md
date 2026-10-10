@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.4.3](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.4.2...alloy-v2.4.3) (2026-10-10)
+
+
+### Bug Fixes
+
+* **deps:** update dependency grafana/alloy to v1.20.0 ([#121](https://github.com/BroTEK-Solutions/ha-addons/issues/121)) ([29a88d3](https://github.com/BroTEK-Solutions/ha-addons/commit/29a88d39aad05f0a899b7f456cba2aa33ce63b8d))
+* **deps:** update dependency grafana/alloy to v1.20.1 ([#124](https://github.com/BroTEK-Solutions/ha-addons/issues/124)) ([192b49d](https://github.com/BroTEK-Solutions/ha-addons/commit/192b49d83106f2e337fa378e193f98fae3fa8017))
+
 ## [2.4.2](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.4.1...alloy-v2.4.2) (2026-08-30)
 
 
