@@ -55,8 +55,7 @@ Open work lives in `backlog/`, driven **only** through the `backlog` CLI. `backl
 is the queue; `backlog doc list --plain` lists the durable docs, which load on demand with
 `backlog doc view <id> --plain`.
 
-Read the **Agent fan-out protocol (canonical)** doc before designing a wave, and the **Wave operating
-model** doc for this project's lane, ownership and defect conventions.
+Loops: the protocol lives in `~/repos/agent-docs/sources/loop/` (this board's "Loop protocol pointer" doc points there); this repository's loop facts are in `LOOP.md`.
 
 - **`backlog/` is committed, so no real identifiers in tasks or docs.** No email addresses, handles,
   usernames, account IDs, device or host names, addresses, coordinates, or Grafana Cloud stack and
