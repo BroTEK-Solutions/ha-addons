@@ -1,12 +1,12 @@
 ARG BUILD_FROM=ghcr.io/home-assistant/base-debian:bookworm@sha256:60cd882d5200157082e568a0b775cca0d9cb5704452ada3cf6f206c4dd6d83c5
 
-FROM golang:1.27-bookworm@sha256:32fa283222e2905d9fee971f60c842e5c815fdc036cf7ea599bf36bd7ca8f67f AS ui-builder
+FROM golang:1.27-bookworm@sha256:21ade014faf952365b9ecbd8dbdb87176fbacb82fac9fb132d9f2a7b8cc3f132 AS ui-builder
 
 WORKDIR /src
 COPY ui/ ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/alloy-ui .
 
-FROM golang:1.27-bookworm@sha256:32fa283222e2905d9fee971f60c842e5c815fdc036cf7ea599bf36bd7ca8f67f AS reporter-builder
+FROM golang:1.27-bookworm@sha256:21ade014faf952365b9ecbd8dbdb87176fbacb82fac9fb132d9f2a7b8cc3f132 AS reporter-builder
 
 WORKDIR /src
 COPY reporter/ ./
