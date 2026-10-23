@@ -32,7 +32,7 @@ jobs:
       - name: Set up just
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
         with:
-          just-version: '1.58.0'
+          just-version: '1.59.0'
 
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -103,7 +103,7 @@ jobs:
       - name: Set up just
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
         with:
-          just-version: '1.58.0'
+          just-version: '1.59.0'
 
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -152,7 +152,7 @@ jobs:
       - name: Set up just
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
         with:
-          just-version: '1.58.0'
+          just-version: '1.59.0'
 
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -210,7 +210,7 @@ jobs:
       - name: Set up just
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
         with:
-          just-version: '1.58.0'
+          just-version: '1.59.0'
 
       - name: Alloy initialization tests
         run: just test-alloy-init </dev/null
@@ -230,7 +230,7 @@ jobs:
       - name: Set up just
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
         with:
-          just-version: '1.58.0'
+          just-version: '1.59.0'
 
       - name: Set up Go for the shared launcher
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
