@@ -1,6 +1,6 @@
 module github.com/BroTEK-Solutions/ha-addons/ha-reporter
 
-go 1.26
+go 1.27.3
 
 require github.com/eclipse/paho.golang v0.23.0
 
