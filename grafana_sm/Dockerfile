@@ -1,4 +1,4 @@
-FROM golang:1.26.4-alpine3.22@sha256:727cfc3c40be55cd1bc9a4a059406b28a059857e3be752aa9d09531e12c20c56 AS launcher-builder
+FROM golang:1.27.3-alpine3.23@sha256:754d5200fc3edae76d3b6598a9a3fac7e74981ee6a5413ab955025f185753ef2 AS launcher-builder
 
 WORKDIR /src
 COPY launcher/go.mod launcher/main.go ./
@@ -8,7 +8,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /out/ha-sm-launcher \
     .
 
-FROM golang:1.26.4-alpine3.22@sha256:727cfc3c40be55cd1bc9a4a059406b28a059857e3be752aa9d09531e12c20c56 AS ui-builder
+FROM golang:1.27.3-alpine3.23@sha256:754d5200fc3edae76d3b6598a9a3fac7e74981ee6a5413ab955025f185753ef2 AS ui-builder
 
 WORKDIR /src
 COPY ui/ ./
@@ -18,7 +18,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /out/ha-sm-ui \
     .
 
-FROM golang:1.26.4-alpine3.22@sha256:727cfc3c40be55cd1bc9a4a059406b28a059857e3be752aa9d09531e12c20c56 AS reporter-builder
+FROM golang:1.27.3-alpine3.23@sha256:754d5200fc3edae76d3b6598a9a3fac7e74981ee6a5413ab955025f185753ef2 AS reporter-builder
 
 WORKDIR /src
 COPY reporter/ ./
