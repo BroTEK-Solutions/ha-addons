@@ -12,7 +12,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -buildid=" -o /o
 
 FROM grafana/pdc-agent:0.0.67@sha256:e17e65368ca5d8267e8996030869c5cf1b6929e0344e08e90eef6e1179172601 AS pdc-source
 
-FROM ghcr.io/home-assistant/base:3.24@sha256:89f3a85707bf03d97012e0ca517d3b335dcbc224edabbb18dcb4e14150d086e6
+FROM ghcr.io/home-assistant/base:3.24@sha256:880016115f356afc814398e17ba68a7ee66dfc1b4eaef09755ea2c9fa18ea481
 
 # The digest pins the HA base and Alpine release. Apply security updates from
 # that release on every rebuild, and keep OpenSSH as a virtual package so its
