@@ -132,7 +132,7 @@ jobs:
         uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
 
       - name: Set up a cache-capable Docker builder
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Run PDC Docker tests
         run: just test-pdc-image </dev/null
@@ -190,7 +190,7 @@ jobs:
       # which is the builder `docker buildx build --load` in the `image` recipe
       # then picks up.
       - name: Set up a cache-capable Docker builder
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Run Alloy Docker tests
         run: just test-alloy-image </dev/null
@@ -250,7 +250,7 @@ jobs:
         uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
 
       - name: Set up a cache-capable Docker builder
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Build and smoke-test both complete images
         run: just test-sm-image </dev/null
