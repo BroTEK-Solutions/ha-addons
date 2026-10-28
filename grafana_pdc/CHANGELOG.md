@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.2](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.2.1...grafana-pdc-v1.2.2) (2026-10-28)
+
+
+### Bug Fixes
+
+* **deps:** build every App with Go 1.27.3 ([#150](https://github.com/BroTEK-Solutions/ha-addons/issues/150)) ([418bc28](https://github.com/BroTEK-Solutions/ha-addons/commit/418bc28e10882cdd59cea375b86383d28e713f04))
+* **deps:** update ghcr.io/home-assistant/base:3.24 docker digest to 8800161 ([#155](https://github.com/BroTEK-Solutions/ha-addons/issues/155)) ([84d5710](https://github.com/BroTEK-Solutions/ha-addons/commit/84d57101d6c942daa4fea4c999d72e553a0801b3))
+* **deps:** update ghcr.io/home-assistant/base:3.24 docker digest to 89f3a85 ([#153](https://github.com/BroTEK-Solutions/ha-addons/issues/153)) ([41386e8](https://github.com/BroTEK-Solutions/ha-addons/commit/41386e8bfdb390c34515378a766171ae7f39de70))
+* **deps:** update ghcr.io/home-assistant/base:3.24 docker digest to 8fde417 ([#131](https://github.com/BroTEK-Solutions/ha-addons/issues/131)) ([b85f6d1](https://github.com/BroTEK-Solutions/ha-addons/commit/b85f6d11da8187c9a28a3a9b0d1fc38b78644a5d))
+* **deps:** update ghcr.io/home-assistant/base:3.24 docker digest to 992dc6a ([#147](https://github.com/BroTEK-Solutions/ha-addons/issues/147)) ([475d855](https://github.com/BroTEK-Solutions/ha-addons/commit/475d85560d3a6e49df4e60a8285db095d6e2965f))
+* **deps:** update grafana/pdc-agent docker tag to v0.0.64 ([#112](https://github.com/BroTEK-Solutions/ha-addons/issues/112)) ([f211d83](https://github.com/BroTEK-Solutions/ha-addons/commit/f211d838c3baf403bff3a7add44fb7ce68cb0838))
+* **deps:** update grafana/pdc-agent docker tag to v0.0.65 ([#118](https://github.com/BroTEK-Solutions/ha-addons/issues/118)) ([151386c](https://github.com/BroTEK-Solutions/ha-addons/commit/151386c8cbef88834202df8e5b854bad8f633ae3))
+* **deps:** update grafana/pdc-agent docker tag to v0.0.66 ([#125](https://github.com/BroTEK-Solutions/ha-addons/issues/125)) ([b33ce40](https://github.com/BroTEK-Solutions/ha-addons/commit/b33ce40df4b6c4d6f6ac023289ee6fa23b82cb98))
+* **deps:** update grafana/pdc-agent docker tag to v0.0.67 ([#141](https://github.com/BroTEK-Solutions/ha-addons/issues/141)) ([2e99714](https://github.com/BroTEK-Solutions/ha-addons/commit/2e997146f6a68aaa54f0213d87207dc600231104))
+
 ## [1.2.1](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.2.0...grafana-pdc-v1.2.1) (2026-08-30)
 
 
