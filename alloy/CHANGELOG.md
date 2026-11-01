@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.4.3](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.4.2...alloy-v2.4.3) (2026-11-01)
+
+
+### Bug Fixes
+
+* **ci:** allow pinned dependency upgrades and isolate Alloy smoke test ([#160](https://github.com/BroTEK-Solutions/ha-addons/issues/160)) ([8f3a99a](https://github.com/BroTEK-Solutions/ha-addons/commit/8f3a99a9cccfc8ae5f5cc8389d46441a922c9e5d))
+* **deps:** build every App with Go 1.27.3 ([#150](https://github.com/BroTEK-Solutions/ha-addons/issues/150)) ([418bc28](https://github.com/BroTEK-Solutions/ha-addons/commit/418bc28e10882cdd59cea375b86383d28e713f04))
+* **deps:** update dependency grafana/alloy to v1.20.0 ([#121](https://github.com/BroTEK-Solutions/ha-addons/issues/121)) ([29a88d3](https://github.com/BroTEK-Solutions/ha-addons/commit/29a88d39aad05f0a899b7f456cba2aa33ce63b8d))
+* **deps:** update dependency grafana/alloy to v1.20.1 ([#124](https://github.com/BroTEK-Solutions/ha-addons/issues/124)) ([192b49d](https://github.com/BroTEK-Solutions/ha-addons/commit/192b49d83106f2e337fa378e193f98fae3fa8017))
+* **deps:** update dependency grafana/alloy to v1.21.0 ([#139](https://github.com/BroTEK-Solutions/ha-addons/issues/139)) ([ab3d1b6](https://github.com/BroTEK-Solutions/ha-addons/commit/ab3d1b6a328b503770738568b206a52d9eb840e4))
+* **deps:** update dependency grafana/alloy to v1.21.1 ([#145](https://github.com/BroTEK-Solutions/ha-addons/issues/145)) ([d0b8826](https://github.com/BroTEK-Solutions/ha-addons/commit/d0b88263068e1e578403635089ac63d0a5da862f))
+* **deps:** update dependency grafana/alloy to v1.21.2 ([#149](https://github.com/BroTEK-Solutions/ha-addons/issues/149)) ([111a967](https://github.com/BroTEK-Solutions/ha-addons/commit/111a96797dd182b4b10f46bef77bc18cf739bd36))
+* **deps:** update dependency grafana/alloy to v1.21.3 ([#159](https://github.com/BroTEK-Solutions/ha-addons/issues/159)) ([4a8a591](https://github.com/BroTEK-Solutions/ha-addons/commit/4a8a5917bf0100aa60a83f7eb6673550d88f93c8))
+* **deps:** update ghcr.io/home-assistant/base-debian:bookworm docker digest to 0bf0b64 ([#130](https://github.com/BroTEK-Solutions/ha-addons/issues/130)) ([1abc627](https://github.com/BroTEK-Solutions/ha-addons/commit/1abc6273da4890f9b80573fa0bfab4b8f36d87b0))
+
 ## [2.4.2](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.4.1...alloy-v2.4.2) (2026-08-30)
 
 
