@@ -26,8 +26,8 @@ def matching_rule(rules: list[dict], description: str) -> dict:
 def main() -> None:
     config = json.loads((ROOT / "renovate.json").read_text())
 
-    if config.get("automerge") is not True:
-        fail("supported dependency updates must automerge after required CI passes")
+    if config.get("automerge") is not False:
+        fail("dependency updates must require manual merge unless explicitly allowed")
     if config.get("platformAutomerge") is not True:
         fail("GitHub must complete automerge as soon as branch protection passes")
     if config.get("automergeType") != "pr":
@@ -42,6 +42,13 @@ def main() -> None:
         fail("Renovate PRs need the standard dependency labels")
 
     rules = config.get("packageRules", [])
+    automerge = matching_rule(rules, "Automerge patch, minor, and pin updates after CI")
+    if set(automerge.get("matchUpdateTypes", [])) != {"patch", "minor", "pin", "pinDigest", "digest"}:
+        fail("only patch, minor, and pin updates may automerge after CI")
+    if automerge.get("automerge") is not True:
+        fail("patch, minor, and pin updates must automerge after CI")
+    if any("automerge" in rule for rule in rules if rule is not automerge):
+        fail("classification rules must not override the update-type automerge policy")
     builder = matching_rule(
         rules,
         "Keep the App build, manifest, and multi-architecture matrix actions on one Home Assistant builder release.",
@@ -75,9 +82,9 @@ def main() -> None:
     ):
         fail("release-pinned shared security workflows must remain updateable")
 
-    actions = matching_rule(rules, "Automerge GitHub Actions after CI")
-    if actions.get("matchManagers") != ["github-actions"] or actions.get("automerge") is not True:
-        fail("GitHub Action updates must automerge after CI")
+    actions = matching_rule(rules, "Classify GitHub Actions updates")
+    if actions.get("matchManagers") != ["github-actions"]:
+        fail("GitHub Action classification must match the github-actions manager")
     if actions.get("addLabels") != ["dep:gha"] or "labels" in actions:
         fail("GitHub Action classification must preserve the standard labels")
 
@@ -90,9 +97,9 @@ def main() -> None:
         "ghcr.io/home-assistant/base-debian",
     }
     if set(app_dependencies.get("matchPackageNames", [])) != expected_packages:
-        fail("the App dependency automerge allowlist has drifted")
+        fail("the App dependency classification has drifted")
     if "matchUpdateTypes" in app_dependencies:
-        fail("App dependency classification must include major updates for CI-gated automerge")
+        fail("App dependency classification must include major updates for manual review")
     if app_dependencies.get("addLabels") != ["dep:app"] or "labels" in app_dependencies:
         fail("App dependency classification must preserve the standard labels")
     if app_dependencies.get("semanticCommitType") != "fix":
@@ -107,9 +114,6 @@ def main() -> None:
         fail("CI runtime rules must match extracted dependency names, not registry package names")
     if runtimes.get("addLabels") != ["dep:toolchain"] or "labels" in runtimes:
         fail("CI runtime classification must preserve the standard labels")
-
-    if any(rule.get("automerge") is False for rule in rules):
-        fail("package rules must not bypass green-CI automerge")
 
     check_ignore_paths(config.get("ignorePaths", []))
 

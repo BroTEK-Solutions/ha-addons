@@ -8,7 +8,7 @@
     "dependencies",
     "renovate"
   ],
-  "automerge": true,
+  "automerge": false,
   "automergeType": "pr",
   "platformAutomerge": true,
   "rebaseWhen": "behind-base-branch",
@@ -48,6 +48,11 @@
   ],
   "packageRules": [
     {
+      "description": "Automerge patch, minor, and pin updates after CI",
+      "matchUpdateTypes": ["patch", "minor", "pin", "pinDigest", "digest"],
+      "automerge": true
+    },
+    {
       "description": "Keep the App build, manifest, and multi-architecture matrix actions on one Home Assistant builder release.",
       "matchManagers": ["github-actions"],
       "matchPackageNames": ["home-assistant/builder"],
@@ -66,9 +71,8 @@
       "allowedVersions": "<6"
     },
     {
-      "description": "Automerge GitHub Actions after CI",
+      "description": "Classify GitHub Actions updates",
       "matchManagers": ["github-actions"],
-      "automerge": true,
       "addLabels": ["dep:gha"]
     },
     {
