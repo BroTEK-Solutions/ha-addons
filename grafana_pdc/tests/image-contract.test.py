@@ -37,6 +37,14 @@ def main() -> None:
     dockerfile = require_file(DOCKERFILE)
     apparmor = require_file(APPARMOR)
     branding = require_file(BRANDING)
+    overlay = APP_DIR / "rootfs/etc/s6-overlay"
+    if (overlay / "s6-rc.d/user").exists():
+        fail("legacy user bundles trigger writes under /etc during s6 boot")
+    bundle = overlay / "user-bundles.d/user/contents.d"
+    if not bundle.is_dir() or {path.name for path in bundle.iterdir()} != {
+        "grafana-pdc", "grafana-pdc-ui", "grafana-pdc-reporter"
+    }:
+        fail("all PDC services must be activated through the current s6 bundle layout")
 
     def png_size(path: Path) -> tuple[int, int]:
         data = path.read_bytes()

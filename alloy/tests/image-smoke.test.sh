@@ -134,3 +134,50 @@ proxy_status="$(docker exec "${CONTAINER}" curl -sS -o /dev/null -w '%{http_code
 test "${proxy_status}" = 502
 
 echo "PASS: compiled ingress validates candidates and remains available when Alloy stops"
+
+# Exercise /init as well as the binaries above. AppArmor keeps the s6 source
+# tree read-only on HAOS; a read-only mount reproduces that constraint without
+# requiring AppArmor on the Docker host. Preserve the base image's own bundles.
+docker cp "${CONTAINER}:/etc/s6-overlay" "${tmp}/s6-overlay"
+docker rm -f "${CONTAINER}" >/dev/null
+printf '%s' '{"safe_mode":true,"ui_log_level":"info","alloy_stability_level":"generally-available"}' \
+    >"${tmp}/cache/addons.self.options.config.cache"
+# Keep s6/Alloy's root-owned state in the container so an unprivileged Linux
+# runner can remove its host fixtures after the test.
+docker run -d --name "${CONTAINER}" \
+    --entrypoint /init \
+    -e SUPERVISOR_TOKEN=smoke \
+    -e CACHE_DIR=/tmp/bashio-cache \
+    -v "${tmp}/cache:/tmp/bashio-cache" \
+    --tmpfs /data \
+    -v "${tmp}/s6-overlay:/etc/s6-overlay:ro" \
+    "${IMAGE}" >/dev/null
+
+started=false
+for _ in {1..30}; do
+    docker logs "${CONTAINER}" >"${tmp}/boot.log" 2>&1
+    if grep -qF 'service init-alloy successfully started' "${tmp}/boot.log" \
+        && grep -qF 'service alloy successfully started' "${tmp}/boot.log" \
+        && grep -qF 'service alloy-ui successfully started' "${tmp}/boot.log" \
+        && grep -qF 'service alloy-reporter successfully started' "${tmp}/boot.log" \
+        && docker exec "${CONTAINER}" curl -fsS http://127.0.0.1:8099/healthz >/dev/null \
+        && docker exec "${CONTAINER}" curl -fsS http://127.0.0.1:12345/-/ready >/dev/null \
+        && docker exec "${CONTAINER}" sh -c '
+            for service in alloy alloy-ui alloy-reporter; do
+                [ "$(/command/s6-svstat -o up "/run/service/${service}")" = true ] || exit 1
+            done
+        '; then
+        started=true
+        break
+    fi
+    if [ "$(docker inspect --format '{{.State.Running}}' "${CONTAINER}")" != true ]; then
+        break
+    fi
+    sleep 1
+done
+if [ "${started}" != true ] || grep -qF 'defining user bundles in /etc/s6-overlay/s6-rc.d is deprecated' "${tmp}/boot.log"; then
+    cat "${tmp}/boot.log" >&2
+    echo "FAIL: s6 must start all Alloy services with read-only service definitions" >&2
+    exit 1
+fi
+echo "PASS: s6 starts every Alloy service with read-only service definitions"

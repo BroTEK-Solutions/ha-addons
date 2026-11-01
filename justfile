@@ -76,6 +76,7 @@ lint:
         alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy-reporter/finish \
         alloy/tests/generate-config.test.sh \
         alloy/tests/init-alloy.test.sh \
+        alloy/tests/image-smoke.test.sh \
         grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run \
         grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run \
         grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish \

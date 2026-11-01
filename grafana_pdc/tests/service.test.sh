@@ -7,7 +7,7 @@ ADDON_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INIT="${ADDON_ROOT}/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run"
 RUN="${ADDON_ROOT}/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run"
 FINISH="${ADDON_ROOT}/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish"
-USER_CONTENT="${ADDON_ROOT}/rootfs/etc/s6-overlay/s6-rc.d/user/contents.d/grafana-pdc"
+USER_CONTENT="${ADDON_ROOT}/rootfs/etc/s6-overlay/user-bundles.d/user/contents.d/grafana-pdc"
 INIT_DEPENDENCY="${ADDON_ROOT}/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/dependencies.d/init-grafana-pdc"
 BASHIO_BIN="${BASHIO_BIN:-${ADDON_ROOT}/tests/fixtures/bashio}"
 
