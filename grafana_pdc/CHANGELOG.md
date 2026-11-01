@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.3](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.2.2...grafana-pdc-v1.2.3) (2026-11-01)
+
+
+### Bug Fixes
+
+* **alloy:** repair s6 startup and migrate PDC user bundle ([#163](https://github.com/BroTEK-Solutions/ha-addons/issues/163)) ([b5fe628](https://github.com/BroTEK-Solutions/ha-addons/commit/b5fe628baf5da748bc288a1239f95dc5853d5389))
+
 ## [1.2.2](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.2.1...grafana-pdc-v1.2.2) (2026-11-01)
 
 

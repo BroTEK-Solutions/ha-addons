@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.4](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.4.3...alloy-v2.4.4) (2026-11-01)
+
+
+### Bug Fixes
+
+* **alloy:** repair s6 startup and migrate PDC user bundle ([#163](https://github.com/BroTEK-Solutions/ha-addons/issues/163)) ([b5fe628](https://github.com/BroTEK-Solutions/ha-addons/commit/b5fe628baf5da748bc288a1239f95dc5853d5389))
+
 ## [2.4.3](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.4.2...alloy-v2.4.3) (2026-11-01)
 
 
