@@ -253,7 +253,10 @@ def main() -> None:
             if isinstance(run, str) and run.startswith("just ") and not run.endswith(" </dev/null"):
                 fail(f"{job_name} must run just with stdin from /dev/null")
 
-    alloy_steps = jobs["alloy-generator-test"]["steps"]
+    alloy_job = jobs["alloy-generator-test"]
+    if alloy_job.get("continue-on-error") or "if" in alloy_job:
+        fail("Alloy confinement job must be unconditional and must propagate failures")
+    alloy_steps = alloy_job["steps"]
     apparmor_step = next(step for step in alloy_steps if step.get("run") == "just test-alloy-apparmor </dev/null")
     if apparmor_step.get("continue-on-error") or "if" in apparmor_step:
         fail("Alloy confinement must be an unconditional, required runtime check")
@@ -425,6 +428,9 @@ def main() -> None:
     aggregate_gate = {"init", *test_lanes, "build-app", "security"}
     if set(jobs["ci-success"].get("needs", [])) != aggregate_gate:
         fail("ci-success must aggregate every build, security, and test result")
+    gate_failure_condition = jobs["ci-success"]["steps"][0].get("if", "")
+    if "needs.alloy-generator-test.result != 'success'" not in gate_failure_condition:
+        fail("ci-success must reject a skipped Alloy confinement job")
     if set(jobs["release"].get("needs", [])) != aggregate_gate:
         fail("release automation must wait for the same complete gate")
     release_condition = jobs["release"].get("if", "")

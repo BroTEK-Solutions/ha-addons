@@ -401,6 +401,7 @@ jobs:
       - name: Fail if any required job did not pass
         if: >-
           ${{
+            needs.alloy-generator-test.result != 'success' ||
             contains(needs.*.result, 'failure') ||
             contains(needs.*.result, 'cancelled')
           }}
