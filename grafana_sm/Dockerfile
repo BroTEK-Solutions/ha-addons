@@ -1,4 +1,4 @@
-FROM golang:1.26.4-alpine3.22@sha256:727cfc3c40be55cd1bc9a4a059406b28a059857e3be752aa9d09531e12c20c56 AS launcher-builder
+FROM golang:1.27.3-alpine3.23@sha256:8a5046497cda39860b832ffdbe8dd66018a0f05bb01352f533a36e7e2ced66a0 AS launcher-builder
 
 WORKDIR /src
 COPY launcher/go.mod launcher/main.go ./
@@ -8,7 +8,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /out/ha-sm-launcher \
     .
 
-FROM golang:1.26.4-alpine3.22@sha256:727cfc3c40be55cd1bc9a4a059406b28a059857e3be752aa9d09531e12c20c56 AS ui-builder
+FROM golang:1.27.3-alpine3.23@sha256:8a5046497cda39860b832ffdbe8dd66018a0f05bb01352f533a36e7e2ced66a0 AS ui-builder
 
 WORKDIR /src
 COPY ui/ ./
@@ -18,7 +18,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /out/ha-sm-ui \
     .
 
-FROM golang:1.26.4-alpine3.22@sha256:727cfc3c40be55cd1bc9a4a059406b28a059857e3be752aa9d09531e12c20c56 AS reporter-builder
+FROM golang:1.27.3-alpine3.23@sha256:8a5046497cda39860b832ffdbe8dd66018a0f05bb01352f533a36e7e2ced66a0 AS reporter-builder
 
 WORKDIR /src
 COPY reporter/ ./
@@ -28,7 +28,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /out/ha-reporter \
     .
 
-FROM grafana/synthetic-monitoring-agent:v0.66.0@sha256:be65f33ed88c7174318aec0155e025194d4402bfdc2a884ca0e36c81ad69276a
+FROM grafana/synthetic-monitoring-agent:v0.68.0@sha256:c96c36aedb9c8b46d437b0bff2434bb17a94b6a80c592069d75a71cdcd70292f
 
 USER root
 COPY --from=launcher-builder --chown=0:0 --chmod=0500 \

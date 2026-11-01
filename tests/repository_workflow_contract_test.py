@@ -24,6 +24,23 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
+def pinned_action(steps: list[dict], action: str, context: str) -> dict:
+    matches = [step for step in steps if str(step.get("uses", "")).split("@", 1)[0] == action]
+    if len(matches) != 1:
+        fail(f"{context} must run exactly one {action} step")
+    step = matches[0]
+    if not re.fullmatch(re.escape(action) + r"@[0-9a-f]{40}", step["uses"]):
+        fail(f"{context} must pin {action} to a full commit SHA")
+    return step
+
+
+def pinned_version(step: dict, key: str, context: str) -> str:
+    version = str((step.get("with") or {}).get(key, ""))
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+        fail(f"{context} must pin an explicit {key} version")
+    return version
+
+
 def third_party_imports(source: str) -> set[str]:
     """Top-level imports this repository does not ship and Python does not bundle."""
     modules: set[str] = set()
@@ -165,16 +182,15 @@ def main() -> None:
         ):
             fail(f"{app} version must use the formatting-preserving release annotation")
 
-    release_action = (
-        "googleapis/release-please-action@"
-        "45996ed1f6d02564a971a2fa1b5860e934307cf7"
-    )
+    release_steps = yaml.safe_load(release_workflow)["jobs"]["release"]["steps"]
+    for action in (
+        "googleapis/release-please-action",
+        "rknightion/.github/.github/actions/broker-token",
+    ):
+        pinned_action(release_steps, action, "release")
     for required in (
         "workflow_call:",
-        release_action,
         "token: ${{ steps.bao.outputs.token }}",
-        "rknightion/.github/.github/actions/broker-token@"
-        "f32275a4a7641f34db5cb005d270db961b54a680 # v1.25.3",
         "permission-set: release-please-ha-addons",
         "id-token: write",
         "config-file: release-please-config.json",
@@ -235,21 +251,20 @@ def main() -> None:
             if isinstance(run, str) and run.startswith("just ") and not run.endswith(" </dev/null"):
                 fail(f"{job_name} must run just with stdin from /dev/null")
 
-    setup_just = (
-        "uses: extractions/setup-just@"
-        "53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4"
-    )
-    if caller.count(setup_just) != len(expected_recipes):
-        fail("each test lane must install the pinned just v4 action")
-    if caller.count("just-version: '1.58.0'") != len(expected_recipes):
-        fail("each test lane must pin just 1.58.0")
-    setup_uv = "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d"
-    if caller.count(setup_uv) != caller.count("version: '0.12.7'"):
-        fail("every setup-uv step must pin an explicit uv version, or CI floats to latest")
+    # Renovate owns the values; the contract owns pinning and consistency.
+    for action, key, lanes in (
+        ("extractions/setup-just", "just-version", test_lanes),
+        ("astral-sh/setup-uv", "version", {"quality", "pdc-test", "alloy-generator-test"}),
+    ):
+        pins = set()
+        for lane in sorted(lanes):
+            step = pinned_action(jobs[lane]["steps"], action, lane)
+            pins.add((step["uses"], pinned_version(step, key, lane)))
+        if len(pins) != 1:
+            fail(f"all lanes must use the same {action} SHA and {key} version")
 
     expected_justfile_commands = (
         "uvx yamllint@{{ yamllint_version }} --strict .",
-        'yamllint_version := "1.38.0"',
         "shellcheck -x --source-path=SCRIPTDIR",
         "bash tests/shared_validate_lib_test.sh",
         "(cd shared/reporter && go test ./...)",
@@ -284,6 +299,8 @@ def main() -> None:
     for command in expected_justfile_commands:
         if command not in justfile:
             fail(f"justfile must run: {command}")
+    if not re.search(r'^yamllint_version := "[0-9]+\.[0-9]+\.[0-9]+"$', justfile, re.MULTILINE):
+        fail("the justfile must pin an explicit yamllint version")
     check_python_invocation(justfile)
 
     # Every image build routes through the `image` recipe, which is the only
@@ -312,12 +329,10 @@ def main() -> None:
     # what makes the cache exportable. Both must sit in the lane that builds the
     # Alloy image, ahead of the build step, or the cache is silently skipped.
     cache_actions = (
-        "crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0",
-        "docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0",
+        "crazy-max/ghaction-github-runtime",
+        "docker/setup-buildx-action",
     )
-    for pinned in cache_actions:
-        if pinned not in caller:
-            fail(f"the Actions layer cache must stay pinned to {pinned}")
+    cache_pins = {action: set() for action in cache_actions}
     # Every lane that builds an image through the `image` recipe caches it. A
     # lane that loses either action still goes green, it just silently builds
     # uncached, so the pair is asserted per lane rather than once for the file.
@@ -332,17 +347,14 @@ def main() -> None:
             for index, step in enumerate(lane_steps)
             if str(step.get("run", "")).startswith(build_command)
         )
-        for pinned in cache_actions:
-            action = pinned.split(" #", 1)[0]
-            positions = [
-                index
-                for index, step in enumerate(lane_steps)
-                if step.get("uses") == action
-            ]
-            if not positions:
-                fail(f"{action} must run in {job_id}")
-            elif positions[0] > build_step:
+        for action in cache_actions:
+            step = pinned_action(lane_steps, action, job_id)
+            cache_pins[action].add(step["uses"])
+            if lane_steps.index(step) > build_step:
                 fail(f"{action} must run before {build_command}, not after it")
+    for action, pins in cache_pins.items():
+        if len(pins) != 1:
+            fail(f"all image lanes must use the same {action} SHA")
 
     for required in (
         "BASHIO_BIN=/usr/bin/bashio",

@@ -3,7 +3,7 @@ id: doc-0003
 title: Closed GitHub issues (pre-Backlog history index)
 type: other
 created_date: '2026-08-17 12:03'
-updated_date: '2026-08-17 12:45'
+updated_date: '2026-10-15 17:51'
 ---
 # Closed GitHub issues (pre-Backlog history index)
 
@@ -20,8 +20,8 @@ The GitHub tracker also stays enabled for external contributors, and Renovate's 
 (`#8`) is a live open issue that is recreated on every run — neither is Backlog's business.
 
 Two commits are given per row because they answer different questions. The **work commit** is what
-changed; the **merge commit** is what shipped to `main`, which is the one the Wave operating model
-asks a `Done` task to cite. Both are reachable from `main`.
+changed; the **merge commit** is what shipped to `main`, which is the one a `Done`
+task cites. Both are reachable from `main`.
 
 | # | Closed | Title | Work commit | Shipped as |
 |---|---|---|---|---|

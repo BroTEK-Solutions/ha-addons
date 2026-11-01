@@ -1,12 +1,12 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/base-debian:bookworm@sha256:60cd882d5200157082e568a0b775cca0d9cb5704452ada3cf6f206c4dd6d83c5
+ARG BUILD_FROM=ghcr.io/home-assistant/base-debian:bookworm@sha256:ebb912a11616e3eda2d31204803587276e70bbb4e7f02a6c92dba5f43256b48d
 
-FROM golang:1.27-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195 AS ui-builder
+FROM golang:1.27.3-bookworm@sha256:d9b6a1beb9474adc2a1ce842573639b44b2a0dd49b6669f51d3821baf9ec37c9 AS ui-builder
 
 WORKDIR /src
 COPY ui/ ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/alloy-ui .
 
-FROM golang:1.27-bookworm@sha256:69a7b9788769bec032d238959b61854e9ae87f57be9029ec04e9885fabf99195 AS reporter-builder
+FROM golang:1.27.3-bookworm@sha256:d9b6a1beb9474adc2a1ce842573639b44b2a0dd49b6669f51d3821baf9ec37c9 AS reporter-builder
 
 WORKDIR /src
 COPY reporter/ ./
@@ -23,7 +23,7 @@ ARG TARGETARCH
 # this file so the validation container always matches the shipped binary.
 RUN set -eux; \
     # renovate: datasource=github-releases depName=grafana/alloy
-    ALLOY_VERSION="1.20.1"; \
+    ALLOY_VERSION="1.21.3"; \
     case "${TARGETARCH}" in \
         amd64)  ARCH="linux-amd64" ;; \
         arm64) ARCH="linux-arm64" ;; \
