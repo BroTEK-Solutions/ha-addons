@@ -27,6 +27,7 @@ ui_run = ROOT / "rootfs/etc/s6-overlay/s6-rc.d/alloy-ui/run"
 ui_type = ROOT / "rootfs/etc/s6-overlay/s6-rc.d/alloy-ui/type"
 ui_dependency = ROOT / "rootfs/etc/s6-overlay/s6-rc.d/alloy-ui/dependencies.d/alloy"
 ui_manifest = ROOT / "rootfs/etc/s6-overlay/user-bundles.d/user/contents.d/alloy-ui"
+user_bundle = ui_manifest.parent
 apparmor = (ROOT / "apparmor.txt").read_text()
 apparmor_rules = [line.strip() for line in apparmor.splitlines() if not line.lstrip().startswith("#")]
 
@@ -64,8 +65,8 @@ checks = {
     "UI service is a longrun": ui_type.is_file() and ui_type.read_text().strip() == "longrun",
     "UI starts independently of Alloy": not ui_dependency.exists(),
     "UI service is in the user bundle": ui_manifest.is_file(),
-    "every Alloy service is activated through the current s6 bundle layout": {
-        path.name for path in (ROOT / "rootfs/etc/s6-overlay/user-bundles.d/user/contents.d").iterdir()
+    "every Alloy service is activated through the current s6 bundle layout": user_bundle.is_dir() and {
+        path.name for path in user_bundle.iterdir()
     } == {"init-alloy", "alloy", "alloy-ui", "alloy-reporter"},
     "legacy user bundle cannot trigger writes under /etc during boot": not (
         ROOT / "rootfs/etc/s6-overlay/s6-rc.d/user"

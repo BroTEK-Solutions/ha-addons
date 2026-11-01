@@ -160,7 +160,13 @@ for _ in {1..30}; do
         && grep -qF 'service alloy successfully started' "${tmp}/boot.log" \
         && grep -qF 'service alloy-ui successfully started' "${tmp}/boot.log" \
         && grep -qF 'service alloy-reporter successfully started' "${tmp}/boot.log" \
-        && docker exec "${CONTAINER}" curl -fsS http://127.0.0.1:8099/healthz >/dev/null; then
+        && docker exec "${CONTAINER}" curl -fsS http://127.0.0.1:8099/healthz >/dev/null \
+        && docker exec "${CONTAINER}" curl -fsS http://127.0.0.1:12345/-/ready >/dev/null \
+        && docker exec "${CONTAINER}" sh -c '
+            for service in alloy alloy-ui alloy-reporter; do
+                [ "$(/command/s6-svstat -o up "/run/service/${service}")" = true ] || exit 1
+            done
+        '; then
         started=true
         break
     fi
