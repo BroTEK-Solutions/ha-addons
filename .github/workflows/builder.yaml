@@ -139,7 +139,7 @@ jobs:
 
   alloy-generator-test:
     name: Alloy schema and generator tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -194,6 +194,12 @@ jobs:
 
       - name: Run Alloy Docker tests
         run: just test-alloy-image </dev/null
+
+      - name: Install AppArmor test prerequisites
+        run: just setup-apparmor-tests </dev/null
+
+      - name: Boot Alloy under its shipped AppArmor profile
+        run: just test-alloy-apparmor </dev/null
 
   alloy-init-test:
     name: Alloy initialization tests
@@ -395,6 +401,7 @@ jobs:
       - name: Fail if any required job did not pass
         if: >-
           ${{
+            needs.alloy-generator-test.result != 'success' ||
             contains(needs.*.result, 'failure') ||
             contains(needs.*.result, 'cancelled')
           }}
