@@ -77,6 +77,7 @@ lint:
         alloy/tests/generate-config.test.sh \
         alloy/tests/init-alloy.test.sh \
         alloy/tests/image-smoke.test.sh \
+        alloy/tests/apparmor.test.sh \
         grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run \
         grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run \
         grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish \
@@ -189,6 +190,18 @@ test-alloy-image:
     just image alloy local/ha-alloy:smoke
     bash alloy/tests/image-smoke.test.sh local/ha-alloy:smoke
 
+# Install the parser on a disposable Ubuntu AppArmor test runner (requires sudo).
+[group('dev')]
+setup-apparmor-tests:
+    sudo -n apt-get update
+    sudo -n apt-get install -y --no-install-recommends apparmor
+
+# Exercise the shipped profile on a Linux Docker host; build with test-alloy-image first.
+[group('check')]
+[no-exit-message]
+test-alloy-apparmor:
+    bash alloy/tests/apparmor.test.sh local/ha-alloy:smoke
+
 # Run Alloy's initialization-service test inside its pinned base image.
 [group('check')]
 [no-exit-message]
@@ -218,9 +231,9 @@ test-sm-image:
 check: fmt-check lint gen-check test
 
 # Docker daemon required by test-pdc-image, test-alloy-image, test-alloy-init, and test-sm-image.
-# Run the CI-equivalent gate.
+# Run the CI-equivalent gate (Linux with AppArmor and passwordless sudo required).
 [group('check')]
-ci: check test-pdc-image test-alloy-image test-alloy-init test-sm-image
+ci: check test-pdc-image test-alloy-image test-alloy-apparmor test-alloy-init test-sm-image
 
 # Compile every source Go module without keeping artifacts.
 [group('build')]

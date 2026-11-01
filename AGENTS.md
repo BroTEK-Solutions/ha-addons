@@ -9,6 +9,13 @@ user-facing description; this file is the contributor contract.
 `just check` is the toolchain-only pre-commit gate and must pass before you commit. `just ci` is the
 CI-equivalent gate and adds the Docker-backed test legs.
 
+`just ci` also requires a Linux Docker host with enforcing AppArmor and passwordless sudo.
+On Ubuntu, `just setup-apparmor-tests` installs the parser. `just test-alloy-image` remains the
+portable image/startup check; after building that image, `just test-alloy-apparmor` loads a uniquely
+named copy of the shipped policy, boots `/init`, checks real Alloy readiness and service state, and
+checks allowed/denied writes. Missing confinement fails rather than skips. The required Alloy CI
+job runs both on an Ubuntu VM. This proves Ubuntu AppArmor startup, not every HAOS runtime feature.
+
 - `just lint` owns the ShellCheck file list explicitly: the s6 service scripts have no extension, so
   they cannot be globbed. A new shell script must be added to that list by hand.
 - `scripts/cloud-environment-setup.sh` is the cloud-provisioning command and is deliberately not a

@@ -234,6 +234,8 @@ def main() -> None:
         "alloy-generator-test": (
             "just test-alloy",
             "just test-alloy-image",
+            "just setup-apparmor-tests",
+            "just test-alloy-apparmor",
         ),
         "alloy-init-test": ("just test-alloy-init",),
         "synthetic-monitoring-test": (
@@ -250,6 +252,11 @@ def main() -> None:
             run = step.get("run")
             if isinstance(run, str) and run.startswith("just ") and not run.endswith(" </dev/null"):
                 fail(f"{job_name} must run just with stdin from /dev/null")
+
+    alloy_steps = jobs["alloy-generator-test"]["steps"]
+    apparmor_step = next(step for step in alloy_steps if step.get("run") == "just test-alloy-apparmor </dev/null")
+    if apparmor_step.get("continue-on-error") or "if" in apparmor_step:
+        fail("Alloy confinement must be an unconditional, required runtime check")
 
     # Renovate owns the values; the contract owns pinning and consistency.
     for action, key, lanes in (

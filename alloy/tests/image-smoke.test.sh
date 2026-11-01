@@ -3,6 +3,7 @@
 set -euo pipefail
 
 IMAGE="${1:?usage: image-smoke.test.sh IMAGE}"
+APPARMOR_PROFILE="${ALLOY_SMOKE_APPARMOR_PROFILE:-}"
 CONTAINER="ha-alloy-ui-smoke-$$"
 tmp="$(mktemp -d)"
 cleanup() {
@@ -138,7 +139,15 @@ echo "PASS: compiled ingress validates candidates and remains available when All
 # Exercise /init as well as the binaries above. AppArmor keeps the s6 source
 # tree read-only on HAOS; a read-only mount reproduces that constraint without
 # requiring AppArmor on the Docker host. Preserve the base image's own bundles.
-docker cp "${CONTAINER}:/etc/s6-overlay" "${tmp}/s6-overlay"
+startup_args=()
+if [ -n "${APPARMOR_PROFILE}" ]; then
+    # The real-policy leg must leave /etc writable at the filesystem layer:
+    # otherwise a read-only mount could hide a missing AppArmor restriction.
+    startup_args+=(--security-opt "apparmor=${APPARMOR_PROFILE}")
+else
+    docker cp "${CONTAINER}:/etc/s6-overlay" "${tmp}/s6-overlay"
+    startup_args+=(-v "${tmp}/s6-overlay:/etc/s6-overlay:ro")
+fi
 docker rm -f "${CONTAINER}" >/dev/null
 printf '%s' '{"safe_mode":true,"ui_log_level":"info","alloy_stability_level":"generally-available"}' \
     >"${tmp}/cache/addons.self.options.config.cache"
@@ -150,7 +159,7 @@ docker run -d --name "${CONTAINER}" \
     -e CACHE_DIR=/tmp/bashio-cache \
     -v "${tmp}/cache:/tmp/bashio-cache" \
     --tmpfs /data \
-    -v "${tmp}/s6-overlay:/etc/s6-overlay:ro" \
+    "${startup_args[@]}" \
     "${IMAGE}" >/dev/null
 
 started=false
@@ -177,7 +186,27 @@ for _ in {1..30}; do
 done
 if [ "${started}" != true ] || grep -qF 'defining user bundles in /etc/s6-overlay/s6-rc.d is deprecated' "${tmp}/boot.log"; then
     cat "${tmp}/boot.log" >&2
-    echo "FAIL: s6 must start all Alloy services with read-only service definitions" >&2
+    echo "FAIL: s6 must start all Alloy services under the selected confinement" >&2
     exit 1
 fi
-echo "PASS: s6 starts every Alloy service with read-only service definitions"
+if [ -n "${APPARMOR_PROFILE}" ]; then
+    actual_profile="$(docker exec "${CONTAINER}" cat /proc/1/attr/current)"
+    if [ "${actual_profile}" != "${APPARMOR_PROFILE} (enforce)" ]; then
+        echo "FAIL: init is not running under the expected enforcing profile: ${actual_profile}" >&2
+        exit 1
+    fi
+    # Paired controls distinguish policy denial from an unwritable filesystem
+    # or a broken probe. Both containers run as root with the same image.
+    docker run --rm --entrypoint sh --security-opt apparmor=unconfined "${IMAGE}" \
+        -c 'touch /etc/s6-overlay/ci-denied-write'
+    docker exec "${CONTAINER}" touch /data/ci-allowed-write
+    if docker exec "${CONTAINER}" sh -c 'touch /etc/s6-overlay/ci-denied-write' >"${tmp}/denied.log" 2>&1; then
+        echo "FAIL: AppArmor allowed a write to the s6 definitions" >&2
+        exit 1
+    fi
+    grep -qF 'Permission denied' "${tmp}/denied.log"
+    docker exec "${CONTAINER}" test ! -e /etc/s6-overlay/ci-denied-write
+    echo "PASS: real AppArmor permits Alloy startup and state writes, and denies s6 definition writes"
+else
+    echo "PASS: s6 starts every Alloy service with read-only service definitions"
+fi
