@@ -142,12 +142,14 @@ docker cp "${CONTAINER}:/etc/s6-overlay" "${tmp}/s6-overlay"
 docker rm -f "${CONTAINER}" >/dev/null
 printf '%s' '{"safe_mode":true,"ui_log_level":"info","alloy_stability_level":"generally-available"}' \
     >"${tmp}/cache/addons.self.options.config.cache"
+# Keep s6/Alloy's root-owned state in the container so an unprivileged Linux
+# runner can remove its host fixtures after the test.
 docker run -d --name "${CONTAINER}" \
     --entrypoint /init \
     -e SUPERVISOR_TOKEN=smoke \
     -e CACHE_DIR=/tmp/bashio-cache \
     -v "${tmp}/cache:/tmp/bashio-cache" \
-    -v "${tmp}/data:/data" \
+    --tmpfs /data \
     -v "${tmp}/s6-overlay:/etc/s6-overlay:ro" \
     "${IMAGE}" >/dev/null
 
