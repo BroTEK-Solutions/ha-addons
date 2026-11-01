@@ -13,6 +13,12 @@ trap cleanup EXIT
 
 mkdir -p "${tmp}/data"
 chmod 0700 "${tmp}/data"
+# bashio::config reads Native App options through the Supervisor cache. The
+# standalone container has no Supervisor; seed the same cache as the init tests.
+mkdir -p "${tmp}/cache"
+chmod 0700 "${tmp}/cache"
+printf '%s' '{"alloy_stability_level":"generally-available"}' \
+    >"${tmp}/cache/addons.self.options.config.cache"
 printf '%s' '{"schema_version":2,"gcloud_rw_api_key":"stored-secret","alloy_additional_args":"--disable-reporting\n--server.http.memory-addr=alloy.test:12345"}' \
     >"${tmp}/data/settings.json"
 # The generated helper expands these variables inside the container.
@@ -27,6 +33,8 @@ chmod +x "${tmp}/fake-alloy"
 docker run --rm \
     --entrypoint /usr/lib/bashio/bashio \
     -e SETTINGS_FILE=/tmp/settings.json \
+    -e CACHE_DIR=/tmp/bashio-cache \
+    -v "${tmp}/cache:/tmp/bashio-cache" \
     -v "${tmp}/data/settings.json:/tmp/settings.json:ro" \
     -v "${tmp}/fake-alloy:/usr/bin/alloy:ro" \
     "${IMAGE}" \
