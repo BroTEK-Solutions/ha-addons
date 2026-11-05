@@ -30,6 +30,13 @@ run `just gen`. Only `Dockerfile` and `CHANGELOG.md` are variant-owned. CI rejec
 belong to release-please, and the SM generator reads the version out of the manifest, so a hand edit
 propagates into generated files silently. Force a version with a `Release-As: X.Y.Z` commit footer.
 
+**MQTT health reporting is optional, default-on.** Native `mqtt_enabled` is passed as
+`REPORTER_MQTT_ENABLED` by each launcher; an absent key preserves existing installs. The SM launcher
+passes only the boolean before dropping privileges, never the token-bearing options file. The shared
+reporter withdraws retained discovery/state when disabled, then idles to avoid s6 restart loops.
+Registry IDs/topics remain slug-based; readable model names are presentation only. Alloy problem
+sensors use `on` for faults and `off` for success; missing metrics remain unknown.
+
 **Conventional Commits select the release, and a squash-merged PR's *title* becomes the commit
 subject on `main`** - so the title needs the prefix. Scope by App: `fix(alloy):`, `feat(alloy):`.
 

@@ -3,7 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["pyyaml", "voluptuous"]
 # ///
-"""Contract test for Alloy's native recovery-only Home Assistant schema."""
+"""Contract test for Alloy's native startup and health-reporting schema."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ ADDON = Path(__file__).resolve().parents[1]
 CONFIG = ADDON / "config.yaml"
 TRANSLATIONS = ADDON / "translations" / "en.yaml"
 EXPECTED_SCHEMA = {
+    "mqtt_enabled": "bool",
     "safe_mode": "bool",
     "ui_log_level": "list(debug|info|warn|error)",
     # A startup flag rather than a pipeline setting: it has to apply to remote
@@ -27,6 +28,7 @@ EXPECTED_SCHEMA = {
     "alloy_stability_level": "list(generally-available|public-preview|experimental)",
 }
 EXPECTED_OPTIONS = {
+    "mqtt_enabled": True,
     "safe_mode": False,
     "ui_log_level": "info",
     "alloy_stability_level": "generally-available",
@@ -59,8 +61,8 @@ def main() -> int:
     check("ingress streams proxied responses", config.get("ingress_stream") is True)
     check("Supervisor restart API is enabled", config.get("hassio_api") is True)
     check("host-network services advertise no ineffective port mappings", "ports" not in config)
-    check("native schema contains recovery and startup controls only", schema == EXPECTED_SCHEMA)
-    check("native defaults contain recovery and startup controls only", options == EXPECTED_OPTIONS)
+    check("native schema contains startup and health-reporting controls only", schema == EXPECTED_SCHEMA)
+    check("native defaults contain startup and health-reporting controls only", options == EXPECTED_OPTIONS)
 
     print("\n== native values validate like Supervisor ==")
     for key, default in EXPECTED_OPTIONS.items():

@@ -56,11 +56,15 @@ func deviceFor(info appInfo) device {
 	if name == "" {
 		name = info.Slug
 	}
+	model := info.Model
+	if model == "" {
+		model = name
+	}
 	return device{
 		Identifiers:  []string{topicRoot + "_" + info.Slug},
 		Name:         name,
 		Manufacturer: "BroTEK Solutions",
-		Model:        info.Slug,
+		Model:        model,
 		SWVersion:    info.Version,
 	}
 }

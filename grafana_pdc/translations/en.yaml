@@ -1,5 +1,11 @@
 ---
 configuration:
+  mqtt_enabled:
+    name: MQTT health reporting
+    description: >-
+      Publishes App health entities through Home Assistant's MQTT broker.
+      Enabled by default. Turn off to remove these entities when the broker
+      is reachable. Restart the App after changing this option.
   signing_token:
     name: Grafana Cloud PDC signing token
     description: >-

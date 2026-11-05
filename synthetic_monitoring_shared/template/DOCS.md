@@ -71,23 +71,34 @@ trust boundary is acceptable.
 
 ## Home Assistant entities over MQTT
 
-If Home Assistant has an MQTT broker (the Mosquitto broker App is the usual
-one), this App publishes its own health as entities using MQTT discovery. There
-is nothing to configure and no credentials to copy: the broker details come from
-the Supervisor, so rotating them does not strand a copy here. Without a broker
-the App behaves exactly as before, and it keeps checking, so installing one
-later needs no restart.
+**MQTT health reporting** (`mqtt_enabled`) on the Home Assistant **Configuration**
+tab controls whether this App publishes health entities through MQTT discovery.
+It defaults to `true` for new and existing installations, including saved options
+that do not yet contain the key. No broker credentials need to be entered: the
+reporter uses the MQTT broker supplied by the Supervisor, usually the Mosquitto
+broker App. Without a broker, the reporter waits and retries while the App keeps
+running normally.
 
-The point is to make the monitoring pipeline itself monitorable. These entities
-let an automation notice that telemetry stopped - which is precisely the failure
-that otherwise hides, because the thing that would have told you is the thing
-that broke.
+To turn reporting off, set `mqtt_enabled` to `false`, save and restart the App.
+The reporter removes its retained discovery and state messages when it can reach
+the broker, then idles without polling health. If the broker is unavailable,
+cleanup is retried and the old entities may remain until it succeeds. To restore
+reporting, enable the option and restart; discovery is published again.
+
+These entities let Home Assistant automations detect application failures, such
+as a probe losing its cloud connection while its process still runs. They depend
+on Home Assistant and its MQTT broker being available. They cannot alert when the
+whole Home Assistant host is down; use independent monitoring for that case.
 
 | Entity | Type | Meaning |
 | --- | --- | --- |
 | Probe running | binary sensor | The agent's local HTTP server answers, so the process is alive. |
 | Connected to Grafana Cloud | binary sensor | The agent's `/ready` endpoint answers. It returns 503 until the probe has actually connected, which makes this the entity worth alerting on. |
 
+
+The device model names the probe variant: **Grafana Synthetic Monitoring Probe**
+or **Grafana Synthetic Monitoring Probe with Browser Checks**. Device identifiers
+and entity unique IDs stay unchanged when the model label is updated.
 
 Entities appear under a device named after the App. They report `unavailable`
 when the App stops, through an MQTT last-will message, and an individual entity

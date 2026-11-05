@@ -9,20 +9,20 @@ to the selected operation mode, validates the complete candidate with Alloy,
 and links to Alloy's component graph. Saving does not interrupt collection;
 choose **Save and restart** when you are ready to apply the new configuration.
 
-The Home Assistant **Configuration** tab contains the startup controls that must
-stay reachable even when Alloy will not start. All pipeline settings live in the
-Web UI, so the same option is never presented in two places. These three are the
-complete set of native App options:
+The Home Assistant **Configuration** tab contains startup and health-reporting
+controls. All pipeline settings live in the Web UI, so the same option is never
+presented in two places. The native App options are:
 
 | Field | Option key | Default | Meaning |
 | --- | --- | --- | --- |
 | Start in recovery safe mode | `safe_mode` | `false` | Ignores the saved Web UI configuration and starts Alloy with logging only, so a configuration that prevents startup can be repaired. See [Troubleshooting](#troubleshooting). |
 | Configuration UI log level | `ui_log_level` | `info` | Verbosity of the ingress configuration service itself. It does not change Alloy's log level or anything shipped to Loki. |
 | Minimum component stability | `alloy_stability_level` | `generally-available` | Lowest component stability Alloy will load. See [Minimum component stability](#minimum-component-stability). |
+| MQTT health reporting | `mqtt_enabled` | `true` | Publishes health entities through the Supervisor-provided MQTT broker. Restart after changing it. |
 
-Because these three are what you reach for when Alloy will not start, they stay
-on the Home Assistant Configuration tab rather than moving into the Web UI,
-which may itself be unreachable at that moment.
+These controls stay on the Home Assistant Configuration tab so they remain
+reachable even when Alloy or its Web UI will not start. Saving pipeline settings
+in the Web UI does not change them.
 
 ## Choose one operation mode
 
@@ -288,25 +288,38 @@ graph** reports an upstream error until Alloy is ready again.
 
 ## Home Assistant entities over MQTT
 
-If Home Assistant has an MQTT broker (the Mosquitto broker App is the usual
-one), this App publishes its own health as entities using MQTT discovery. There
-is nothing to configure and no credentials to copy: the broker details come from
-the Supervisor, so rotating them does not strand a copy here. Without a broker
-the App behaves exactly as before, and it keeps checking, so installing one
-later needs no restart.
+**MQTT health reporting** (`mqtt_enabled`) on the Home Assistant **Configuration**
+tab controls whether this App publishes health entities through MQTT discovery.
+It defaults to `true` for new and existing installations, including saved options
+that do not yet contain the key. No broker credentials need to be entered: the
+reporter uses the MQTT broker supplied by the Supervisor, usually the Mosquitto
+broker App. Without a broker, the reporter waits and retries while the App keeps
+running normally.
 
-The point is to make the monitoring pipeline itself monitorable. These entities
-let an automation notice that telemetry stopped - which is precisely the failure
-that otherwise hides, because the thing that would have told you is the thing
-that broke.
+To turn reporting off, set `mqtt_enabled` to `false`, save and restart the App.
+The reporter removes its retained discovery and state messages when it can reach
+the broker, then idles without polling health. If the broker is unavailable,
+cleanup is retried and the old entities may remain until it succeeds. To restore
+reporting, enable the option and restart; discovery is published again.
+
+These entities let Home Assistant automations detect application failures, such
+as Alloy failing to load its configuration while its container still runs. They depend
+on Home Assistant and its MQTT broker being available. They cannot alert when the
+whole Home Assistant host is down; use independent monitoring for that case.
 
 | Entity | Type | Meaning |
 | --- | --- | --- |
 | Ready | binary sensor | Alloy's `/-/ready` endpoint answers, so the pipeline is running. |
-| Healthy | binary sensor | Alloy's `/-/healthy` endpoint answers. Exposed as a problem sensor. |
-| Configuration loaded | binary sensor | Alloy's last configuration load succeeded. |
+| Healthy | problem binary sensor | `OK` (`off`) when Alloy's `/-/healthy` endpoint succeeds; `Problem` (`on`) when it fails. |
+| Configuration loaded | problem binary sensor | `OK` (`off`) when Alloy's last configuration load succeeded; `Problem` (`on`) when it failed. A missing metric is `unknown`. |
 | Alloy version | sensor | The running Alloy version, from its own build-info metric. |
 
+
+The device model is **Grafana Alloy**. Device identifiers and entity unique IDs
+stay unchanged across this update. The **Healthy** and **Configuration loaded**
+problem sensors previously published success as `on`, which Home Assistant
+interpreted as a problem. Their polarity is now corrected: update any automation
+that used their raw `on`/`off` states so `on` means a fault and `off` means success.
 
 Entities appear under a device named after the App. They report `unavailable`
 when the App stops, through an MQTT last-will message, and an individual entity

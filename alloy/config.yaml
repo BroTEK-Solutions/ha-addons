@@ -29,10 +29,12 @@ map:
 backup_exclude:
   - alloy/**
 options:
+  mqtt_enabled: true
   safe_mode: false
   ui_log_level: info
   alloy_stability_level: generally-available
 schema:
+  mqtt_enabled: bool
   safe_mode: bool
   ui_log_level: list(debug|info|warn|error)
   alloy_stability_level: list(generally-available|public-preview|experimental)

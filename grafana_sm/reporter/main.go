@@ -12,6 +12,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -64,7 +65,7 @@ func awaitBroker(ctx context.Context, supervisor *supervisorClient) (mqttService
 		case present:
 			return service, nil
 		case !announced:
-			log.Printf("no Home Assistant MQTT broker is configured; entities will appear automatically if one is added")
+			log.Printf("no Home Assistant MQTT broker is configured; waiting to apply MQTT health reporting settings")
 			announced = true
 		}
 		select {
@@ -76,6 +77,14 @@ func awaitBroker(ctx context.Context, supervisor *supervisorClient) (mqttService
 }
 
 func run(ctx context.Context) error {
+	enabled := true
+	switch os.Getenv("REPORTER_MQTT_ENABLED") {
+	case "", "true":
+	case "false":
+		enabled = false
+	default:
+		return errors.New("REPORTER_MQTT_ENABLED must be true or false")
+	}
 	app := envOr("REPORTER_APP", "")
 	if app == "" {
 		return errors.New("REPORTER_APP is required")
@@ -95,14 +104,14 @@ func run(ctx context.Context) error {
 		&http.Client{Timeout: 15 * time.Second},
 	)
 
-	info, err := supervisor.AppInfo(ctx)
+	// Never guess the registry identity: a fallback slug could create duplicate
+	// devices or leave the real discovery topics behind when disabling reporting.
+	info, err := awaitAppInfo(ctx, supervisor)
 	if err != nil {
-		// Without the registry details the entities would be unattributable, so
-		// fall back to the App name this reporter was told to serve.
-		log.Printf("could not read App info from the Supervisor: %v", err)
-		info = appInfo{Slug: app, Name: app}
+		return err
 	}
 	info.Slug = sanitizeSlug(info.Slug)
+	info.Model = modelFor(app)
 
 	service, err := awaitBroker(ctx, supervisor)
 	if err != nil {
@@ -136,6 +145,10 @@ func run(ctx context.Context) error {
 			ClientID: topicRoot + "-" + info.Slug,
 		},
 	}
+	if !enabled {
+		// A cleanup connection must not recreate availability after withdrawal.
+		config.WillMessage = nil
+	}
 
 	connection, err := autopaho.NewConnection(ctx, config)
 	if err != nil {
@@ -143,6 +156,33 @@ func run(ctx context.Context) error {
 	}
 	if err := connection.AwaitConnection(ctx); err != nil {
 		return err
+	}
+	if !enabled {
+		for {
+			cleanup, cancel := context.WithTimeout(ctx, 15*time.Second)
+			err := withdrawDiscovery(cleanup, connection, entities, info.Slug)
+			cancel()
+			if err == nil {
+				break
+			}
+			log.Printf("MQTT health reporting is disabled; discovery cleanup will retry: %v", err)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(discoveryRetryInterval):
+			}
+		}
+		shutdown, cancel := context.WithTimeout(ctx, 5*time.Second)
+		err := connection.Disconnect(shutdown)
+		cancel()
+		if err != nil {
+			return err
+		}
+		log.Printf("MQTT health reporting is disabled; retained discovery removed")
+		// s6 supervises this process in Alloy/PDC. Exiting successfully would
+		// restart it and repeat cleanup forever. No broker or health polling now.
+		<-ctx.Done()
+		return ctx.Err()
 	}
 	log.Printf("publishing %d Home Assistant entities for %s over MQTT", len(entities), info.Slug)
 
@@ -205,6 +245,42 @@ func run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+func awaitAppInfo(ctx context.Context, supervisor *supervisorClient) (appInfo, error) {
+	for {
+		info, err := supervisor.AppInfo(ctx)
+		if err == nil && info.Slug != "" {
+			return info, nil
+		}
+		log.Printf("waiting for App identity from the Supervisor (error: %v)", err)
+		select {
+		case <-ctx.Done():
+			return appInfo{}, ctx.Err()
+		case <-time.After(discoveryRetryInterval):
+		}
+	}
+}
+
+// Empty retained publications remove only this App's existing discovery and
+// state. QoS 1 acknowledgement is required before treating cleanup as complete.
+func withdrawDiscovery(ctx context.Context, connection *autopaho.ConnectionManager, entities []entitySpec, slug string) error {
+	topics := make([]string, 0, len(entities)+2)
+	for _, entity := range entities {
+		topics = append(topics, discoveryTopic(entity, slug))
+	}
+	names := topicsFor(slug)
+	topics = append(topics, names.state, names.availability)
+	for _, topic := range topics {
+		response, err := connection.Publish(ctx, &paho.Publish{Topic: topic, QoS: 1, Retain: true})
+		if err != nil {
+			return err
+		}
+		if response == nil || response.ReasonCode >= 0x80 {
+			return fmt.Errorf("broker did not acknowledge removal of %s", topic)
+		}
+	}
+	return nil
 }
 
 func main() {
