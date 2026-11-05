@@ -1,11 +1,11 @@
 ---
 id: HAB-0023
 title: Make MQTT health reporting configurable and correct device presentation
-status: In Progress
+status: Done
 assignee:
   - agent
 created_date: '2026-11-05T23:34:00Z'
-updated_date: '2026-11-05T23:45:00Z'
+updated_date: '2026-11-05T23:51:00Z'
 labels:
   - unit:alloy
   - unit:grafana-pdc
@@ -23,23 +23,25 @@ App health devices appear automatically whenever a Supervisor MQTT broker exists
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 All four Apps expose mqtt_enabled, defaulting to true for existing and new installations; false stops health reporting and removes retained discovery when the broker is reachable.
-- [ ] #2 Alloy problem sensors report OFF for success and ON for observed failures; unavailable metrics remain unknown.
-- [ ] #3 Device models use readable product names while existing device identifiers and entity unique IDs remain stable.
-- [ ] #4 Configuration, migration effects, broker-unavailable cleanup behavior and monitoring limitations are documented; generated copies stay synchronized.
-- [ ] #5 Focused regression tests, the repository pre-commit gate, and dsreview pass; changes are submitted through a PR.
+- [x] #1 All four Apps expose mqtt_enabled, defaulting to true for existing and new installations; false stops health reporting and removes retained discovery when the broker is reachable.
+- [x] #2 Alloy problem sensors report OFF for success and ON for observed failures; unavailable metrics remain unknown.
+- [x] #3 Device models use readable product names while existing device identifiers and entity unique IDs remain stable.
+- [x] #4 Configuration, migration effects, broker-unavailable cleanup behavior and monitoring limitations are documented; generated copies stay synchronized.
+- [x] #5 Focused regression tests, the repository pre-commit gate, and dsreview pass; changes are submitted through a PR.
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 just check
-- [ ] #2 Fast subset while iterating (not the gate): just fmt-check && just lint && just gen-check && just test-repo
+- [x] #1 just check
+- [x] #2 Fast subset while iterating (not the gate): just fmt-check && just lint && just gen-check && just test-repo
 <!-- DOD:END -->
 
 ## Implementation Plan
 
 <!-- SECTION:PLAN:BEGIN -->
 1. Read mqtt_enabled from the mounted App options in the shared reporter, preserving true when the key is absent; disabled mode removes retained discovery/state using the existing identity, retries if the broker is unavailable, then idles without health polling. Restart applies the option. 2. Add default-true options, translations and user documentation in the three source App trees; keep Alloy option in its native Configuration tab. 3. Correct problem-class polarity and add stable product model names without changing IDs/topics. 4. Prove regressions red then green, exercise MQTT publication/cleanup against a local protocol fixture, regenerate copies, run just check, and review the final candidate with dsreview. 5. Submit and land a focused conventional-commit PR after required CI; record the merge identity.
+
+Final step-1 correction: each launcher reads the native option and passes only REPORTER_MQTT_ENABLED. The reporter never reads the token-bearing options file. Missing s6 options files also preserve enabled behavior; existing malformed/unreadable files fail closed.
 <!-- SECTION:PLAN:END -->
 
 ## Implementation Notes
@@ -53,3 +55,9 @@ dsreview identified a valid startup regression in the s6 scripts when the option
 
 Both review findings resolved: absent options files preserve enabled behavior, while existing unreadable/malformed files and dangling symlinks remain fail-closed. Both original scripts failed the missing-file fixture; corrected scripts passed seven cases each (missing file, true, false, absent key, malformed, unreadable, dangling symlink), plus ShellCheck. No unresolved major/minor findings; trivial guard correction does not require repeating the full dsreview per review policy. Reviewer evidence: /tmp/ha-mqtt-review.json. Runtime tests use local MQTT/HTTP fixtures, not a live HA broker.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Merged PR #169 as 22adf8387d3b45718f97210c5a92b8f45511b470. All four Apps now expose default-enabled MQTT health reporting; disabling and restarting withdraws retained discovery/state and idles. Alloy problem polarity is corrected; readable product models preserve registry identity. Generated copies and operational docs are synchronized. just check passed, reporter tests passed three race-detector iterations, and CI run 42131870088 passed all App test legs, AppArmor startup, security checks and eight architecture builds against 51f012613798679363d3ed2d1832e2c9bba5627e. Merge tree is byte-identical to that tested candidate. dsreview initially found the missing-options-file startup regression in both s6 scripts; both findings were corrected and seven fixture cases per script plus the final gate passed, with no unresolved findings. No live Home Assistant validation or release performed. Existing raw-state automations need the documented Alloy polarity adjustment. Pre-existing orderly-shutdown availability race is tracked separately in HAB-0024 (make MQTT offline publication reliable during orderly reporter shutdown).
+<!-- SECTION:FINAL_SUMMARY:END -->
