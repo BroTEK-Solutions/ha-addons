@@ -17,6 +17,7 @@ type entitySpec struct {
 	DeviceClass    string
 	EntityCategory string
 	Icon           string
+	Invert         bool // Positive upstream signal represented as a problem sensor.
 	Probe          probe
 }
 
@@ -43,6 +44,7 @@ func specsFor(app string) ([]entitySpec, error) {
 				Name:           "Healthy",
 				Component:      componentBinarySensor,
 				DeviceClass:    "problem",
+				Invert:         true,
 				EntityCategory: "diagnostic",
 				Probe:          probe{Kind: probeHTTPStatus, URL: base + "/-/healthy"},
 			},
@@ -51,6 +53,7 @@ func specsFor(app string) ([]entitySpec, error) {
 				Name:           "Configuration loaded",
 				Component:      componentBinarySensor,
 				DeviceClass:    "problem",
+				Invert:         true,
 				EntityCategory: "diagnostic",
 				Probe: probe{
 					Kind:   probeMetric,
@@ -110,4 +113,19 @@ func specsFor(app string) ([]entitySpec, error) {
 		}, nil
 	}
 	return nil, fmt.Errorf("no entity specification for App %q", app)
+}
+
+func modelFor(app string) string {
+	switch app {
+	case "alloy":
+		return "Grafana Alloy"
+	case "grafana_pdc":
+		return "Grafana Private Data Source Connect"
+	case "grafana_sm":
+		return "Grafana Synthetic Monitoring Probe"
+	case "grafana_sm_browser":
+		return "Grafana Synthetic Monitoring Probe with Browser Checks"
+	default:
+		return app
+	}
 }

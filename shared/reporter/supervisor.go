@@ -25,6 +25,7 @@ type mqttService struct {
 // It names the device in the Home Assistant device registry, so entities group
 // under the App rather than appearing as unrelated orphans.
 type appInfo struct {
+	Model   string `json:"-"` // Product identity supplied by this reporter, not a user-renamable display name.
 	Slug    string `json:"slug"`
 	Name    string `json:"name"`
 	Version string `json:"version"`

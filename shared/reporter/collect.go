@@ -175,7 +175,7 @@ func (c *collector) Collect(ctx context.Context, entities []entitySpec) map[stri
 	for _, entity := range entities {
 		switch entity.Probe.Kind {
 		case probeHTTPStatus:
-			state[entity.Key] = boolPayload(c.statusOK(ctx, entity.Probe.URL))
+			state[entity.Key] = entity.boolPayload(c.statusOK(ctx, entity.Probe.URL))
 		case probeMetric, probeMetricLabel:
 			samples, seen := scraped[entity.Probe.URL]
 			if !seen {
@@ -203,7 +203,7 @@ func resolveMetric(entity entitySpec, samples []sample) any {
 			continue
 		}
 		if entity.Component == componentBinarySensor {
-			return boolPayload(candidate.Value != 0)
+			return entity.boolPayload(candidate.Value != 0)
 		}
 		return candidate.Value
 	}
@@ -214,7 +214,10 @@ func resolveMetric(entity entitySpec, samples []sample) any {
 	return nil
 }
 
-func boolPayload(value bool) string {
+func (entity entitySpec) boolPayload(value bool) string {
+	if entity.Invert {
+		value = !value
+	}
 	if value {
 		return "ON"
 	}

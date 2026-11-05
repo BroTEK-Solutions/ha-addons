@@ -36,6 +36,7 @@ TRANSLATIONS = ADDON / "translations" / "en.yaml"
 
 REQUIRED = {"signing_token", "hosted_grafana_id", "cluster"}
 MAIN_DEFAULTS: dict[str, object] = {
+    "mqtt_enabled": True,
     "allowed_endpoints": [],
     "log_level": "info",
 }

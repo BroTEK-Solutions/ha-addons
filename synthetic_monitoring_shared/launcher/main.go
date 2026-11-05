@@ -29,6 +29,7 @@ const (
 )
 
 type options struct {
+	MQTTEnabled          bool   `json:"mqtt_enabled"`
 	APIToken             string `json:"api_token"`
 	APIServerAddress     string `json:"api_server_address"`
 	LogLevel             string `json:"log_level"`
@@ -43,7 +44,7 @@ type agentProcess struct {
 }
 
 func loadOptions(reader io.Reader) (options, error) {
-	result := options{LogLevel: "warn"}
+	result := options{LogLevel: "warn", MQTTEnabled: true}
 	decoder := json.NewDecoder(reader)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&result); err != nil {
@@ -110,6 +111,12 @@ func wrapWithTini(process agentProcess, tiniPath string) agentProcess {
 	return process
 }
 
+// Pass the health-reporting option before dropping the child's privileges; the
+// options file also contains the probe token and must not be made readable.
+func reporterEnvironment(opts options, environment []string) []string {
+	return setEnvironment(withoutToken(environment), "REPORTER_MQTT_ENABLED", strconv.FormatBool(opts.MQTTEnabled))
+}
+
 // startReporter launches the optional Home Assistant MQTT reporter alongside
 // the agent. This App has no supervision tree - the launcher execs the agent and
 // is replaced by it - so the reporter is started as a child beforehand and is
@@ -118,8 +125,8 @@ func wrapWithTini(process agentProcess, tiniPath string) agentProcess {
 // Every failure here is deliberately silent-ish and non-fatal: the probe is the
 // product, and a telemetry side channel must never keep it from starting. The
 // child is started while the launcher is still root so it can be dropped to the
-// same unprivileged account the agent runs as, and it inherits only the ambient
-// environment, never the probe's API token.
+// same unprivileged account the agent runs as. It receives the ambient
+// environment and the health-reporting switch, never the probe's API token.
 //
 // The child is also unsupervised for the container's lifetime. syscall.Exec
 // replaces this launcher with the agent, so the agent inherits the reporter and
@@ -129,7 +136,7 @@ func wrapWithTini(process agentProcess, tiniPath string) agentProcess {
 // restarted. That is the accepted trade for never letting a side channel gate
 // the probe, and DOCS.md states it as a documented behaviour rather than
 // leaving users to infer it from silence.
-func startReporter(reporterPath string, environment []string, log io.Writer) {
+func startReporter(reporterPath string, environment []string, opts options, log io.Writer) {
 	if os.Getenv("REPORTER_APP") == "" {
 		return
 	}
@@ -137,7 +144,7 @@ func startReporter(reporterPath string, environment []string, log io.Writer) {
 		return
 	}
 	command := exec.Command(reporterPath)
-	command.Env = withoutToken(environment)
+	command.Env = reporterEnvironment(opts, environment)
 	command.Stdout = log
 	command.Stderr = log
 	command.SysProcAttr = &syscall.SysProcAttr{
@@ -282,7 +289,7 @@ func run() error {
 	// Started before the privilege drop, because setting the child's credentials
 	// requires the launcher to still be root. os.Environ() is passed rather than
 	// the agent's environment so the probe's API token never reaches it.
-	startReporter(reporterPath, os.Environ(), os.Stderr)
+	startReporter(reporterPath, os.Environ(), opts, os.Stderr)
 	startUI(uiPath, os.Environ(), opts, os.Stderr)
 	if err := dropPrivileges(); err != nil {
 		return fmt.Errorf("drop launcher privileges: %w", err)

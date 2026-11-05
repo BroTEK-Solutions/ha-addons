@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - agent
 created_date: '2026-11-05T23:34:00Z'
-updated_date: '2026-11-05T23:35:00Z'
+updated_date: '2026-11-05T23:45:00Z'
 labels:
   - unit:alloy
   - unit:grafana-pdc
@@ -41,3 +41,15 @@ App health devices appear automatically whenever a Supervisor MQTT broker exists
 <!-- SECTION:PLAN:BEGIN -->
 1. Read mqtt_enabled from the mounted App options in the shared reporter, preserving true when the key is absent; disabled mode removes retained discovery/state using the existing identity, retries if the broker is unavailable, then idles without health polling. Restart applies the option. 2. Add default-true options, translations and user documentation in the three source App trees; keep Alloy option in its native Configuration tab. 3. Correct problem-class polarity and add stable product model names without changing IDs/topics. 4. Prove regressions red then green, exercise MQTT publication/cleanup against a local protocol fixture, regenerate copies, run just check, and review the final candidate with dsreview. 5. Submit and land a focused conventional-commit PR after required CI; record the merge identity.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Runtime seam corrected after inspecting SM privilege drop: launchers pass only REPORTER_MQTT_ENABLED rather than allowing the reporter to read the token-bearing options file. Missing keys/flags preserve enabled behavior. Regression tests first failed for Alloy success/failure polarity, slug-as-model, and disabled mode still advertising a last will. All now pass using HTTP probe fixtures and actual MQTT client packets against a local protocol peer. Native configuration, translations and docs are implemented; launcher and s6 false/default wiring verified.
+
+Final local gate: just check passed after generated-copy refresh; all 188 Alloy configuration checks passed. MQTT source tests passed three iterations under the race detector with fixture-only probe traffic (go test -race -timeout 90s -count=3). The enabled-flow test waits for initial state before cancellation and allows the existing five-second shutdown grace. No live HA instance modified. Final review pending.
+
+dsreview identified a valid startup regression in the s6 scripts when the options file is absent (the Alloy image smoke test uses empty /data). Correcting missing-file behavior to enabled; unreadable or malformed existing files intentionally remain fail-closed. Independent review otherwise confirmed option plumbing, polarity, model naming and SM token separation. Test-timing investigation also identified pre-existing orderly-shutdown availability race, recorded separately in HAB-0024 (make MQTT offline publication reliable during orderly reporter shutdown); it is outside this change.
+
+Both review findings resolved: absent options files preserve enabled behavior, while existing unreadable/malformed files and dangling symlinks remain fail-closed. Both original scripts failed the missing-file fixture; corrected scripts passed seven cases each (missing file, true, false, absent key, malformed, unreadable, dangling symlink), plus ShellCheck. No unresolved major/minor findings; trivial guard correction does not require repeating the full dsreview per review policy. Reviewer evidence: /tmp/ha-mqtt-review.json. Runtime tests use local MQTT/HTTP fixtures, not a live HA broker.
+<!-- SECTION:NOTES:END -->

@@ -4,5 +4,12 @@
 # it must never be able to disturb Alloy, so it runs as its own service and the
 # reporter itself stays quiet when no MQTT broker is configured.
 REPORTER_APP=alloy
-export REPORTER_APP
+# A fresh data directory has no options file. Existing files must decode:
+# unreadable/malformed options must not silently override a configured false.
+REPORTER_MQTT_ENABLED=true
+if [[ -e /data/options.json || -L /data/options.json ]]; then
+    # Preserve false: jq's // operator would replace it with true.
+    REPORTER_MQTT_ENABLED="$(jq -r 'if has("mqtt_enabled") then .mqtt_enabled else true end' /data/options.json)" || exit 1
+fi
+export REPORTER_APP REPORTER_MQTT_ENABLED
 exec /usr/bin/ha-reporter

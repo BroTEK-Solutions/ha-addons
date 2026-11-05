@@ -20,9 +20,11 @@ panel_title: PDC status
 ports:
   8090/tcp: null
 options:
+  mqtt_enabled: true
   allowed_endpoints: []
   log_level: info
 schema:
+  mqtt_enabled: bool
   signing_token: password(1,)
   hosted_grafana_id: match(^[1-9][0-9]*$)
   cluster: match(^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$)

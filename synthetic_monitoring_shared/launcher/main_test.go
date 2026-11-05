@@ -22,6 +22,36 @@ func TestLoadOptionsRejectsUnknownFields(t *testing.T) {
 	}
 }
 
+func TestReporterEnvironmentAppliesMQTTOptionWithoutProbeToken(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		json string
+		want string
+	}{
+		{"existing installation", `{"api_token":"OPTION_SECRET"}`, "true"},
+		{"disabled", `{"api_token":"OPTION_SECRET","mqtt_enabled":false}`, "false"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, err := loadOptions(strings.NewReader(tt.json))
+			if err != nil {
+				t.Fatal(err)
+			}
+			ambient := []string{"SM_AGENT_API_TOKEN=AMBIENT_SECRET", "REPORTER_MQTT_ENABLED=stale", "PATH=/usr/bin"}
+			before := append([]string(nil), ambient...)
+			got := reporterEnvironment(opts, ambient)
+			if !containsString(got, "REPORTER_MQTT_ENABLED="+tt.want) || containsString(got, "REPORTER_MQTT_ENABLED=stale") {
+				t.Fatalf("reporter environment = %v; want configured MQTT value %s", got, tt.want)
+			}
+			if strings.Contains(strings.Join(got, "\x00"), "SECRET") || strings.Contains(strings.Join(got, "\x00"), tokenEnvVar+"=") {
+				t.Fatal("probe token reached the reporter environment")
+			}
+			if !reflect.DeepEqual(ambient, before) {
+				t.Fatal("building reporter environment mutated the ambient environment")
+			}
+		})
+	}
+}
+
 func TestBuildAgentProcessKeepsTokenOutOfArguments(t *testing.T) {
 	opts := options{
 		APIToken:             "SENTINEL_TOKEN",
@@ -188,7 +218,7 @@ func TestStartReporterIsANoOpWithoutAnAppName(t *testing.T) {
 	var log strings.Builder
 	// A missing REPORTER_APP means this image does not publish entities. It must
 	// not warn, and above all must not fail: the probe still has to start.
-	startReporter("/nonexistent/ha-reporter", os.Environ(), &log)
+	startReporter("/nonexistent/ha-reporter", os.Environ(), options{}, &log)
 	if log.String() != "" {
 		t.Fatalf("expected silence, got %q", log.String())
 	}
@@ -197,7 +227,7 @@ func TestStartReporterIsANoOpWithoutAnAppName(t *testing.T) {
 func TestStartReporterIsANoOpWhenTheBinaryIsAbsent(t *testing.T) {
 	t.Setenv("REPORTER_APP", "grafana_sm")
 	var log strings.Builder
-	startReporter(filepath.Join(t.TempDir(), "absent"), os.Environ(), &log)
+	startReporter(filepath.Join(t.TempDir(), "absent"), os.Environ(), options{}, &log)
 	if log.String() != "" {
 		t.Fatalf("an absent reporter must not be reported as a failure, got %q", log.String())
 	}
@@ -224,7 +254,7 @@ func TestReporterNeverReceivesTheProbeToken(t *testing.T) {
 	}
 
 	for _, environment := range map[string][]string{
-		"reporter": withoutToken(ambient),
+		"reporter": reporterEnvironment(opts, ambient),
 		"UI":       setEnvironment(withoutToken(ambient), "SM_UI_OPTIONS", "{}"),
 	} {
 		for _, entry := range environment {

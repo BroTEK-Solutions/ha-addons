@@ -22,10 +22,12 @@ ingress_port: 4051
 panel_icon: mdi:radar
 panel_title: Probe status
 options:
+  mqtt_enabled: true
   log_level: info
   allow_private_networks: false
   disable_usage_reports: false
 schema:
+  mqtt_enabled: bool
   api_token: password(1,)
   api_server_address: >-
     match(^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*:[1-9][0-9]{0,4}$)
