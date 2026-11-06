@@ -1,9 +1,11 @@
 ---
 id: HAB-0030
 title: Keep release publication queued and reject unexpected skipped gates
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@codex'
 created_date: '2026-11-06T00:09:00Z'
+updated_date: '2026-11-06T00:14:00Z'
 labels:
   - unit:repo
 dependencies: []
@@ -31,3 +33,9 @@ Workflow cancellation can discard a version-changing push when a later tracker-o
 - [ ] #1 just check
 - [ ] #2 Fast subset while iterating (not the gate): just fmt-check && just lint && just gen-check && just test-repo
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Keep superseded PR cancellation, preserve queued main publication for every version change, and provide explicit missed-version recovery. Enforce mandatory successful outcomes and allow image skips only for verified no-change selection. CI lane researches current supported concurrency schema, proves outcome cases, validates actionlint/zizmor and full gate, then guarded review before landing.
+<!-- SECTION:PLAN:END -->
