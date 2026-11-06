@@ -5,10 +5,10 @@ title: >-
   allowlist lands
 status: Done
 assignee: []
-created_date: '2026-09-26 15:37'
-updated_date: '2026-09-26 18:49'
+created_date: 2026-09-26 15:37
+updated_date: '2026-11-06T00:09:00Z'
 labels:
-  - 'unit:repo'
+  - unit:repo
 dependencies: []
 priority: high
 type: chore
@@ -33,7 +33,7 @@ This is a BroTEK-Solutions repo, so it lands via a branch and PR, not a push to 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [x] #1 builder.yaml has no tj-actions reference and zizmor/actionlint pass
-- [ ] #2 A PR that touches exactly one App builds only that App; a push to main behaves as before
+- [x] #2 A PR that touches exactly one App builds only that App; a push to main behaves as before
 <!-- AC:END -->
 
 ## Definition of Done
@@ -47,3 +47,9 @@ This is a BroTEK-Solutions repo, so it lands via a branch and PR, not a push to 
 <!-- SECTION:NOTES:BEGIN -->
 Landed via PR #122 (squash 7d01a4d): Read changed files is a plain git diff step; init drops pull-requests: read. PR run built every App as expected for a builder.yaml change. AC #2's one-App PR path is still to be seen on the next single-App PR.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Remaining one-App evidence verified: PR #159 changed only alloy/Dockerfile. PR run 40751425977 and main run 40752048010 both built only Alloy amd64/aarch64 successfully, skipping publication for unchanged versions. Implementation landed in PR #122, merge 7d01a4d; no further change needed.
+<!-- SECTION:FINAL_SUMMARY:END -->

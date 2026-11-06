@@ -3,12 +3,13 @@ id: HAB-0016
 title: Build a Traefik state custom integration for Home Assistant
 status: To Do
 assignee: []
-created_date: '2026-08-29 17:38'
+created_date: 2026-08-29 17:38
+updated_date: '2026-11-06T00:09:00Z'
 labels:
-  - 'unit:traefik'
+  - unit:traefik
 dependencies: []
 references:
-  - 'https://doc.traefik.io/traefik/operations/api/'
+  - https://doc.traefik.io/traefik/operations/api/
 priority: low
 type: feature
 ordinal: 16000
@@ -35,3 +36,9 @@ Observability-only HACS custom integration (new repository) reading the Traefik 
 - [ ] #1 just check
 - [ ] #2 Fast subset while iterating (not the gate): just fmt-check && just lint && just gen-check && just test-repo
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-06 delegated product disposition: Defer the separate Traefik HACS observability product. It adds ongoing integration maintenance for infrastructure state already suitable for the existing observability stack. Reconsider when a concrete HA automation or display requirement justifies the additional product. Archived as unbuilt/deferred, not delivered. User authorized autonomous product triage; historical market-gap claims have not been revalidated.
+<!-- SECTION:NOTES:END -->

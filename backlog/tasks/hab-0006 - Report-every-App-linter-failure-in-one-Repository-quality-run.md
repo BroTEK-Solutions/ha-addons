@@ -1,12 +1,13 @@
 ---
 id: HAB-0006
 title: Report every App linter failure in one Repository quality run
-status: To Do
-assignee: []
-created_date: '2026-08-17 14:20'
-updated_date: '2026-08-29 14:54'
+status: In Progress
+assignee:
+  - '@codex'
+created_date: 2026-08-17 14:20
+updated_date: '2026-11-06T00:09:00Z'
 labels:
-  - 'unit:repo'
+  - unit:repo
 dependencies: []
 priority: low
 type: chore
@@ -44,3 +45,9 @@ Low priority - it costs contributor time, not correctness.
 - [ ] #5 PDC only: python3 grafana_pdc/tests/config-schema.test.py && python3 grafana_pdc/tests/image-contract.test.py
 - [ ] #6 SM only: python3 scripts/sync_synthetic_monitoring_variants.py && (cd synthetic_monitoring_shared/launcher && go test ./...)
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Run all four App metadata checks despite individual failures and aggregate their outcomes to fail the job. Exercise multiple simultaneous failures and retain diagnostics. CI lane owns together with HAB-0004 (Go formatting and vetting gate).
+<!-- SECTION:PLAN:END -->

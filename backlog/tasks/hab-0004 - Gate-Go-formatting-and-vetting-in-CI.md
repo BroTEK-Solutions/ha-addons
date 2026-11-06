@@ -1,12 +1,13 @@
 ---
 id: HAB-0004
 title: Gate Go formatting and vetting in CI
-status: To Do
-assignee: []
-created_date: '2026-08-17 14:19'
-updated_date: '2026-08-29 14:54'
+status: In Progress
+assignee:
+  - '@codex'
+created_date: 2026-08-17 14:19
+updated_date: '2026-11-06T00:09:00Z'
 labels:
-  - 'unit:repo'
+  - unit:repo
 dependencies: []
 priority: medium
 type: chore
@@ -45,3 +46,9 @@ The repository has many small Go modules (alloy/reporter, alloy/ui, grafana_pdc/
 - [ ] #5 PDC only: python3 grafana_pdc/tests/config-schema.test.py && python3 grafana_pdc/tests/image-contract.test.py
 - [ ] #6 SM only: python3 scripts/sync_synthetic_monitoring_variants.py && (cd synthetic_monitoring_shared/launcher && go test ./...)
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Retain source-only gofmt; add full go vet across five source Go modules to just check and Repository quality. Include shared SM UI tests in test-sm. Prove deliberately failing format/vet/UI fixtures fail actual recipes; run final gate. CI lane owns root workflow and justfile edits.
+<!-- SECTION:PLAN:END -->

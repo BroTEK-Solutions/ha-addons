@@ -1,10 +1,12 @@
 ---
 id: HAB-0020
 title: Harden Actions token and ci-success check
-status: To Do
+status: Done
 assignee: []
-created_date: '2026-09-26 15:35'
-labels: []
+created_date: 2026-09-26 15:35
+updated_date: '2026-11-06T00:09:00Z'
+labels:
+  - unit:repo
 dependencies: []
 priority: medium
 ordinal: 20000
@@ -21,3 +23,9 @@ Found 2026-09-26 by the renovate-repair pilot security review (verified live): d
 - [ ] #1 just check
 - [ ] #2 Fast subset while iterating (not the gate): just fmt-check && just lint && just gen-check && just test-repo
 <!-- DOD:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Live GitHub API verification on 2026-11-06: workflow default permissions read; Actions PR approval disabled; strict required ci-success is pinned to GitHub Actions integration 15368. Existing workflows already passed PR #169 CI run 42131870088 with these settings. This was an externally applied settings change, not a new code change; local code-gate definitions do not apply to this reconciliation.
+<!-- SECTION:FINAL_SUMMARY:END -->

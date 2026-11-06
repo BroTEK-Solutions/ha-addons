@@ -1,12 +1,13 @@
 ---
 id: HAB-0005
 title: Confine the Grafana PDC status page and MQTT reporter under AppArmor
-status: To Do
-assignee: []
-created_date: '2026-08-17 14:20'
-updated_date: '2026-08-29 14:54'
+status: In Progress
+assignee:
+  - '@codex'
+created_date: 2026-08-17 14:20
+updated_date: '2026-11-06T00:09:00Z'
 labels:
-  - 'unit:grafana-pdc'
+  - unit:grafana-pdc
 dependencies: []
 priority: high
 type: enhancement
@@ -51,3 +52,9 @@ Untestable in CI, like the Alloy change: AppArmor only takes effect on a real Ho
 - [ ] #5 PDC only: python3 grafana_pdc/tests/config-schema.test.py && python3 grafana_pdc/tests/image-contract.test.py
 - [ ] #6 SM only: python3 scripts/sync_synthetic_monitoring_variants.py && (cd synthetic_monitoring_shared/launcher && go test ./...)
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Tighten PDC outer writable set and exact policy contract; document recovery; build enforcing Ubuntu startup/denied-write proof analogous Alloy. Retain real HAOS acceptance criterion as a pre-merge requirement and report it unverified until actual evidence exists. PDC lane owns its isolated candidate.
+<!-- SECTION:PLAN:END -->
