@@ -84,7 +84,7 @@ func buildDiscovery(entity entitySpec, info appInfo) ([]byte, error) {
 		Name:              entity.Name,
 		UniqueID:          fmt.Sprintf("%s_%s_%s", topicRoot, slug, entity.Key),
 		StateTopic:        names.state,
-		ValueTemplate:     fmt.Sprintf("{{ value_json.%s | default('') }}", entity.Key),
+		ValueTemplate:     fmt.Sprintf("{{ value_json.%s | default('None') }}", entity.Key),
 		AvailabilityTopic: names.availability,
 		PayloadAvailable:  payloadOnline,
 		PayloadNotAvail:   payloadOffline,
@@ -98,8 +98,8 @@ func buildDiscovery(entity entitySpec, info appInfo) ([]byte, error) {
 
 // buildState renders the single JSON document every entity reads. Keys whose
 // value is unknown are omitted rather than sent as null, because an absent key
-// makes the template fall through to its default and Home Assistant shows the
-// entity as unknown - which is what an unobservable state should look like.
+// renders the explicit None sentinel Home Assistant uses to clear stale state.
+// An empty binary-sensor payload would be ignored and keep the previous value.
 func buildState(values map[string]any) ([]byte, error) {
 	present := make(map[string]any, len(values))
 	for key, value := range values {
