@@ -33,6 +33,11 @@ job runs both on an Ubuntu VM. This proves Ubuntu AppArmor startup, not every HA
 - `scripts/cloud-environment-setup.sh` is the cloud-provisioning command and is deliberately not a
   recipe: it uses sudo and installs tools globally.
 
+Alloy API uploads are capped at 1 MiB and complete encoded settings at 2 MiB. Settings updates
+hold the shared cross-process lock across read, merge, validation and replacement, with cancellable
+lock acquisition. Safe mode ignores saved runtime flags and credentials; its ingress-only recovery
+action archives exact existing bytes before resetting settings. Never replace this with a silent reset.
+
 ## Rules that are easy to break by accident
 
 **`grafana_sm/` and `grafana_sm_browser/` are generated.** Edit `synthetic_monitoring_shared/` and

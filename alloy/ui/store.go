@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,13 +11,21 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 )
 
 const settingsSchemaVersion = 2
 
+// Requests remain capped at 1 MiB. Stored settings retain inactive-mode fields
+// and credentials, so their complete encoded document has a separate ceiling.
+const maxSettingsBytes = 2 << 20
+
+var errSettingsTooLarge = errors.New("saved settings exceed the 2 MiB limit")
+
 type settingsStore interface {
-	Load() (map[string]any, error)
-	Save(map[string]any) error
+	Load(context.Context) (map[string]any, error)
+	Update(context.Context, func(map[string]any) (map[string]any, error)) error
+	Recover(context.Context) error
 }
 
 type fileStore struct {
@@ -27,15 +37,28 @@ func newFileStore(path, legacyPath string) *fileStore {
 	return &fileStore{path: path, legacyPath: legacyPath}
 }
 
-func (s *fileStore) Load() (map[string]any, error) {
+func (s *fileStore) Load(ctx context.Context) (map[string]any, error) {
+	unlock, err := s.lock(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	return s.loadLocked(ctx)
+}
+
+func (s *fileStore) loadLocked(ctx context.Context) (map[string]any, error) {
 	settings, err := readSettings(s.path)
 	if err == nil {
 		version, valid := settings["schema_version"].(float64)
 		if !valid || version != settingsSchemaVersion {
 			return nil, fmt.Errorf("read settings: unsupported schema_version %v", settings["schema_version"])
 		}
-		if migrateSettings(settings) {
-			if err := s.Save(settings); err != nil {
+		migrated := migrateSettings(settings)
+		if err := validateStoredSettingsTypes(settings); err != nil {
+			return nil, err
+		}
+		if migrated {
+			if err := s.saveLocked(ctx, settings); err != nil {
 				return nil, fmt.Errorf("persist settings migration: %w", err)
 			}
 			return readSettings(s.path)
@@ -53,17 +76,17 @@ func (s *fileStore) Load() (map[string]any, error) {
 	}
 	if legacyErr == nil {
 		for key := range operationalSettingNames {
-			if value, present := legacy[key]; present {
+			if value, present := legacy[key]; present && value != nil {
 				settings[key] = value
 			}
 		}
 		if _, present := settings["gcloud_rw_api_key"]; !present {
-			if legacySecret, present := legacy["fleet_password"]; present {
+			if legacySecret, present := legacy["fleet_password"]; present && legacySecret != nil {
 				settings["gcloud_rw_api_key"] = legacySecret
 			}
 		}
 	}
-	if err := s.Save(settings); err != nil {
+	if err := s.saveLocked(ctx, settings); err != nil {
 		return nil, fmt.Errorf("persist migrated settings: %w", err)
 	}
 	return readSettings(s.path)
@@ -71,6 +94,16 @@ func (s *fileStore) Load() (map[string]any, error) {
 
 func migrateSettings(settings map[string]any) bool {
 	changed := migrateReservedFleetAttribute(settings)
+	// Earlier native options and the permissive API could persist nulls.
+	// Startup treated those as absent, so preserve that meaning on upgrade
+	// rather than forcing otherwise valid settings through recovery.
+	for key, value := range settings {
+		_, known := operationalSettingNames[key]
+		if value == nil && (known || isSecretOption(key) || key == "restart_required") {
+			delete(settings, key)
+			changed = true
+		}
+	}
 	return migrateStabilityLevelOut(settings) || changed
 }
 
@@ -113,55 +146,128 @@ func migrateReservedFleetAttribute(settings map[string]any) bool {
 	return true
 }
 
+// Update holds the same cross-process lock as initialization across the entire
+// read/merge/validate/write transaction. A later request merges the latest
+// secrets, rather than silently restoring its earlier snapshot.
+func (s *fileStore) Update(ctx context.Context, update func(map[string]any) (map[string]any, error)) error {
+	unlock, err := s.lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	settings, err := s.loadLocked(ctx)
+	if err != nil {
+		return err
+	}
+	candidate, err := update(settings)
+	if err != nil {
+		return err
+	}
+	return s.saveLocked(ctx, candidate)
+}
+
 func (s *fileStore) Save(settings map[string]any) error {
+	ctx := context.Background()
+	unlock, err := s.lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return s.saveLocked(ctx, settings)
+}
+
+func (s *fileStore) lock(ctx context.Context) (func(), error) {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
+		return nil, fmt.Errorf("create settings directory: %w", err)
+	}
+	lock, err := os.OpenFile(s.path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open settings lock: %w", err)
+	}
+	for {
+		if err := ctx.Err(); err != nil {
+			_ = lock.Close()
+			return nil, err
+		}
+		err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN); _ = lock.Close() }, nil
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EAGAIN) {
+			_ = lock.Close()
+			return nil, fmt.Errorf("lock settings: %w", err)
+		}
+		timer := time.NewTimer(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			_ = lock.Close()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func encodeSettings(settings map[string]any) ([]byte, error) {
 	stored := make(map[string]any, len(settings)+1)
 	for key, value := range settings {
 		stored[key] = value
 	}
 	stored["schema_version"] = settingsSchemaVersion
-
-	dir := filepath.Dir(s.path)
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return fmt.Errorf("create settings directory: %w", err)
+	if err := validateStoredSettingsTypes(stored); err != nil {
+		return nil, err
 	}
-	lock, err := os.OpenFile(s.path+".lock", os.O_CREATE|os.O_RDWR, 0o600)
+	var data bytes.Buffer
+	encoder := json.NewEncoder(&data)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(stored); err != nil {
+		return nil, fmt.Errorf("encode settings: %w", err)
+	}
+	if data.Len() > maxSettingsBytes {
+		return nil, errSettingsTooLarge
+	}
+	return data.Bytes(), nil
+}
+
+func (s *fileStore) saveLocked(ctx context.Context, settings map[string]any) error {
+	data, err := encodeSettings(settings)
 	if err != nil {
-		return fmt.Errorf("open settings lock: %w", err)
+		return err
 	}
-	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		return fmt.Errorf("lock settings: %w", err)
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) //nolint:errcheck -- closing the descriptor also releases the lock
-
+	dir := filepath.Dir(s.path)
 	temporary, err := os.CreateTemp(dir, "."+filepath.Base(s.path)+".tmp-*")
 	if err != nil {
 		return fmt.Errorf("create temporary settings: %w", err)
 	}
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
-
+	defer temporary.Close() //nolint:errcheck -- explicit close before replacement reports errors
 	if err := temporary.Chmod(0o600); err != nil {
-		_ = temporary.Close()
 		return fmt.Errorf("protect temporary settings: %w", err)
 	}
-	encoder := json.NewEncoder(temporary)
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(stored); err != nil {
-		_ = temporary.Close()
-		return fmt.Errorf("encode settings: %w", err)
+	if _, err := temporary.Write(data); err != nil {
+		return fmt.Errorf("write settings: %w", err)
 	}
 	if err := temporary.Sync(); err != nil {
-		_ = temporary.Close()
 		return fmt.Errorf("sync settings: %w", err)
 	}
 	if err := temporary.Close(); err != nil {
 		return fmt.Errorf("close settings: %w", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := os.Rename(temporaryPath, s.path); err != nil {
 		return fmt.Errorf("activate settings: %w", err)
 	}
-	directory, err := os.Open(dir)
+	return syncSettingsDirectory(dir)
+}
+
+func syncSettingsDirectory(path string) error {
+	directory, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("open settings directory: %w", err)
 	}
@@ -172,13 +278,82 @@ func (s *fileStore) Save(settings map[string]any) error {
 	return nil
 }
 
+// Recover never decodes damaged data. Archive its exact bytes durably before
+// replacing the active file; a failed archive leaves the original untouched.
+func (s *fileStore) Recover(ctx context.Context) error {
+	unlock, err := s.lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	info, err := os.Lstat(s.path)
+	if err != nil {
+		return fmt.Errorf("open settings for recovery: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("recovery requires a regular settings file")
+	}
+	original, err := os.Open(s.path)
+	if err != nil {
+		return fmt.Errorf("open settings for recovery: %w", err)
+	}
+	defer original.Close()
+	backupDir := filepath.Join(filepath.Dir(s.path), "backups")
+	if err := os.MkdirAll(backupDir, 0o700); err != nil {
+		return fmt.Errorf("create settings archive directory: %w", err)
+	}
+	archive, err := os.CreateTemp(backupDir, "settings-"+time.Now().UTC().Format("20060102T150405Z")+"-*.partial")
+	if err != nil {
+		return fmt.Errorf("create settings archive: %w", err)
+	}
+	defer archive.Close() //nolint:errcheck -- explicit close reports errors
+	if _, err := io.Copy(archive, &contextReader{ctx: ctx, reader: original}); err != nil {
+		return fmt.Errorf("archive settings: %w", err)
+	}
+	if err := archive.Sync(); err != nil {
+		return fmt.Errorf("sync settings archive: %w", err)
+	}
+	if err := archive.Close(); err != nil {
+		return fmt.Errorf("close settings archive: %w", err)
+	}
+	if err := os.Rename(archive.Name(), strings.TrimSuffix(archive.Name(), ".partial")+".json"); err != nil {
+		return fmt.Errorf("complete settings archive: %w", err)
+	}
+	if err := syncSettingsDirectory(backupDir); err != nil {
+		return err
+	}
+	if err := syncSettingsDirectory(filepath.Dir(s.path)); err != nil {
+		return err
+	}
+	return s.saveLocked(ctx, map[string]any{"restart_required": true})
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r *contextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.reader.Read(p)
+}
+
 func readSettings(path string) (map[string]any, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
-	decoder := json.NewDecoder(io.LimitReader(file, 1<<20))
+	data, err := io.ReadAll(io.LimitReader(file, maxSettingsBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	if len(data) > maxSettingsBytes {
+		return nil, errSettingsTooLarge
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
 	var settings map[string]any
 	if err := decoder.Decode(&settings); err != nil {
 		return nil, fmt.Errorf("decode %s: %w", path, err)
