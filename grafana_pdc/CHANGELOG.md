@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.2.3...grafana-pdc-v1.3.0) (2026-11-06)
+
+
+### Features
+
+* make MQTT health reporting configurable and correct sensor states ([#169](https://github.com/BroTEK-Solutions/ha-addons/issues/169)) ([22adf83](https://github.com/BroTEK-Solutions/ha-addons/commit/22adf8387d3b45718f97210c5a92b8f45511b470))
+
+
+### Bug Fixes
+
+* confine PDC and make companion diagnostics reliable ([#172](https://github.com/BroTEK-Solutions/ha-addons/issues/172)) ([502c230](https://github.com/BroTEK-Solutions/ha-addons/commit/502c2305dba78e4a2539530c4cc2b2e720c1afe0))
+* recover MQTT health reporting and reject overflowing ports ([#173](https://github.com/BroTEK-Solutions/ha-addons/issues/173)) ([2b201d7](https://github.com/BroTEK-Solutions/ha-addons/commit/2b201d72eddad998d56557b9c9926b765013fb5b))
+
 ## [1.2.3](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.2.2...grafana-pdc-v1.2.3) (2026-11-01)
 
 
