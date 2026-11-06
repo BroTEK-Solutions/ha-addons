@@ -13,8 +13,11 @@ env:
   MONITORED_FILES: "config.json config.yaml config.yml Dockerfile launcher reporter ui rootfs apparmor.txt"
 
 concurrency:
-  group: build-apps-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # PRs supersede old checks. Main publication must retain running AND pending
+  # version-changing pushes, including when tracker-only pushes follow them.
+  group: ${{ github.event_name == 'pull_request' && format('build-apps-pr-{0}', github.ref) || 'app-publication' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  queue: ${{ github.event_name == 'pull_request' && 'single' || 'max' }}
 
 jobs:
   quality:
@@ -444,44 +447,36 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-      - name: Fail if any required job did not pass
-        if: >-
-          ${{
-            needs.alloy-generator-test.result != 'success' ||
-            contains(needs.*.result, 'failure') ||
-            contains(needs.*.result, 'cancelled')
-          }}
+      - name: Check every required job outcome
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
-          echo "A required job failed or was cancelled: ${{ join(needs.*.result, ', ') }}"
-          exit 1
-
-      - name: All required jobs passed
-        run: echo "ci-success - ${{ join(needs.*.result, ', ') }}"
+          if jq -e '
+            . as $jobs |
+            all(to_entries[];
+              if .key == "build-app" then
+                .value.result == "success" or
+                (.value.result == "skipped" and
+                 $jobs.init.result == "success" and $jobs.init.outputs.changed == "false")
+              else .value.result == "success" end
+            ) and (.init.outputs.changed == "true" or .init.outputs.changed == "false")
+          ' <<< "$NEEDS_JSON" >/dev/null; then
+            echo "ci-success: every required job passed"
+          else
+            echo "::error::A required job did not pass or App selection was invalid"
+            jq 'map_values({result, outputs})' <<< "$NEEDS_JSON"
+            exit 1
+          fi
 
   release:
     name: Prepare or publish App releases
-    needs:
-      - init
-      - quality
-      - pdc-test
-      - alloy-generator-test
-      - alloy-init-test
-      - synthetic-monitoring-test
-      - build-app
-      - security
+    needs: [ci-success]
     if: >-
       ${{
         always() &&
         github.event_name == 'push' &&
         github.ref == 'refs/heads/main' &&
-        needs.init.result == 'success' &&
-        needs.quality.result == 'success' &&
-        needs.pdc-test.result == 'success' &&
-        needs.alloy-generator-test.result == 'success' &&
-        needs.alloy-init-test.result == 'success' &&
-        needs.synthetic-monitoring-test.result == 'success' &&
-        needs.security.result == 'success' &&
-        (needs.build-app.result == 'success' || needs.build-app.result == 'skipped')
+        needs.ci-success.result == 'success'
       }}
     permissions:
       contents: write
