@@ -25,6 +25,8 @@ global.fetch=()=>new Promise(()=>{});
 const response={agent_responding:true,endpoint:{},options:{},diagnostics:{connected:null,pushes:0,checks:[{type:'HTTP',running:0,executions:null,errors:null}]},checked_at:'2026-01-01T00:00:00Z'};
 render(response);
 assert.equal(elements.get('cloud').textContent,'Cloud state unknown');
+assert.equal(elements.get('config').children[1].textContent,'Unknown');
+assert.equal(elements.get('config').children[3].textContent,'Unknown');
 assert.equal(elements.get('totals').children[0].children[0].textContent,'Unknown');
 assert.equal(elements.get('totals').children[1].children[0].textContent,'0');
 assert.equal(elements.get('checks').children[0].children[1].textContent,'0');
