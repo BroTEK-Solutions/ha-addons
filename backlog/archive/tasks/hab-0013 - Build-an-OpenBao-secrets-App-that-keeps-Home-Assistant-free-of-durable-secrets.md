@@ -3,12 +3,13 @@ id: HAB-0013
 title: Build an OpenBao secrets App that keeps Home Assistant free of durable secrets
 status: To Do
 assignee: []
-created_date: '2026-08-29 17:37'
+created_date: 2026-08-29 17:37
+updated_date: '2026-11-06T00:09:00Z'
 labels:
-  - 'unit:openbao-secrets'
+  - unit:openbao-secrets
 dependencies: []
 references:
-  - 'https://github.com/rgruyters/addon-vault-secrets'
+  - https://github.com/rgruyters/addon-vault-secrets
 priority: medium
 type: feature
 ordinal: 13000
@@ -34,3 +35,9 @@ New App in this repo: authenticate to an OpenBao (or Vault-API-compatible) serve
 - [ ] #1 just check
 - [ ] #2 Fast subset while iterating (not the gate): just fmt-check && just lint && just gen-check && just test-repo
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-06 delegated product disposition: Reject the current no-durable-secrets promise: rendering secrets to persistent files or App options and preserving them during outages retains durable secrets. Reconsider only with an explicit persistence/threat model, bootstrap identity and reload contract; do not ship a misleading security promise. Archived as unbuilt/deferred, not delivered. User authorized autonomous product triage; historical market-gap claims have not been revalidated.
+<!-- SECTION:NOTES:END -->

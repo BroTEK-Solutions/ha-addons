@@ -1,12 +1,13 @@
 ---
 id: HAB-0004
 title: Gate Go formatting and vetting in CI
-status: To Do
-assignee: []
-created_date: '2026-08-17 14:19'
-updated_date: '2026-08-29 14:54'
+status: Done
+assignee:
+  - '@codex'
+created_date: 2026-08-17 14:19
+updated_date: '2026-11-06T00:20:00Z'
 labels:
-  - 'unit:repo'
+  - unit:repo
 dependencies: []
 priority: medium
 type: chore
@@ -29,19 +30,31 @@ The repository has many small Go modules (alloy/reporter, alloy/ui, grafana_pdc/
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 gofmt -l reports nothing across the repository, including alloy/ui/config_test.go
-- [ ] #2 CI fails when a Go source file is unformatted
-- [ ] #3 CI fails on the vet-or-stronger checks chosen for this task, and the task notes record which bar was set and why
-- [ ] #4 The gate covers the source modules and deliberately skips the generated copies under grafana_sm, grafana_sm_browser, alloy/reporter and grafana_pdc/reporter
-- [ ] #5 The gate is added to backlog.config.yml definition_of_done and to the command list in AGENTS.md
+- [x] #1 gofmt -l reports nothing across the repository, including alloy/ui/config_test.go
+- [x] #2 CI fails when a Go source file is unformatted
+- [x] #3 CI fails on the vet-or-stronger checks chosen for this task, and the task notes record which bar was set and why
+- [x] #4 The gate covers the source modules and deliberately skips the generated copies under grafana_sm, grafana_sm_browser, alloy/reporter and grafana_pdc/reporter
+- [x] #5 The gate is added to backlog.config.yml definition_of_done and to the command list in AGENTS.md
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 yamllint --strict .
-- [ ] #2 python3 tests/app_metadata_contract_test.py && python3 tests/app_version_changed_test.py && python3 tests/renovate_config_contract_test.py && python3 tests/repository_workflow_contract_test.py && python3 tests/synthetic_monitoring_variants_test.py
-- [ ] #3 SHELL only: shellcheck alloy/rootfs/usr/share/alloy/generate-config.sh alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish alloy/tests/generate-config.test.sh alloy/tests/init-alloy.test.sh grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish grafana_pdc/tests/service.test.sh grafana_pdc/tests/image-smoke.test.sh grafana_pdc/tests/fixtures/bashio grafana_pdc/tests/fixtures/fake-pdc
-- [ ] #4 ALLOY only: python3 alloy/tests/config-schema.test.py && python3 alloy/tests/image-contract.test.py && bash alloy/tests/generate-config.test.sh && node alloy/tests/ui-static.test.mjs && (cd alloy/ui && go test ./...)
-- [ ] #5 PDC only: python3 grafana_pdc/tests/config-schema.test.py && python3 grafana_pdc/tests/image-contract.test.py
-- [ ] #6 SM only: python3 scripts/sync_synthetic_monitoring_variants.py && (cd synthetic_monitoring_shared/launcher && go test ./...)
+- [x] #1 yamllint --strict .
+- [x] #2 python3 tests/app_metadata_contract_test.py && python3 tests/app_version_changed_test.py && python3 tests/renovate_config_contract_test.py && python3 tests/repository_workflow_contract_test.py && python3 tests/synthetic_monitoring_variants_test.py
+- [x] #3 SHELL only: shellcheck alloy/rootfs/usr/share/alloy/generate-config.sh alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish alloy/tests/generate-config.test.sh alloy/tests/init-alloy.test.sh grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish grafana_pdc/tests/service.test.sh grafana_pdc/tests/image-smoke.test.sh grafana_pdc/tests/fixtures/bashio grafana_pdc/tests/fixtures/fake-pdc
+- [x] #4 ALLOY only: python3 alloy/tests/config-schema.test.py && python3 alloy/tests/image-contract.test.py && bash alloy/tests/generate-config.test.sh && node alloy/tests/ui-static.test.mjs && (cd alloy/ui && go test ./...)
+- [x] #5 PDC only: python3 grafana_pdc/tests/config-schema.test.py && python3 grafana_pdc/tests/image-contract.test.py
+- [x] #6 SM only: python3 scripts/sync_synthetic_monitoring_variants.py && (cd synthetic_monitoring_shared/launcher && go test ./...)
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Retain source-only gofmt; add full go vet across five source Go modules to just check and Repository quality. Include shared SM UI tests in test-sm. Prove deliberately failing format/vet/UI fixtures fail actual recipes; run final gate. CI lane owns root workflow and justfile edits.
+<!-- SECTION:PLAN:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Merged PR #170 as 192c79cd56ea92ca820b484dabf37fe5f5874a58. Exact candidate 7c49f716082058dd6d62b6fba863d6c3d9263ba6 passed CI run 42135401737, including required ci-success and all eight architecture builds. Local just check, actionlint and zizmor passed; dsreview PASS with zero findings. Actual recipe probes proved format/vet/UI failures and pinned Docker metadata linter reported two simultaneous invalid Apps while the remaining Apps ran; aggregate failed. Standard full go vet is the chosen baseline without a second linter toolchain; generated modules are checked through source and generation drift. Existing backlog gate just check now includes vet. Legacy bare-python DoD commands were executed through their current locked uv recipes, preserving the same tests.
+<!-- SECTION:FINAL_SUMMARY:END -->

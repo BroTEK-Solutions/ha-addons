@@ -53,21 +53,33 @@ jobs:
         run: just lint </dev/null
 
       - name: Lint Alloy App metadata
+        id: lint_alloy
+        if: ${{ !cancelled() }}
+        continue-on-error: true
         uses: frenck/action-addon-linter@b9cfd1bc62ba60d2c4fc96317b5f7ada5923f4a7 # v2.21.1
         with:
           path: "./alloy"
 
       - name: Lint Grafana PDC App metadata
+        id: lint_pdc
+        if: ${{ !cancelled() }}
+        continue-on-error: true
         uses: frenck/action-addon-linter@b9cfd1bc62ba60d2c4fc96317b5f7ada5923f4a7 # v2.21.1
         with:
           path: "./grafana_pdc"
 
       - name: Lint Grafana Synthetic Monitoring App metadata
+        id: lint_sm
+        if: ${{ !cancelled() }}
+        continue-on-error: true
         uses: frenck/action-addon-linter@b9cfd1bc62ba60d2c4fc96317b5f7ada5923f4a7 # v2.21.1
         with:
           path: "./grafana_sm"
 
       - name: Lint Grafana Synthetic Monitoring browser App metadata
+        id: lint_sm_browser
+        if: ${{ !cancelled() }}
+        continue-on-error: true
         uses: frenck/action-addon-linter@b9cfd1bc62ba60d2c4fc96317b5f7ada5923f4a7 # v2.21.1
         with:
           path: "./grafana_sm_browser"
@@ -85,8 +97,34 @@ jobs:
       - name: Check formatting
         run: just fmt-check </dev/null
 
+      - name: Vet Go source modules
+        run: just vet </dev/null
+
       - name: Run repository tests
         run: just test-repo </dev/null
+
+      # continue-on-error above lets every App report diagnostics; use outcome
+      # here because conclusion is rewritten to success for a tolerated failure.
+      - name: Check all App lint results
+        id: app_lint_result
+        if: ${{ !cancelled() }}
+        env:
+          ALLOY_RESULT: ${{ steps.lint_alloy.outcome }}
+          PDC_RESULT: ${{ steps.lint_pdc.outcome }}
+          SM_RESULT: ${{ steps.lint_sm.outcome }}
+          SM_BROWSER_RESULT: ${{ steps.lint_sm_browser.outcome }}
+        run: |
+          failed=0
+          for result in "alloy:$ALLOY_RESULT" "grafana_pdc:$PDC_RESULT" \
+            "grafana_sm:$SM_RESULT" "grafana_sm_browser:$SM_BROWSER_RESULT"; do
+            app=${result%%:*}
+            outcome=${result#*:}
+            if [[ "$outcome" != success ]]; then
+              echo "::error::$app: $outcome"
+              failed=1
+            fi
+          done
+          exit "$failed"
 
   pdc-test:
     name: Grafana PDC tests
@@ -238,14 +276,16 @@ jobs:
         with:
           just-version: '1.59.0'
 
-      - name: Set up Go for the shared launcher
+      - name: Set up Go for the shared launcher and status page
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: synthetic_monitoring_shared/launcher/go.mod
           cache: true
-          cache-dependency-path: synthetic_monitoring_shared/launcher/go.mod
+          cache-dependency-path: |
+            synthetic_monitoring_shared/launcher/go.mod
+            synthetic_monitoring_shared/ui/go.mod
 
-      - name: Test the shared launcher
+      - name: Test the shared launcher and status page
         run: just test-sm </dev/null
 
       # Same pair as the Alloy lane, and needed for the same reason: the two

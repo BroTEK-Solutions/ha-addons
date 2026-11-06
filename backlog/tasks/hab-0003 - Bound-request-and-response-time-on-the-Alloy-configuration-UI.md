@@ -1,12 +1,13 @@
 ---
 id: HAB-0003
 title: Bound request and response time on the Alloy configuration UI
-status: To Do
-assignee: []
-created_date: '2026-08-17 14:19'
-updated_date: '2026-08-29 14:54'
+status: In Progress
+assignee:
+  - '@codex'
+created_date: 2026-08-17 14:19
+updated_date: '2026-11-06T00:09:00Z'
 labels:
-  - 'unit:alloy'
+  - unit:alloy
 dependencies: []
 priority: medium
 type: bug
@@ -42,3 +43,9 @@ Exposure is limited: the listener is loopback-plus-ingress and `ingressOnly` rej
 - [ ] #5 PDC only: python3 grafana_pdc/tests/config-schema.test.py && python3 grafana_pdc/tests/image-contract.test.py
 - [ ] #6 SM only: python3 scripts/sync_synthetic_monitoring_variants.py && (cd synthetic_monitoring_shared/launcher && go test ./...)
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Bound server reads, API execution and writes with coordinated budgets; cancel validator process groups; bound proxy connection/header and idle waits while preserving streaming. Prove with real slow-body HTTP, large valid save, timeout/no-save, stream and subprocess fixtures. Isolated Alloy lane; root reviews and lands.
+<!-- SECTION:PLAN:END -->
