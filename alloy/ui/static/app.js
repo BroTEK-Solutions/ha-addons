@@ -1,6 +1,9 @@
 const form = document.querySelector("#config-form");
 const notice = document.querySelector("#notice");
 const runtimeStatus = document.querySelector("#runtime-status");
+const settingsRecovery = document.querySelector("#settings-recovery");
+const confirmSettingsRecovery = document.querySelector("#confirm-settings-recovery");
+const recoverSettingsButton = document.querySelector("#recover-settings");
 const discoveredModeChoices = Array.from(document.querySelectorAll('input[name="operation_mode"]'));
 const modeChoices = discoveredModeChoices.length > 0 ? discoveredModeChoices : [document.querySelector("#operation_mode")];
 const modeSelect = {
@@ -55,6 +58,8 @@ async function loadStatus() {
   }
   const messages = [];
   safeMode = Boolean(status.safe_mode);
+  settingsRecovery.hidden = !status.recovery_available;
+  if (status.settings_readable === false) messages.push("Saved settings cannot be read. Enable Safe mode and restart to archive and reset them.");
   if (status.safe_mode) messages.push("Safe mode is active; saved pipelines are not running.");
   if (!status.alloy_ready) messages.push("Alloy is not ready, but this recovery page remains available.");
   alloyReady = Boolean(status.alloy_ready);
@@ -65,6 +70,30 @@ async function loadStatus() {
   runtimeStatus.hidden = messages.length === 0;
   updateFleetStarterVisibility();
   scheduleFleetHealthPoll();
+}
+
+async function recoverSettings() {
+  if (!confirmSettingsRecovery.checked) return;
+  recoverSettingsButton.disabled = true;
+  try {
+    const response = await fetch("api/recover", {
+      method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ confirm: true }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Could not recover saved settings");
+    confirmSettingsRecovery.checked = false;
+    // Clear fields absent from the empty store too, so stale values in an
+    // already loaded form cannot accidentally repopulate the reset settings.
+    form.reset();
+    await loadConfig();
+    await loadStatus();
+    setNotice(data.message, "success");
+  } catch (error) {
+    setNotice(error.message, "error");
+  } finally {
+    recoverSettingsButton.disabled = !confirmSettingsRecovery.checked;
+  }
 }
 
 function updateFleetStarterVisibility() {
@@ -269,6 +298,7 @@ async function save(restart) {
     return false;
   } finally {
     document.querySelectorAll("button").forEach((button) => { button.disabled = false; });
+    recoverSettingsButton.disabled = !confirmSettingsRecovery.checked;
   }
 }
 
@@ -356,5 +386,9 @@ form.addEventListener("submit", (event) => { event.preventDefault(); void save(f
 document.querySelector("#save-restart").addEventListener("click", () => { void save(true); });
 document.querySelector("#generate-fleet-reference").addEventListener("click", () => { void generateFleetReference(); });
 document.querySelector("#download-fleet-reference").addEventListener("click", downloadFleetReference);
+confirmSettingsRecovery.addEventListener("change", () => {
+  recoverSettingsButton.disabled = !confirmSettingsRecovery.checked;
+});
+recoverSettingsButton.addEventListener("click", () => { void recoverSettings(); });
 loadConfig().catch((error) => setNotice(error.message, "error"));
 loadStatus().catch(() => scheduleFleetHealthPoll());

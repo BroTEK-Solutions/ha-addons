@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -37,7 +38,7 @@ func TestFileStoreReturnsV2DefaultsWhenNoStateExists(t *testing.T) {
 	dir := t.TempDir()
 	store := newFileStore(filepath.Join(dir, "settings.json"), filepath.Join(dir, "options.json"))
 
-	got, err := store.Load()
+	got, err := store.Load(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +64,7 @@ func TestFileStoreImportsLegacyOptionsOnlyOnce(t *testing.T) {
 	}
 	store := newFileStore(settingsPath, legacyPath)
 
-	got, err := store.Load()
+	got, err := store.Load(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +83,7 @@ func TestFileStoreImportsLegacyOptionsOnlyOnce(t *testing.T) {
 	if err := os.WriteFile(legacyPath, encoded, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	got, err = store.Load()
+	got, err = store.Load(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +101,7 @@ func TestFileStoreMigratesReservedFleetTargetingAttribute(t *testing.T) {
 	}
 	store := newFileStore(settingsPath, filepath.Join(dir, "options.json"))
 
-	got, err := store.Load()
+	got, err := store.Load(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +129,7 @@ func TestFileStoreDropsStoredStabilityLevel(t *testing.T) {
 	}
 	store := newFileStore(settingsPath, filepath.Join(dir, "options.json"))
 
-	got, err := store.Load()
+	got, err := store.Load(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +162,7 @@ func TestFileStoreSavesAtomicallyWithOwnerOnlyPermissions(t *testing.T) {
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode = %o, want 600", info.Mode().Perm())
 	}
-	got, err := store.Load()
+	got, err := store.Load(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +173,7 @@ func TestFileStoreSavesAtomicallyWithOwnerOnlyPermissions(t *testing.T) {
 	if err := store.Save(map[string]any{"unsupported": func() {}}); err == nil {
 		t.Fatal("Save() accepted a value JSON cannot encode")
 	}
-	got, err = store.Load()
+	got, err = store.Load(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,8 +253,39 @@ func TestFileStoreRejectsUnsupportedOrAmbiguousState(t *testing.T) {
 				t.Fatal(err)
 			}
 			store := newFileStore(path, filepath.Join(dir, "options.json"))
-			if _, err := store.Load(); err == nil {
+			if _, err := store.Load(context.Background()); err == nil {
 				t.Fatal("Load() accepted invalid state")
+			}
+		})
+	}
+}
+
+func TestFileStorePreservesAbsentMeaningOfLegacyNullSettings(t *testing.T) {
+	for _, source := range []string{"settings", "legacy"} {
+		t.Run(source, func(t *testing.T) {
+			dir := t.TempDir()
+			settingsPath := filepath.Join(dir, "settings.json")
+			legacyPath := filepath.Join(dir, "options.json")
+			target := settingsPath
+			if source == "legacy" {
+				target = legacyPath
+			}
+			data := []byte(`{"schema_version":2,"loki_url":null,"host_metrics":null,"manual_config_enabled":null,"gcloud_rw_api_key":null,"loki_password":"keep-secret"}`)
+			if err := os.WriteFile(target, data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			store := newFileStore(settingsPath, legacyPath)
+			settings, err := store.Load(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if settings["loki_password"] != "keep-secret" {
+				t.Fatal("migration lost existing secret")
+			}
+			for _, key := range []string{"loki_url", "host_metrics", "manual_config_enabled", "gcloud_rw_api_key"} {
+				if _, ok := settings[key]; ok {
+					t.Fatalf("null %s was not migrated to absence", key)
+				}
 			}
 		})
 	}

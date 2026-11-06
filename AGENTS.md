@@ -48,6 +48,11 @@ but does not isolate processes sharing an identity. SM status JSON uses null for
 observed zero remains zero. The PDC and SM source UI tests exercise their embedded renderers with
 Node as well as Go HTTP fixtures, so Node is required for `just test-pdc` and `just test-sm`.
 
+Alloy API uploads are capped at 1 MiB and complete encoded settings at 2 MiB. Settings updates
+hold the shared cross-process lock across read, merge, validation and replacement, with cancellable
+lock acquisition. Safe mode ignores saved runtime flags and credentials; its ingress-only recovery
+action archives exact existing bytes before resetting settings. Never replace this with a silent reset.
+
 ## Rules that are easy to break by accident
 
 **`grafana_sm/` and `grafana_sm_browser/` are generated.** Edit `synthetic_monitoring_shared/` and
