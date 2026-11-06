@@ -264,3 +264,19 @@ func TestSanitizeSlugKeepsTopicsWellFormed(t *testing.T) {
 		}
 	}
 }
+
+func TestBinaryUnknownTemplateClearsPreviousState(t *testing.T) {
+	encoded, err := buildDiscovery(entitySpec{Key: "ready", Component: componentBinarySensor}, appInfo{Slug: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var discovery discoveryPayload
+	if err := json.Unmarshal(encoded, &discovery); err != nil {
+		t.Fatal(err)
+	}
+	// MQTT binary sensors ignore an empty rendered payload. The documented None
+	// sentinel explicitly resets either previous ON or OFF to unknown.
+	if discovery.ValueTemplate != "{{ value_json.ready | default('None') }}" {
+		t.Fatalf("missing metric must render None, got %s", discovery.ValueTemplate)
+	}
+}

@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -76,7 +78,7 @@ func mqttPeer(t *testing.T) (int, <-chan packets.Packet) {
 	return listener.Addr().(*net.TCPAddr).Port, events
 }
 
-func startTestReporter(t *testing.T, app, enabled string, port int) (chan error, context.CancelFunc) {
+func startTestReporter(t *testing.T, app, enabled string, port int, credentials ...func() (string, string)) (chan error, context.CancelFunc) {
 	t.Helper()
 	// Keep run()'s real collection path, but redirect only its fixed local probe
 	// addresses to a fixture rather than touching services on the test host.
@@ -99,7 +101,11 @@ func startTestReporter(t *testing.T, app, enabled string, port int) (chan error,
 		case "/addons/self/info":
 			_, _ = fmt.Fprintf(w, `{"result":"ok","data":{"slug":"repository_%s","name":"Custom display name","version":"1.0.0"}}`, app)
 		case "/services/mqtt":
-			_, _ = fmt.Fprintf(w, `{"result":"ok","data":{"host":"127.0.0.1","port":%d}}`, port)
+			username, password := "", ""
+			if len(credentials) != 0 {
+				username, password = credentials[0]()
+			}
+			_, _ = fmt.Fprintf(w, `{"result":"ok","data":{"host":"127.0.0.1","port":%d,"username":%q,"password":%q}}`, port, username, password)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -216,5 +222,105 @@ func TestEnabledReporterPublishesReadableProductAndStableIdentity(t *testing.T) 
 				}
 			}
 		})
+	}
+}
+
+// Exercise two actual MQTT sessions, dropping the socket after the first state
+// as a broker/network failure would. Credentials rotate before reconnection.
+func TestReconnectRefreshesCredentialsAndRepublishesDiscovery(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	events := make(chan packets.Packet, 64)
+	var rotated atomic.Bool
+	done := make(chan struct{})
+	t.Cleanup(func() { listener.Close(); <-done })
+	go func() {
+		defer close(done)
+		defer close(events)
+		for attempt := 0; attempt < 2; attempt++ {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+			for {
+				p, err := packets.ReadPacket(conn)
+				if err != nil {
+					break
+				}
+				if _, ping := p.Content.(*packets.Pingreq); !ping {
+					events <- p.Content
+				}
+				var reply packets.Packet
+				switch p := p.Content.(type) {
+				case *packets.Pingreq:
+					reply = &packets.Pingresp{}
+				case *packets.Connect:
+					reply = &packets.Connack{Properties: &packets.Properties{}}
+				case *packets.Publish:
+					if p.QoS == 1 {
+						reply = &packets.Puback{PacketID: p.PacketID, Properties: &packets.Properties{}}
+					}
+				case *packets.Disconnect:
+					conn.Close()
+					return
+				}
+				if reply != nil {
+					if _, err := reply.WriteTo(conn); err != nil {
+						break
+					}
+				}
+				if p, ok := p.Content.(*packets.Publish); ok && p.Topic == "brotek/repository_alloy/state" && attempt == 0 {
+					rotated.Store(true)
+					break
+				}
+			}
+			conn.Close()
+		}
+	}()
+	startTestReporter(t, "alloy", "true", listener.Addr().(*net.TCPAddr).Port, func() (string, string) {
+		if rotated.Load() {
+			return "new-user", "new-password"
+		}
+		return "old-user", "old-password"
+	})
+	for session := 0; session < 2; session++ {
+		connect, ok := nextMQTT(t, events).(*packets.Connect)
+		if !ok {
+			t.Fatal("expected CONNECT")
+		}
+		expected := "old-user"
+		if session == 1 {
+			expected = "new-user"
+		}
+		expectedPassword := "old-password"
+		if session == 1 {
+			expectedPassword = "new-password"
+		}
+		if connect.Username != expected || string(connect.Password) != expectedPassword {
+			t.Fatalf("session %d uses stale credentials", session)
+		}
+		discovery, online := 0, false
+		for {
+			packet := nextMQTT(t, events)
+			p, ok := packet.(*packets.Publish)
+			if !ok {
+				t.Fatalf("expected publication, got %T: %+v", packet, packet)
+			}
+			if strings.HasSuffix(p.Topic, "/config") {
+				discovery++
+			}
+			if p.Topic == "brotek/repository_alloy/availability" && string(p.Payload) == "online" {
+				online = true
+			}
+			if p.Topic == "brotek/repository_alloy/state" {
+				if discovery != 4 || !online {
+					t.Fatalf("session %d missing discovery/online: %d %v", session, discovery, online)
+				}
+				break
+			}
+		}
 	}
 }
