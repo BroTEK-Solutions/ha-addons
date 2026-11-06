@@ -45,8 +45,8 @@ job runs both on an Ubuntu VM. This proves Ubuntu AppArmor startup, not every HA
 The PDC and Synthetic Monitoring agents and status UIs omit Supervisor credentials from their
 exec environments; the MQTT reporters retain service access. Environment filtering reduces exposure
 but does not isolate processes sharing an identity. SM status JSON uses null for unobserved metrics;
-observed zero remains zero. The source UI tests exercise the embedded renderer with Node as well as
-Go HTTP fixtures, so Node is required for `just test-sm`.
+observed zero remains zero. The PDC and SM source UI tests exercise their embedded renderers with
+Node as well as Go HTTP fixtures, so Node is required for `just test-pdc` and `just test-sm`.
 
 ## Rules that are easy to break by accident
 
