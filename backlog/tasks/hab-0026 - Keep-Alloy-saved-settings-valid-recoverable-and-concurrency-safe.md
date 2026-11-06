@@ -1,9 +1,11 @@
 ---
 id: HAB-0026
 title: Keep Alloy saved settings valid, recoverable and concurrency safe
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@codex'
 created_date: '2026-11-06T00:09:00Z'
+updated_date: '2026-11-06T00:20:00Z'
 labels:
   - unit:alloy
 dependencies: []
@@ -32,3 +34,9 @@ Individually accepted requests can merge into a document larger than the loader 
 - [ ] #1 just check
 - [ ] #2 Fast subset while iterating (not the gate): just fmt-check && just lint && just gen-check && just test-repo
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Bound encoded persisted documents before replacement; serialize the full read/merge/validate/write transaction or reject revision conflicts; enforce supported option keys/types and single JSON document; make safe mode ignore saved runtime flags and expose ingress-protected recovery that archives damaged settings. Exercise HTTP saves, deterministic concurrent credentials, exact validated startup types and recovery with preserved originals. Alloy lane owns separate candidate after request-budget handoff.
+<!-- SECTION:PLAN:END -->
