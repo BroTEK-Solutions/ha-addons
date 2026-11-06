@@ -146,6 +146,30 @@ def main() -> None:
         "AppArmor must define the grafana_pdc profile using HA's required flags",
     )
     outer_profile = apparmor.split("profile pdc", maxsplit=1)[0]
+    outer_rules = {
+        line.strip() for line in outer_profile.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    if "file," in outer_rules:
+        fail("outer AppArmor profile must not grant unrestricted file access")
+    require(outer_profile, "/{,**} rm,", "outer AppArmor reads and memory maps must remain broad")
+    writable_rules = set()
+    for rule in outer_rules:
+        permissions = re.search(r"\s+([a-z]+),$", rule)
+        if rule.startswith(("/", "@")) and permissions and "w" in permissions.group(1):
+            writable_rules.add(rule)
+    if writable_rules != {
+        "/etc/services.d/** rwix,",
+        "/etc/cont-init.d/** rwix,",
+        "/etc/cont-finish.d/** rwix,",
+        "/run/{,**} rwk,",
+        "/dev/tty rw,",
+        "/dev/null rw,",
+        "/tmp/** rwk,",
+        "/data/ssh/ rwk,",
+        "/data/ssh/** rwk,",
+    }:
+        fail(f"outer AppArmor writable paths must be confined to runtime and SSH state: {sorted(writable_rules)}")
     require(
         outer_profile,
         "network inet stream,",

@@ -398,6 +398,8 @@ def main() -> None:
         "pdc-test": (
             "just test-pdc",
             "just test-pdc-image",
+            "just setup-apparmor-tests",
+            "just test-pdc-apparmor",
         ),
         "alloy-generator-test": (
             "just test-alloy",
@@ -421,13 +423,16 @@ def main() -> None:
             if isinstance(run, str) and run.startswith("just ") and not run.endswith(" </dev/null"):
                 fail(f"{job_name} must run just with stdin from /dev/null")
 
-    alloy_job = jobs["alloy-generator-test"]
-    if alloy_job.get("continue-on-error") or "if" in alloy_job:
-        fail("Alloy confinement job must be unconditional and must propagate failures")
-    alloy_steps = alloy_job["steps"]
-    apparmor_step = next(step for step in alloy_steps if step.get("run") == "just test-alloy-apparmor </dev/null")
-    if apparmor_step.get("continue-on-error") or "if" in apparmor_step:
-        fail("Alloy confinement must be an unconditional, required runtime check")
+    for job_name, recipe in (
+        ("alloy-generator-test", "test-alloy-apparmor"),
+        ("pdc-test", "test-pdc-apparmor"),
+    ):
+        job = jobs[job_name]
+        if job.get("continue-on-error") or "if" in job:
+            fail(f"{job_name} confinement job must be unconditional and must propagate failures")
+        step = next(step for step in job["steps"] if step.get("run") == f"just {recipe} </dev/null")
+        if step.get("continue-on-error") or "if" in step:
+            fail(f"{recipe} must be an unconditional, required runtime check")
 
     # Renovate owns the values; the contract owns pinning and consistency.
     for action, key, lanes in (

@@ -53,6 +53,11 @@ hold the shared cross-process lock across read, merge, validation and replacemen
 lock acquisition. Safe mode ignores saved runtime flags and credentials; its ingress-only recovery
 action archives exact existing bytes before resetting settings. Never replace this with a silent reset.
 
+`just test-pdc-apparmor` boots the actual PDC agent, UI and reporter under the shipped policy
+on an enforcing Linux Docker host, using an isolated certificate signer and paired filesystem
+write controls. It is required by `just ci`; Ubuntu proof does not replace the separate real-HAOS
+pre-merge criterion for the confinement change.
+
 ## Rules that are easy to break by accident
 
 **`grafana_sm/` and `grafana_sm_browser/` are generated.** Edit `synthetic_monitoring_shared/` and
