@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-11-06T00:09:00Z'
-updated_date: '2026-11-06T00:13:00Z'
+updated_date: '2026-11-06T00:27:00Z'
 labels:
   - unit:repo
 dependencies: []
@@ -38,3 +38,9 @@ Bash arithmetic wraps a sufficiently large decimal port back into the accepted r
 <!-- SECTION:PLAN:BEGIN -->
 Normalize leading zeros and compare decimal lengths/lexical values before arithmetic. Cover overflowing endpoint strings, huge leading-zero inputs and inclusive bounds in existing shared validator suite; regenerate copies and run full gate with shared reporter batch.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+PR #173 head b564bb5. Existing suite reproduced overflowing decimal endpoint acceptance:85/87 before,87/87 after. Normalized digit-length/lexical comparison avoids arithmetic on untrusted values. Generated copies and full gate pass; shared guarded review complete.
+<!-- SECTION:NOTES:END -->

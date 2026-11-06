@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-11-06T00:09:00Z'
-updated_date: '2026-11-06T00:15:00Z'
+updated_date: '2026-11-06T00:27:00Z'
 labels:
   - unit:sm-shared
 dependencies: []
@@ -38,3 +38,9 @@ Empty, partial or truncated successful metrics responses currently become valid 
 <!-- SECTION:PLAN:BEGIN -->
 Represent absent diagnostic fields as null/unknown, preserve observed zeros, and reject truncated/invalid metrics reads. Exercise the source HTTP status handler and frontend formatting using existing test surfaces; regenerate variants.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+PR #172 head b8a046e plus tested small display follow-up pending. HTTP empty/partial/truncated/invalid regressions and actual embedded Node renderer test red/green; source UI race suite and integrated just check pass. Review major finding resolved by merging PR #170 source-UI gate; missing version/uptime display follow-up also uses Unknown.
+<!-- SECTION:NOTES:END -->
