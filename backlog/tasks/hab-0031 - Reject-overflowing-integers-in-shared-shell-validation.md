@@ -1,9 +1,11 @@
 ---
 id: HAB-0031
 title: Reject overflowing integers in shared shell validation
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@codex'
 created_date: '2026-11-06T00:09:00Z'
+updated_date: '2026-11-06T00:13:00Z'
 labels:
   - unit:repo
 dependencies: []
@@ -30,3 +32,9 @@ Bash arithmetic wraps a sufficiently large decimal port back into the accepted r
 - [ ] #1 just check
 - [ ] #2 Fast subset while iterating (not the gate): just fmt-check && just lint && just gen-check && just test-repo
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Normalize leading zeros and compare decimal lengths/lexical values before arithmetic. Cover overflowing endpoint strings, huge leading-zero inputs and inclusive bounds in existing shared validator suite; regenerate copies and run full gate with shared reporter batch.
+<!-- SECTION:PLAN:END -->

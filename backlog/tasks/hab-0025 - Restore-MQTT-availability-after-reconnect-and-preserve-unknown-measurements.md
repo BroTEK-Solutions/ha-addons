@@ -1,9 +1,11 @@
 ---
 id: HAB-0025
 title: Restore MQTT availability after reconnect and preserve unknown measurements
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@codex'
 created_date: '2026-11-06T00:09:00Z'
+updated_date: '2026-11-06T00:11:00Z'
 labels:
   - unit:repo
 dependencies: []
@@ -30,3 +32,9 @@ The reporter publishes online once, so an unexpected disconnect can leave recove
 - [ ] #1 just check
 - [ ] #2 Fast subset while iterating (not the gate): just fmt-check && just lint && just gen-check && just test-repo
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Refresh Supervisor broker credentials before connection attempts; signal reconnects into the main publication loop and retry retained discovery/online with bounded publish contexts. Keep orderly shutdown path unchanged. Render explicit unknown sentinel per Home Assistant MQTT semantics and prove transitions with wire and template fixtures. Source shared reporter only; regenerate copies.
+<!-- SECTION:PLAN:END -->
