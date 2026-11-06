@@ -1,0 +1,27 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"os"
+	"os/exec"
+	"syscall"
+	"time"
+)
+
+// Generators are shell scripts, so cancelling just their immediate process can
+// leave a child running with an inherited stdout pipe. Kill the entire isolated
+// group and bound pipe draining even if a child has detached from that group.
+func candidateCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
+	command := exec.CommandContext(ctx, name, args...)
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	command.Cancel = func() error {
+		err := syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+		if errors.Is(err, syscall.ESRCH) {
+			return os.ErrProcessDone
+		}
+		return err
+	}
+	command.WaitDelay = time.Second
+	return command
+}
