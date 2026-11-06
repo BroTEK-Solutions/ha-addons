@@ -98,6 +98,11 @@ echo "== ha_valid_integer_range =="
 accepts ha_valid_integer_range 1 1 50
 accepts ha_valid_integer_range 50 1 50
 accepts ha_valid_integer_range 08 1 50
+accepts ha_valid_integer_range 000000000000000000000000000000000000001 1 65535
+accepts ha_valid_integer_range 65535 1 65535
+accepts ha_valid_integer_range 000 0 50
+rejects ha_valid_integer_range 18446744073709551617 1 65535
+rejects ha_valid_integer_range 65536 1 65535
 rejects ha_valid_integer_range 0 1 50
 rejects ha_valid_integer_range 51 1 50
 rejects ha_valid_integer_range abc 1 50
@@ -152,6 +157,8 @@ rejects ha_valid_endpoint homeassistant
 rejects ha_valid_endpoint "homeassistant:8123/path"
 rejects ha_valid_endpoint "homeassistant:0"
 rejects ha_valid_endpoint "homeassistant:70000"
+rejects ha_valid_endpoint "homeassistant:18446744073709551617"
+accepts ha_valid_endpoint "homeassistant:00065535"
 rejects ha_valid_endpoint ".leading:8123"
 rejects ha_valid_endpoint "double..dot:8123"
 rejects ha_valid_endpoint "2001:db8::1:8123"
