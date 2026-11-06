@@ -22,9 +22,17 @@ function setAgent(responding) {
     : "Agent is not responding on its local metrics port";
 }
 
-function renderIdentity(options) {
+function renderIdentity(options, available) {
   const list = document.getElementById("identity");
   list.replaceChildren();
+  if (!available) {
+    const term = document.createElement("dt");
+    term.textContent = "Configuration unavailable";
+    const detail = document.createElement("dd");
+    detail.textContent = "The App could not read its options. Check the Configuration tab and App logs.";
+    list.append(term, detail);
+    return;
+  }
   for (const [key, label] of IDENTITY_FIELDS) {
     const value = options[key];
     if (value === undefined || value === null || value === "" || value === 0) continue;
@@ -43,15 +51,17 @@ function renderIdentity(options) {
   }
 }
 
-function renderEndpoints(endpoints) {
+function renderEndpoints(endpoints, available) {
   const body = document.getElementById("endpoints");
   body.replaceChildren();
-  if (!endpoints.length) {
+  if (!available || !endpoints.length) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
     cell.colSpan = 3;
     cell.className = "empty";
-    cell.textContent = "No allowlist entries. Every destination reachable from this App is permitted.";
+    cell.textContent = available
+      ? "No allowlist entries. Every destination reachable from this App is permitted."
+      : "Allowlist policy is unknown because the App could not read its configuration.";
     row.append(cell);
     body.append(row);
     return;
@@ -63,7 +73,7 @@ function renderEndpoints(endpoints) {
     const result = document.createElement("td");
     result.className = "state " + (entry.reachable ? "state-ok" : "state-bad");
     result.textContent = entry.reachable ? "Reachable" : "Not reachable";
-    if (/nothing to test/.test(entry.detail)) {
+    if (/nothing to test|not tested/.test(entry.detail)) {
       result.className = "state state-unknown";
       result.textContent = "Not tested";
     }
@@ -109,8 +119,8 @@ async function refresh() {
     if (!response.ok) throw new Error("HTTP " + response.status);
     const status = await response.json();
     setAgent(status.agent_responding);
-    renderIdentity(status.options || {});
-    renderEndpoints(status.endpoints || []);
+    renderIdentity(status.options || {}, status.options_available === true);
+    renderEndpoints(status.endpoints || [], status.options_available === true);
     document.getElementById("checked").textContent =
       new Date(status.checked_at).toLocaleTimeString();
   } catch (error) {

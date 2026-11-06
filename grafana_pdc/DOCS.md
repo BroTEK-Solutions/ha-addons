@@ -218,3 +218,18 @@ behavior while presenting a shorter main configuration form.
 See Grafana's current [PDC configuration
 documentation](https://grafana.com/docs/grafana-cloud/observe-and-act/connect-externally-hosted/private-data-source-connect/configure-pdc/)
 for Cloud-side setup.
+
+### Diagnostic time limits and unavailable configuration
+
+The status page checks up to four allowlisted endpoints concurrently within a
+five-second collection budget. An outage therefore still produces a response;
+entries that could not be attempted or whose probes were interrupted by the
+collection budget say **Not tested**.
+A failed TCP probe describes that attempt and does not prove the Cloud tunnel's
+state. The agent's local metrics response is checked within the same budget.
+
+If the options file is missing, unreadable or invalid, the page reports
+**Configuration unavailable** and says the allowlist policy is unknown. It only
+reports unrestricted access when it successfully reads a configuration with no
+allowlist entries. Check the Configuration tab and App logs before drawing
+conclusions about access policy from an unavailable configuration.
