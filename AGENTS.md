@@ -33,6 +33,12 @@ job runs both on an Ubuntu VM. This proves Ubuntu AppArmor startup, not every HA
 - `scripts/cloud-environment-setup.sh` is the cloud-provisioning command and is deliberately not a
   recipe: it uses sudo and installs tools globally.
 
+The PDC and Synthetic Monitoring agents and status UIs omit Supervisor credentials from their
+exec environments; the MQTT reporters retain service access. Environment filtering reduces exposure
+but does not isolate processes sharing an identity. SM status JSON uses null for unobserved metrics;
+observed zero remains zero. The source UI tests exercise the embedded renderer with Node as well as
+Go HTTP fixtures, so Node is required for `just test-sm`.
+
 ## Rules that are easy to break by accident
 
 **`grafana_sm/` and `grafana_sm_browser/` are generated.** Edit `synthetic_monitoring_shared/` and

@@ -2,4 +2,7 @@
 # shellcheck shell=bash
 # Serves the read-only ingress status page. Like the MQTT reporter this is a
 # side channel: it must never be able to disturb the tunnel.
+# Only the reporter needs Supervisor service access.
+unset SUPERVISOR_TOKEN HASSIO_TOKEN
+
 exec /usr/bin/grafana-pdc-ui

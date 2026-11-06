@@ -255,7 +255,7 @@ func TestReporterNeverReceivesTheProbeToken(t *testing.T) {
 
 	for _, environment := range map[string][]string{
 		"reporter": reporterEnvironment(opts, ambient),
-		"UI":       setEnvironment(withoutToken(ambient), "SM_UI_OPTIONS", "{}"),
+		"UI":       uiEnvironment(ambient, "{}"),
 	} {
 		for _, entry := range environment {
 			if strings.Contains(entry, opts.APIToken) {
@@ -276,5 +276,38 @@ func TestStartUIIsANoOpWhenTheBinaryIsAbsent(t *testing.T) {
 	startUI(filepath.Join(t.TempDir(), "absent"), os.Environ(), options{}, &log)
 	if log.String() != "" {
 		t.Fatalf("an absent UI must not prevent probe startup, got %q", log.String())
+	}
+}
+
+func TestAgentDoesNotInheritSupervisorCredential(t *testing.T) {
+	opts := options{APIToken: "probe-fixture", APIServerAddress: "example.com:443", LogLevel: "warn"}
+	ambient := []string{"SUPERVISOR_TOKEN=supervisor-fixture", "HASSIO_TOKEN=legacy-fixture", "PATH=/usr/bin"}
+	process, err := buildAgentProcess(opts, ambient)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range process.Env {
+		if strings.Contains(entry, "fixture") && entry != tokenEnvVar+"=probe-fixture" {
+			t.Fatalf("agent inherited unrelated credential: %s", entry)
+		}
+	}
+	if !containsString(reporterEnvironment(opts, ambient), "SUPERVISOR_TOKEN=supervisor-fixture") {
+		t.Fatal("reporter lost required access")
+	}
+}
+
+func TestUIEnvironmentExcludesBothCredentialKinds(t *testing.T) {
+	ambient := []string{"SUPERVISOR_TOKEN=supervisor-fixture", "HASSIO_TOKEN=legacy-fixture", tokenEnvVar + "=probe-fixture", "PATH=/usr/bin"}
+	env := uiEnvironment(ambient, `{"log_level":"warn"}`)
+	for _, entry := range env {
+		if strings.Contains(entry, "fixture") {
+			t.Fatalf("UI inherited credential: %s", entry)
+		}
+	}
+	if !containsString(env, "PATH=/usr/bin") || !containsString(env, `SM_UI_OPTIONS={"log_level":"warn"}`) {
+		t.Fatal("UI lost safe configuration")
+	}
+	if len(ambient) != 4 {
+		t.Fatal("caller environment mutated")
 	}
 }
