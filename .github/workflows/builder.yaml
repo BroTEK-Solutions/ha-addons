@@ -137,6 +137,12 @@ jobs:
       - name: Run PDC Docker tests
         run: just test-pdc-image </dev/null
 
+      - name: Install AppArmor test prerequisites
+        run: just setup-apparmor-tests </dev/null
+
+      - name: Boot PDC under the shipped AppArmor policy
+        run: just test-pdc-apparmor </dev/null
+
   alloy-generator-test:
     name: Alloy schema and generator tests
     runs-on: ubuntu-26.04

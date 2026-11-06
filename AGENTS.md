@@ -21,6 +21,11 @@ job runs both on an Ubuntu VM. This proves Ubuntu AppArmor startup, not every HA
 - `scripts/cloud-environment-setup.sh` is the cloud-provisioning command and is deliberately not a
   recipe: it uses sudo and installs tools globally.
 
+`just test-pdc-apparmor` boots the actual PDC agent, UI and reporter under the shipped policy
+on an enforcing Linux Docker host, using an isolated certificate signer and paired filesystem
+write controls. It is required by `just ci`; Ubuntu proof does not replace the separate real-HAOS
+pre-merge criterion for the confinement change.
+
 ## Rules that are easy to break by accident
 
 **`grafana_sm/` and `grafana_sm_browser/` are generated.** Edit `synthetic_monitoring_shared/` and

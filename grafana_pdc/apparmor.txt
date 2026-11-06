@@ -1,11 +1,23 @@
 #include <tunables/global>
 
+# Reads stay broad so diagnostics cannot silently lose data. Writes are limited
+# to s6 runtime files and the App's own persistent SSH material. The ingress UI
+# and MQTT reporter inherit this outer profile; the PDC agent transitions below.
+#
+# Recovery: a missing permission can prevent a service from starting, make the
+# status page unavailable, or leave MQTT entities unavailable. Temporarily set
+# `apparmor: false` in grafana_pdc/config.yaml while diagnosing the denied path
+# in the HAOS host's `dmesg`; restore confinement after correcting the policy.
 profile grafana_pdc flags=(attach_disconnected,mediate_deleted) {
   #include <abstractions/base>
+  #include <abstractions/nameservice>
 
-  # Required by the Home Assistant S6 base image.
-  file,
+  # A bare file rule grants writes everywhere; later rules cannot restrict it.
+  /{,**} rm,
   signal (send) set=(kill,term,int,hup,cont),
+  # Container runtime termination; do not grant signals from arbitrary peers.
+  signal (receive) set=(kill,term,int,hup,cont) peer=unconfined,
+  signal (receive) set=(kill,term,int,hup,cont) peer=runc,
   capability chown,
   capability kill,
   capability setgid,
@@ -17,17 +29,21 @@ profile grafana_pdc flags=(attach_disconnected,mediate_deleted) {
   /run/{s6,s6-rc*,service}/** ix,
   /package/** ix,
   /command/** ix,
+  /etc/s6-overlay/** rix,
   # curl runs under this profile for the IPv4 loopback health probe. The status
   # page and the MQTT reporter also run here: the page dials allowlisted
   # destinations to test reachability, which may be IPv6, and the reporter
   # connects to the Home Assistant broker.
   network inet stream,
   network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
   /etc/services.d/** rwix,
   /etc/cont-init.d/** rwix,
   /etc/cont-finish.d/** rwix,
   /run/{,**} rwk,
   /dev/tty rw,
+  /dev/null rw,
 
   # Bashio and the add-on's transient setup files.
   /usr/lib/bashio/** ix,
@@ -57,6 +73,8 @@ profile grafana_pdc flags=(attach_disconnected,mediate_deleted) {
     /proc/[0-9]*/net/netstat r,
     /proc/[0-9]*/fd/ r,
     /proc/sys/net/core/somaxconn r,
+    # Go runtime CPU quota discovery on cgroup v2.
+    /sys/fs/cgroup/cpu.max r,
     /etc/ssh/** r,
     /etc/ssl/certs/** r,
     /etc/ssl/openssl.cnf r,
