@@ -5,7 +5,7 @@ status: In Progress
 assignee:
   - '@codex'
 created_date: '2026-11-06T00:09:00Z'
-updated_date: '2026-11-06T00:11:00Z'
+updated_date: '2026-11-06T00:27:00Z'
 labels:
   - unit:repo
 dependencies: []
@@ -38,3 +38,9 @@ The reporter publishes online once, so an unexpected disconnect can leave recove
 <!-- SECTION:PLAN:BEGIN -->
 Refresh Supervisor broker credentials before connection attempts; signal reconnects into the main publication loop and retry retained discovery/online with bounded publish contexts. Keep orderly shutdown path unchanged. Render explicit unknown sentinel per Home Assistant MQTT semantics and prove transitions with wire and template fixtures. Source shared reporter only; regenerate copies.
 <!-- SECTION:PLAN:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+PR #173 head b564bb5. MQTT wire reconnect with credential rotation and Jinja explicit unknown proof pass; reporter race suite and integrated just check pass. dsreview PASS: corrected valid collection/publication budget issue by creating publication context after collection. Low-confidence reconnect-delay finding refuted by pinned autopaho v0.23 source: establishServerConnection starts attempt0 each session, NewConstantBackoff returns0 for attempt0. Orderly shutdown unchanged.
+<!-- SECTION:NOTES:END -->

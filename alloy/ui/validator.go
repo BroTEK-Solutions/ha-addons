@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -67,7 +66,7 @@ func (v *alloyValidator) Validate(ctx context.Context, settings map[string]any) 
 			return fmt.Errorf("write manual candidate: %w", err)
 		}
 	} else {
-		command := exec.CommandContext(ctx, "bash", v.generatorPath)
+		command := candidateCommand(ctx, "bash", v.generatorPath)
 		command.Env = candidateEnvironment(settings)
 		var stderr bytes.Buffer
 		command.Stderr = &stderr
@@ -80,7 +79,7 @@ func (v *alloyValidator) Validate(ctx context.Context, settings map[string]any) 
 		}
 	}
 
-	command := exec.CommandContext(ctx, v.alloyPath, "validate", "--stability.level="+v.stabilityLevel(), configPath)
+	command := candidateCommand(ctx, v.alloyPath, "validate", "--stability.level="+v.stabilityLevel(), configPath)
 	command.Env = candidateEnvironment(settings)
 	output, err := command.CombinedOutput()
 	if err != nil {
@@ -99,7 +98,7 @@ func (v *alloyValidator) validateStartupInputs(ctx context.Context, settings map
 		}
 		arguments := append([]string{"run"}, additionalArguments...)
 		arguments = append(arguments, "--help")
-		command := exec.CommandContext(ctx, v.alloyPath, arguments...)
+		command := candidateCommand(ctx, v.alloyPath, arguments...)
 		command.Env = candidateEnvironment(settings)
 		output, err := command.CombinedOutput()
 		if err != nil {

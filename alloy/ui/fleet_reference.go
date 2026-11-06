@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -142,7 +141,7 @@ func (r *commandFleetReferenceRenderer) Render(ctx context.Context, settings map
 		return nil, fmt.Errorf("validate Fleet starter pipeline: %w", err)
 	}
 
-	command := exec.CommandContext(ctx, "bash", r.generatorPath)
+	command := candidateCommand(ctx, "bash", r.generatorPath)
 	command.Env = append(candidateEnvironment(settings),
 		"FLEET_REFERENCE_PIPELINE=true",
 		"JOURNAL_PATH="+r.journalPath,

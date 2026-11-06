@@ -123,7 +123,11 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 				return
 			}
 			if err := validator.Validate(r.Context(), candidate); err != nil {
-				writeError(w, http.StatusBadRequest, err)
+				writeRequestError(w, r, http.StatusBadRequest, err)
+				return
+			}
+			if err := r.Context().Err(); err != nil {
+				writeRequestError(w, r, http.StatusRequestTimeout, err)
 				return
 			}
 			if err := store.Save(candidate); err != nil {
@@ -143,7 +147,7 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 			return
 		}
 		if err := supervisor.Restart(r.Context()); err != nil {
-			writeError(w, http.StatusBadGateway, err)
+			writeRequestError(w, r, http.StatusBadGateway, err)
 			return
 		}
 		writeJSON(w, http.StatusAccepted, apiResponse{OK: true, Message: "Restart requested."})
@@ -193,7 +197,7 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 		}
 		manifest, err := references.Render(r.Context(), starterSettings)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err)
+			writeRequestError(w, r, http.StatusBadRequest, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, fleetReferenceResponse{
@@ -206,7 +210,7 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 		w.Header().Set("Cache-Control", "no-store")
 		staticFiles.ServeHTTP(w, r)
 	}))
-	return securityHeaders(mux), nil
+	return securityHeaders(withAPIBudget(mux, 30*time.Second)), nil
 }
 
 func alloyReady(ctx context.Context, alloyURL string) bool {
@@ -309,12 +313,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	server := &http.Server{
-		Addr:              envOr("LISTEN_ADDR", "0.0.0.0:8099"),
-		Handler:           ingressOnly(envOr("INGRESS_SOURCE_IP", "172.30.32.2"), handler),
-		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
+	server := newHTTPServer(envOr("LISTEN_ADDR", "0.0.0.0:8099"), ingressOnly(envOr("INGRESS_SOURCE_IP", "172.30.32.2"), handler))
 	if level := envOr("UI_LOG_LEVEL", "info"); level == "debug" || level == "info" {
 		log.Printf("Alloy configuration UI listening on %s", server.Addr)
 	}
@@ -326,4 +325,40 @@ func envOr(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func newHTTPServer(address string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              address,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		// Unlike the read-only UIs (10s), Alloy must upload up to 1 MiB,
+		// validate it and save it. The API's 30s context cancels subprocesses;
+		// 45s leaves room to send its result. The proxy uses idle deadlines
+		// instead so active Alloy streams can outlive a single API exchange.
+		WriteTimeout: 45 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+}
+
+// Bound work as well as socket writes: http.Server.WriteTimeout alone does not
+// cancel a request context or the validation processes attached to it.
+func withAPIBudget(next http.Handler, budget time.Duration) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			ctx, cancel := context.WithTimeout(r.Context(), budget)
+			defer cancel()
+			r = r.WithContext(ctx)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func writeRequestError(w http.ResponseWriter, r *http.Request, status int, err error) {
+	if errors.Is(r.Context().Err(), context.DeadlineExceeded) {
+		writeError(w, http.StatusGatewayTimeout, errors.New("request timed out; retry when Alloy is ready"))
+		return
+	}
+	writeError(w, status, err)
 }
