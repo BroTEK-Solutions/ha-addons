@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.5.0](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.4.4...alloy-v2.5.0) (2026-11-06)
+
+
+### Features
+
+* make MQTT health reporting configurable and correct sensor states ([#169](https://github.com/BroTEK-Solutions/ha-addons/issues/169)) ([22adf83](https://github.com/BroTEK-Solutions/ha-addons/commit/22adf8387d3b45718f97210c5a92b8f45511b470))
+
+
+### Bug Fixes
+
+* **alloy:** bound UI requests and validation processes ([#171](https://github.com/BroTEK-Solutions/ha-addons/issues/171)) ([073e91b](https://github.com/BroTEK-Solutions/ha-addons/commit/073e91b4f6ec4fcf255e83f0180e50fdc4c89581))
+* **alloy:** preserve valid settings and support safe recovery ([#176](https://github.com/BroTEK-Solutions/ha-addons/issues/176)) ([54bedb4](https://github.com/BroTEK-Solutions/ha-addons/commit/54bedb49e57c0120da5dc753096f954edb79f56d))
+* recover MQTT health reporting and reject overflowing ports ([#173](https://github.com/BroTEK-Solutions/ha-addons/issues/173)) ([2b201d7](https://github.com/BroTEK-Solutions/ha-addons/commit/2b201d72eddad998d56557b9c9926b765013fb5b))
+
 ## [2.4.4](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.4.3...alloy-v2.4.4) (2026-11-01)
 
 
