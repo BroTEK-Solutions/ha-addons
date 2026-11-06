@@ -1,11 +1,11 @@
 ---
 id: HAB-0005
 title: Confine the Grafana PDC status page and MQTT reporter under AppArmor
-status: In Progress
+status: Done
 assignee:
   - '@codex'
 created_date: 2026-08-17 14:20
-updated_date: '2026-11-06T00:09:00Z'
+updated_date: '2026-11-06T01:00:00Z'
 labels:
   - unit:grafana-pdc
 dependencies: []
@@ -35,22 +35,22 @@ Untestable in CI, like the Alloy change: AppArmor only takes effect on a real Ho
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The bare file, rule is gone from grafana_pdc/apparmor.txt and reads stay broad enough that no read is silently denied
-- [ ] #2 Writes in the outer profile are confined to the App's own state, matching the shape Alloy uses
-- [ ] #3 grafana_pdc/tests/image-contract.test.py asserts no unrestricted file rule and pins the writable set exactly, mirroring the Alloy checks
-- [ ] #4 The status page, the MQTT reporter and the pdc agent all still start and work on a real Home Assistant OS install, with no denials in dmesg
-- [ ] #5 The profile header documents the apparmor: false recovery switch and the symptoms of an over-tight rule
-- [ ] #6 python3 grafana_pdc/tests/config-schema.test.py and python3 grafana_pdc/tests/image-contract.test.py pass
+- [x] #1 The bare file, rule is gone from grafana_pdc/apparmor.txt and reads stay broad enough that no read is silently denied
+- [x] #2 Writes in the outer profile are confined to the App's own state, matching the shape Alloy uses
+- [x] #3 grafana_pdc/tests/image-contract.test.py asserts no unrestricted file rule and pins the writable set exactly, mirroring the Alloy checks
+- [x] #4 The status page, the MQTT reporter and the pdc agent all still start and work on a real Home Assistant OS install, with no denials in dmesg
+- [x] #5 The profile header documents the apparmor: false recovery switch and the symptoms of an over-tight rule
+- [x] #6 python3 grafana_pdc/tests/config-schema.test.py and python3 grafana_pdc/tests/image-contract.test.py pass
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 yamllint --strict .
-- [ ] #2 python3 tests/app_metadata_contract_test.py && python3 tests/app_version_changed_test.py && python3 tests/renovate_config_contract_test.py && python3 tests/repository_workflow_contract_test.py && python3 tests/synthetic_monitoring_variants_test.py
-- [ ] #3 SHELL only: shellcheck alloy/rootfs/usr/share/alloy/generate-config.sh alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish alloy/tests/generate-config.test.sh alloy/tests/init-alloy.test.sh grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish grafana_pdc/tests/service.test.sh grafana_pdc/tests/image-smoke.test.sh grafana_pdc/tests/fixtures/bashio grafana_pdc/tests/fixtures/fake-pdc
-- [ ] #4 ALLOY only: python3 alloy/tests/config-schema.test.py && python3 alloy/tests/image-contract.test.py && bash alloy/tests/generate-config.test.sh && node alloy/tests/ui-static.test.mjs && (cd alloy/ui && go test ./...)
-- [ ] #5 PDC only: python3 grafana_pdc/tests/config-schema.test.py && python3 grafana_pdc/tests/image-contract.test.py
-- [ ] #6 SM only: python3 scripts/sync_synthetic_monitoring_variants.py && (cd synthetic_monitoring_shared/launcher && go test ./...)
+- [x] #1 yamllint --strict .
+- [x] #2 python3 tests/app_metadata_contract_test.py && python3 tests/app_version_changed_test.py && python3 tests/renovate_config_contract_test.py && python3 tests/repository_workflow_contract_test.py && python3 tests/synthetic_monitoring_variants_test.py
+- [x] #3 SHELL only: shellcheck alloy/rootfs/usr/share/alloy/generate-config.sh alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish alloy/tests/generate-config.test.sh alloy/tests/init-alloy.test.sh grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish grafana_pdc/tests/service.test.sh grafana_pdc/tests/image-smoke.test.sh grafana_pdc/tests/fixtures/bashio grafana_pdc/tests/fixtures/fake-pdc
+- [x] #4 ALLOY only: python3 alloy/tests/config-schema.test.py && python3 alloy/tests/image-contract.test.py && bash alloy/tests/generate-config.test.sh && node alloy/tests/ui-static.test.mjs && (cd alloy/ui && go test ./...)
+- [x] #5 PDC only: python3 grafana_pdc/tests/config-schema.test.py && python3 grafana_pdc/tests/image-contract.test.py
+- [x] #6 SM only: python3 scripts/sync_synthetic_monitoring_variants.py && (cd synthetic_monitoring_shared/launcher && go test ./...)
 <!-- DOD:END -->
 
 ## Implementation Plan
@@ -58,3 +58,9 @@ Untestable in CI, like the Alloy change: AppArmor only takes effect on a real Ho
 <!-- SECTION:PLAN:BEGIN -->
 Tighten PDC outer writable set and exact policy contract; document recovery; build enforcing Ubuntu startup/denied-write proof analogous Alloy. Retain real HAOS acceptance criterion as a pre-merge requirement and report it unverified until actual evidence exists. PDC lane owns its isolated candidate.
 <!-- SECTION:PLAN:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Merged in combined PR #172 at 502c2305dba78e4a2539530c4cc2b2e720c1afe0; draft #175 superseded. Outer writes restricted to App state with exact writable-set contract and documented recovery. Fresh combined image/startup, enforcing Ubuntu AppArmor allowed/denied writes, unrestricted-policy negative mutation, just check and guarded review passed. Real HAOS proof used reviewed source d1cdd999b5df9ff14a42fe7215c14500802e3397 and unchanged policy SHA256 0ca50bbc001ac20797852a991cc285e91465d603022baebeeb8d104e83ece28a: protected custom profile loaded, real PDC signing/SSH connection, reporter cleanup, ingress status HTTP200 with agent responding. Continuous final kernel capture through stop had63 lines and zero denials. Original App stayed started with unchanged options/version. Separate test App stopped/manual with verified retained partial backup; temporary login revoked. Exact combined head c1a50d86d703e5903de38566892f049b011ea980 passed CI42140343973 and all eight images.
+<!-- SECTION:FINAL_SUMMARY:END -->
