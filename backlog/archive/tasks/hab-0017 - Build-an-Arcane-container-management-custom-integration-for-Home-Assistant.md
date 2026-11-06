@@ -3,12 +3,13 @@ id: HAB-0017
 title: Build an Arcane container-management custom integration for Home Assistant
 status: To Do
 assignee: []
-created_date: '2026-08-29 17:38'
+created_date: 2026-08-29 17:38
+updated_date: '2026-11-06T00:09:00Z'
 labels:
-  - 'unit:arcane'
+  - unit:arcane
 dependencies: []
 references:
-  - 'https://getarcane.app/api-reference'
+  - https://getarcane.app/api-reference
 priority: medium
 type: feature
 ordinal: 17000
@@ -35,3 +36,9 @@ HACS custom integration (new repository) for Arcane (getarcane.app), the Docker/
 - [ ] #1 just check
 - [ ] #2 Fast subset while iterating (not the gate): just fmt-check && just lint && just gen-check && just test-repo
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-06 delegated product disposition: Defer the separate Arcane HACS product. It needs a dedicated repository, API compatibility and least-privilege capability verification. Reconsider with a read-only first release and a specific household use case; optional infrastructure controls remain a separate decision. Archived as unbuilt/deferred, not delivered. User authorized autonomous product triage; historical market-gap claims have not been revalidated.
+<!-- SECTION:NOTES:END -->

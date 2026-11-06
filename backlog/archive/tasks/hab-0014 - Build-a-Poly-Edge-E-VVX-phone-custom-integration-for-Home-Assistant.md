@@ -3,9 +3,10 @@ id: HAB-0014
 title: Build a Poly Edge E / VVX phone custom integration for Home Assistant
 status: To Do
 assignee: []
-created_date: '2026-08-29 17:37'
+created_date: 2026-08-29 17:37
+updated_date: '2026-11-06T00:09:00Z'
 labels:
-  - 'unit:poly-phone'
+  - unit:poly-phone
 dependencies: []
 references:
   - >-
@@ -38,3 +39,9 @@ HACS custom integration (new repository) for Poly desk phones running PVOS/UCS, 
 - [ ] #1 just check
 - [ ] #2 Fast subset while iterating (not the gate): just fmt-check && just lint && just gen-check && just test-repo
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-06 delegated product disposition: Defer the separate Poly HACS product. Call-state automation has a useful case but needs device/firmware compatibility and event privacy validation beyond this App maintenance scope. Reconsider with a dedicated repository and hardware acceptance fixture. Archived as unbuilt/deferred, not delivered. User authorized autonomous product triage; historical market-gap claims have not been revalidated.
+<!-- SECTION:NOTES:END -->

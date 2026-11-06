@@ -60,6 +60,12 @@ fmt-check:
     just --fmt --check
     unformatted="$(gofmt -l {{ go_source_modules }} grafana_pdc/tests/fixtures)"; if [ -n "$unformatted" ]; then printf 'unformatted Go sources:\n%s\n' "$unformatted" >&2; exit 1; fi
 
+# Run all standard Go vet checks once per source module, excluding generated copies.
+[group('check')]
+[no-exit-message]
+vet:
+    for module in {{ go_source_modules }}; do (cd "$module" && go vet ./...); done
+
 # Lint every YAML file and every tracked shell script, including the s6 services.
 [group('check')]
 [no-exit-message]
@@ -218,11 +224,12 @@ test-alloy-init:
         docker run --rm -v "${PWD}:/w" -w /w \
         "$alloy_base" bash alloy/tests/init-alloy.test.sh
 
-# Run the shared Synthetic Monitoring launcher tests.
+# Run the shared Synthetic Monitoring launcher and status-page tests.
 [group('check')]
 [no-exit-message]
 test-sm:
     (cd synthetic_monitoring_shared/launcher && go test ./...)
+    (cd synthetic_monitoring_shared/ui && go test ./...)
 
 # Build and smoke-test both Docker-backed Synthetic Monitoring images.
 [group('check')]
@@ -235,7 +242,7 @@ test-sm-image:
 
 # Run the toolchain-only pre-commit gate.
 [group('check')]
-check: fmt-check lint gen-check test
+check: fmt-check lint vet gen-check test
 
 # Docker daemon required by test-pdc-image, test-alloy-image, test-alloy-init, and test-sm-image.
 # Run the CI-equivalent gate (Linux with AppArmor and passwordless sudo required).

@@ -275,6 +275,13 @@ tab and restart the App. Safe mode starts Alloy with only logging configured,
 while leaving the Web UI available so the stored operational configuration can
 be repaired. Disable safe mode and restart after the candidate saves cleanly.
 
+Configuration requests allow up to 10 seconds to upload their JSON body and
+30 seconds overall for API work, including Alloy validation. A validation timeout
+returns an error without saving the candidate; retry after checking the App logs.
+The proxied Alloy UI allows long-lived responses while data keeps flowing, but
+closes an upstream connection or a blocked client write after 30 seconds without
+progress. It waits up to 10 seconds for Alloy's response headers.
+
 ## Alloy component graph and network ports
 
 Alloy's component graph is proxied through Home Assistant ingress at **Open Web

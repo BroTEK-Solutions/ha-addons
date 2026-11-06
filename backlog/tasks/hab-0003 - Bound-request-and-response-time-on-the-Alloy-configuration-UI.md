@@ -1,12 +1,13 @@
 ---
 id: HAB-0003
 title: Bound request and response time on the Alloy configuration UI
-status: To Do
-assignee: []
-created_date: '2026-08-17 14:19'
-updated_date: '2026-08-29 14:54'
+status: Done
+assignee:
+  - '@codex'
+created_date: 2026-08-17 14:19
+updated_date: '2026-11-06T00:27:00Z'
 labels:
-  - 'unit:alloy'
+  - unit:alloy
 dependencies: []
 priority: medium
 type: bug
@@ -27,18 +28,30 @@ Exposure is limited: the listener is loopback-plus-ingress and `ingressOnly` rej
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 alloy/ui/main.go sets ReadTimeout and WriteTimeout alongside the existing ReadHeaderTimeout and IdleTimeout
-- [ ] #2 The chosen values do not break a legitimate settings save, including a manual_config override at the 1 MiB MaxBytesReader ceiling
-- [ ] #3 cd alloy/ui && go test ./... passes
-- [ ] #4 The three UI servers agree on the timeout policy, or the file explains in a comment why the Alloy UI differs
+- [x] #1 alloy/ui/main.go sets ReadTimeout and WriteTimeout alongside the existing ReadHeaderTimeout and IdleTimeout
+- [x] #2 The chosen values do not break a legitimate settings save, including a manual_config override at the 1 MiB MaxBytesReader ceiling
+- [x] #3 cd alloy/ui && go test ./... passes
+- [x] #4 The three UI servers agree on the timeout policy, or the file explains in a comment why the Alloy UI differs
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 yamllint --strict .
-- [ ] #2 python3 tests/app_metadata_contract_test.py && python3 tests/app_version_changed_test.py && python3 tests/renovate_config_contract_test.py && python3 tests/repository_workflow_contract_test.py && python3 tests/synthetic_monitoring_variants_test.py
-- [ ] #3 SHELL only: shellcheck alloy/rootfs/usr/share/alloy/generate-config.sh alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish alloy/tests/generate-config.test.sh alloy/tests/init-alloy.test.sh grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish grafana_pdc/tests/service.test.sh grafana_pdc/tests/image-smoke.test.sh grafana_pdc/tests/fixtures/bashio grafana_pdc/tests/fixtures/fake-pdc
-- [ ] #4 ALLOY only: python3 alloy/tests/config-schema.test.py && python3 alloy/tests/image-contract.test.py && bash alloy/tests/generate-config.test.sh && node alloy/tests/ui-static.test.mjs && (cd alloy/ui && go test ./...)
-- [ ] #5 PDC only: python3 grafana_pdc/tests/config-schema.test.py && python3 grafana_pdc/tests/image-contract.test.py
-- [ ] #6 SM only: python3 scripts/sync_synthetic_monitoring_variants.py && (cd synthetic_monitoring_shared/launcher && go test ./...)
+- [x] #1 yamllint --strict .
+- [x] #2 python3 tests/app_metadata_contract_test.py && python3 tests/app_version_changed_test.py && python3 tests/renovate_config_contract_test.py && python3 tests/repository_workflow_contract_test.py && python3 tests/synthetic_monitoring_variants_test.py
+- [x] #3 SHELL only: shellcheck alloy/rootfs/usr/share/alloy/generate-config.sh alloy/rootfs/etc/s6-overlay/s6-rc.d/init-alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/run alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish alloy/tests/generate-config.test.sh alloy/tests/init-alloy.test.sh grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish grafana_pdc/tests/service.test.sh grafana_pdc/tests/image-smoke.test.sh grafana_pdc/tests/fixtures/bashio grafana_pdc/tests/fixtures/fake-pdc
+- [x] #4 ALLOY only: python3 alloy/tests/config-schema.test.py && python3 alloy/tests/image-contract.test.py && bash alloy/tests/generate-config.test.sh && node alloy/tests/ui-static.test.mjs && (cd alloy/ui && go test ./...)
+- [x] #5 PDC only: python3 grafana_pdc/tests/config-schema.test.py && python3 grafana_pdc/tests/image-contract.test.py
+- [x] #6 SM only: python3 scripts/sync_synthetic_monitoring_variants.py && (cd synthetic_monitoring_shared/launcher && go test ./...)
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Bound server reads, API execution and writes with coordinated budgets; cancel validator process groups; bound proxy connection/header and idle waits while preserving streaming. Prove with real slow-body HTTP, large valid save, timeout/no-save, stream and subprocess fixtures. Isolated Alloy lane; root reviews and lands.
+<!-- SECTION:PLAN:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Merged PR #171 as 073e91b4f6ec4fcf255e83f0180e50fdc4c89581. Exact head ef91cab00b072f5bf3ae9dc7cb519a1d21500556 passed required CI run42136285802 and both Alloy image builds. Real socket tests reproduce stalled headers/bodies/writes, API cancellation, maximum-size legitimate save and active proxy streams; child-process negative control proves cancellation reaches descendants. Go race suite and just check passed; dsreview PASS with zero findings. Alloy-specific upload/validation/write budget rationale documented. Legacy DoD Python checks run using the current locked uv recipes.
+<!-- SECTION:FINAL_SUMMARY:END -->

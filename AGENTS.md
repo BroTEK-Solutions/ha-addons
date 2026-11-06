@@ -9,6 +9,18 @@ user-facing description; this file is the contributor contract.
 `just check` is the toolchain-only pre-commit gate and must pass before you commit. `just ci` is the
 CI-equivalent gate and adds the Docker-backed test legs.
 
+`just check` includes source-only Go formatting and `just vet` across all five owned Go modules.
+Full standard `go vet ./...` is the baseline: it adds the checks omitted by `go test` without a
+second linter toolchain. Generated copies are checked for drift instead of vetted twice.
+The Synthetic Monitoring test recipe runs both the shared launcher and status-page suites.
+
+The four App metadata linters continue after failures and a final outcome check fails the job if
+any App did not pass. To reproduce one locally, clone `https://github.com/frenck/action-addon-linter`,
+check out the exact action SHA in `.github/workflows/builder.yaml`, then build its `src/` directory
+with `docker build -t local/app-linter <clone>/src`. From this repository run
+`docker run --rm -v "$PWD:/github/workspace" -w /github/workspace -e INPUT_PATH=./alloy
+-e INPUT_COMMUNITY=false local/app-linter`, replacing `alloy` for each App to inspect.
+
 `just ci` also requires a Linux Docker host with enforcing AppArmor and passwordless sudo.
 On Ubuntu, `just setup-apparmor-tests` installs the parser. `just test-alloy-image` remains the
 portable image/startup check; after building that image, `just test-alloy-apparmor` loads a uniquely
@@ -40,7 +52,9 @@ propagates into generated files silently. Force a version with a `Release-As: X.
 passes only the boolean before dropping privileges, never the token-bearing options file. The shared
 reporter withdraws retained discovery/state when disabled, then idles to avoid s6 restart loops.
 Registry IDs/topics remain slug-based; readable model names are presentation only. Alloy problem
-sensors use `on` for faults and `off` for success; missing metrics remain unknown.
+sensors use `on` for faults and `off` for success; missing metrics render the explicit MQTT `None`
+sentinel to clear stale state. Reconnects refresh Supervisor broker details and republish retained
+discovery/availability; the ordered shutdown publication race remains a separate tracked issue.
 
 **Conventional Commits select the release, and a squash-merged PR's *title* becomes the commit
 subject on `main`** - so the title needs the prefix. Scope by App: `fix(alloy):`, `feat(alloy):`.

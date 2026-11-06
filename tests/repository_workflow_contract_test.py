@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 import struct
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -102,6 +104,44 @@ def check_python_invocation(justfile: str) -> None:
             fail(f"{path} must provision Python through uv, not pip")
 
 
+def check_app_lint_results(steps: list[dict]) -> None:
+    """Every App gets diagnostics, but continuing past a linter never hides failure."""
+    linters = [step for step in steps if str(step.get("uses", "")).startswith("frenck/action-addon-linter@")]
+    apps = {"alloy", "grafana_pdc", "grafana_sm", "grafana_sm_browser"}
+    if {step.get("with", {}).get("path", "").removeprefix("./") for step in linters} != apps:
+        fail("metadata lint must cover all four Apps")
+    for step in linters:
+        if step.get("continue-on-error") is not True or step.get("if") != "${{ !cancelled() }}":
+            fail("every App linter must run after earlier failures and preserve its outcome")
+    aggregate = next((step for step in steps if step.get("id") == "app_lint_result"), None)
+    if not aggregate or aggregate.get("if") != "${{ !cancelled() }}" or aggregate.get("continue-on-error"):
+        fail("App lint results must be aggregated even after other quality failures")
+    references = {f"${{{{ steps.{step['id']}.outcome }}}}": step for step in linters}
+    if set(aggregate.get("env", {}).values()) != set(references):
+        fail("App lint aggregation must consume every linter's outcome, not its conclusion")
+    # Execute the shipped aggregation script. Two failures must both be reported;
+    # a skipped linter must not accidentally turn an incomplete run green.
+    cases = (
+        ({app: "success" for app in apps}, True),
+        ({app: "failure" if app in {"alloy", "grafana_pdc"} else "success" for app in apps}, False),
+        ({app: "skipped" if app == "grafana_sm" else "success" for app in apps}, False),
+    )
+    for outcomes, success in cases:
+        environment = os.environ.copy()
+        for key, reference in aggregate["env"].items():
+            app = references[reference]["with"]["path"].removeprefix("./")
+            environment[key] = outcomes[app]
+        result = subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", aggregate["run"]],
+            env=environment, capture_output=True, text=True, timeout=10, check=False,
+        )
+        if (result.returncode == 0) != success:
+            fail(f"App lint aggregation returned {result.returncode} for {outcomes}")
+        for app, outcome in outcomes.items():
+            if outcome != "success" and f"{app}: {outcome}" not in result.stdout + result.stderr:
+                fail(f"App lint aggregation hid {app}'s {outcome} result")
+
+
 def main() -> None:
     caller_path = ROOT / ".github/workflows/builder.yaml"
     reusable_path = ROOT / ".github/workflows/build-app.yaml"
@@ -119,6 +159,7 @@ def main() -> None:
     justfile = justfile_path.read_text()
     caller_config = yaml.safe_load(caller)
     jobs = caller_config["jobs"]
+    check_app_lint_results(jobs["quality"]["steps"])
 
     for release_file in (
         release_workflow_path,
@@ -223,6 +264,7 @@ def main() -> None:
     expected_recipes = {
         "quality": (
             "just fmt-check",
+            "just vet",
             "just lint",
             "just gen-check",
             "just test-repo",
@@ -306,6 +348,7 @@ def main() -> None:
         "bash alloy/tests/image-smoke.test.sh local/ha-alloy:smoke",
         "bash alloy/tests/init-alloy.test.sh",
         "(cd synthetic_monitoring_shared/launcher && go test ./...)",
+        "(cd synthetic_monitoring_shared/ui && go test ./...)",
         "just image grafana_sm local/ha-grafana-sm:smoke",
         "just image grafana_sm_browser local/ha-grafana-sm-browser:smoke",
         "python3 tests/synthetic_monitoring_image_smoke_test.py local/ha-grafana-sm:smoke standard",
