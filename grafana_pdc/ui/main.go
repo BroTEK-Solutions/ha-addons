@@ -10,6 +10,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"io/fs"
@@ -31,12 +32,15 @@ func envOr(key, fallback string) string {
 }
 
 func newHandler(optionsPath, metricsURL string) (http.Handler, error) {
+	return newHandlerWithDial(optionsPath, metricsURL, (&net.Dialer{}).DialContext)
+}
+
+func newHandlerWithDial(optionsPath, metricsURL string, dial func(context.Context, string, string) (net.Conn, error)) (http.Handler, error) {
 	assets, err := fs.Sub(staticFiles, "static")
 	if err != nil {
 		return nil, err
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
-	dialer := &net.Dialer{}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +49,7 @@ func newHandler(optionsPath, metricsURL string) (http.Handler, error) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		status := collectStatus(r.Context(), optionsPath, metricsURL, client, dialer.DialContext, time.Now)
+		status := collectStatus(r.Context(), optionsPath, metricsURL, client, dial, time.Now)
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		_ = json.NewEncoder(w).Encode(status)

@@ -50,7 +50,7 @@ setup:
 # Format Go sources and this justfile in place, then refresh generated copies.
 [group('check')]
 fmt: && gen
-    gofmt -w {{ go_source_modules }}
+    gofmt -w {{ go_source_modules }} grafana_pdc/tests/fixtures
     just --fmt
 
 # Verify formatting without mutating files.
@@ -58,7 +58,7 @@ fmt: && gen
 [no-exit-message]
 fmt-check:
     just --fmt --check
-    unformatted="$(gofmt -l {{ go_source_modules }})"; if [ -n "$unformatted" ]; then printf 'unformatted Go sources:\n%s\n' "$unformatted" >&2; exit 1; fi
+    unformatted="$(gofmt -l {{ go_source_modules }} grafana_pdc/tests/fixtures)"; if [ -n "$unformatted" ]; then printf 'unformatted Go sources:\n%s\n' "$unformatted" >&2; exit 1; fi
 
 # Run all standard Go vet checks once per source module, excluding generated copies.
 [group('check')]
@@ -93,6 +93,7 @@ lint:
         grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-ui/finish \
         grafana_pdc/tests/service.test.sh \
         grafana_pdc/tests/image-smoke.test.sh \
+        grafana_pdc/tests/apparmor.test.sh \
         grafana_pdc/tests/fixtures/bashio \
         grafana_pdc/tests/fixtures/fake-pdc
 
@@ -185,6 +186,12 @@ test-pdc-image:
     just image grafana_pdc local/ha-grafana-pdc:smoke
     bash grafana_pdc/tests/image-smoke.test.sh local/ha-grafana-pdc:smoke
 
+# Require enforcing AppArmor and boot the real PDC agent and companions.
+[group('check')]
+[no-exit-message]
+test-pdc-apparmor:
+    bash grafana_pdc/tests/apparmor.test.sh local/ha-grafana-pdc:smoke
+
 # Run Alloy's schema, image-contract, UI, browser-state, and generator tests.
 [group('check')]
 [no-exit-message]
@@ -246,7 +253,7 @@ check: fmt-check lint vet gen-check test
 # Docker daemon required by test-pdc-image, test-alloy-image, test-alloy-init, and test-sm-image.
 # Run the CI-equivalent gate (Linux with AppArmor and passwordless sudo required).
 [group('check')]
-ci: check test-pdc-image test-alloy-image test-alloy-apparmor test-alloy-init test-sm-image
+ci: check test-pdc-image test-pdc-apparmor test-alloy-image test-alloy-apparmor test-alloy-init test-sm-image
 
 # Compile every source Go module without keeping artifacts.
 [group('build')]

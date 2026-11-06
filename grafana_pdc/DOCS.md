@@ -218,3 +218,44 @@ behavior while presenting a shorter main configuration form.
 See Grafana's current [PDC configuration
 documentation](https://grafana.com/docs/grafana-cloud/observe-and-act/connect-externally-hosted/private-data-source-connect/configure-pdc/)
 for Cloud-side setup.
+
+### Diagnostic time limits and unavailable configuration
+
+The status page checks up to four allowlisted endpoints concurrently within a
+five-second collection budget. An outage therefore still produces a response;
+entries that could not be attempted or whose probes were interrupted by the
+collection budget say **Not tested**.
+A failed TCP probe describes that attempt and does not prove the Cloud tunnel's
+state. The agent's local metrics response is checked within the same budget.
+
+If the options file is missing, unreadable or invalid, the page reports
+**Configuration unavailable** and says the allowlist policy is unknown. It only
+reports unrestricted access when it successfully reads a configuration with no
+allowlist entries. Check the Configuration tab and App logs before drawing
+conclusions about access policy from an unavailable configuration.
+
+### AppArmor confinement and recovery
+
+The status page and MQTT reporter inherit the App's outer AppArmor profile.
+Reads remain broad; writes are limited to s6 runtime files, temporary files,
+legacy service hook directories, and `/data/ssh`. The PDC agent transitions to
+its own narrower child profile. The profile does not restrict which network
+peers the companions can contact.
+
+A missing permission can prevent startup, break the status page, or leave MQTT
+entities unavailable. Check the App logs and the HAOS host's kernel log
+(`dmesg`) for `apparmor="DENIED"` entries naming the App profile and denied path.
+For a local development build, temporarily setting `apparmor: false` in its
+`config.yaml` and reinstalling/restarting that build can confirm the cause.
+Restore confinement after correcting the specific rule; do not leave AppArmor
+disabled as a permanent workaround. Installed repository Apps do not expose
+this developer metadata setting in their normal Configuration form.
+
+The Linux CI check boots the real PDC agent, status page and reporter under an
+enforcing copy of the shipped profile. A local test signer supplies a disposable
+certificate; the reporter reaches a fake Supervisor with no MQTT broker. The
+check verifies certificate writes, service profiles, status-page responses and
+paired allowed/denied filesystem writes. It has no external network access and
+does not establish a Grafana Cloud tunnel or prove MQTT delivery. HAOS startup,
+real Supervisor ingress, broker discovery and a connected tunnel still require
+validation on an actual HAOS installation before this policy change is merged.

@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -33,10 +35,11 @@ type endpointStatus struct {
 }
 
 type statusResponse struct {
-	AgentResponding bool             `json:"agent_responding"`
-	Options         options          `json:"options"`
-	Endpoints       []endpointStatus `json:"endpoints"`
-	CheckedAt       string           `json:"checked_at"`
+	OptionsAvailable bool             `json:"options_available"`
+	AgentResponding  bool             `json:"agent_responding"`
+	Options          options          `json:"options"`
+	Endpoints        []endpointStatus `json:"endpoints"`
+	CheckedAt        string           `json:"checked_at"`
 }
 
 // loadOptions reads the Supervisor-managed options file. Unknown fields are
@@ -48,11 +51,19 @@ func loadOptions(path string) (options, error) {
 		return options{}, err
 	}
 	defer file.Close()
-	var result options
-	if err := json.NewDecoder(io.LimitReader(file, 1<<20)).Decode(&result); err != nil {
+	var result *options
+	decoder := json.NewDecoder(io.LimitReader(file, 1<<20))
+	if err := decoder.Decode(&result); err != nil {
 		return options{}, err
 	}
-	return result, nil
+	if result == nil {
+		return options{}, errors.New("options must be an object")
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return options{}, errors.New("options contain trailing data")
+	}
+	return *result, nil
 }
 
 // agentResponding probes the PDC agent's own metrics endpoint. It proves the
@@ -91,6 +102,9 @@ func checkEndpoint(ctx context.Context, dial func(context.Context, string, strin
 	defer cancel()
 	connection, err := dial(attempt, "tcp", endpoint)
 	if err != nil {
+		if ctx.Err() != nil {
+			return endpointStatus{Endpoint: endpoint, Detail: "not tested; diagnostic collection ended before the probe completed"}
+		}
 		return endpointStatus{Endpoint: endpoint, Detail: summarizeDialError(err)}
 	}
 	_ = connection.Close()
@@ -121,20 +135,55 @@ func collectStatus(
 	dial func(context.Context, string, string) (net.Conn, error),
 	now func() time.Time,
 ) statusResponse {
+	// Leave headroom beneath the HTTP server's ten-second write deadline.
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 	response := statusResponse{
-		AgentResponding: agentResponding(ctx, client, metricsURL),
-		CheckedAt:       now().UTC().Format(time.RFC3339),
-		Endpoints:       []endpointStatus{},
+		CheckedAt: now().UTC().Format(time.RFC3339),
+		Endpoints: []endpointStatus{},
 	}
 	opts, err := loadOptions(optionsPath)
 	if err == nil {
 		response.Options = opts
+		response.OptionsAvailable = true
 	}
-
 	endpoints := append([]string(nil), response.Options.AllowedEndpoints...)
 	sort.Strings(endpoints)
 	for _, endpoint := range endpoints {
-		response.Endpoints = append(response.Endpoints, checkEndpoint(ctx, dial, endpoint))
+		response.Endpoints = append(response.Endpoints, endpointStatus{Endpoint: endpoint, Detail: "not tested; diagnostic time budget exhausted"})
 	}
+
+	var pending sync.WaitGroup
+	pending.Add(1)
+	go func() {
+		defer pending.Done()
+		response.AgentResponding = agentResponding(ctx, client, metricsURL)
+	}()
+	// Four workers bound open sockets and goroutines even for large allowlists.
+	jobs := make(chan int)
+	for range min(4, len(endpoints)) {
+		pending.Add(1)
+		go func() {
+			defer pending.Done()
+			for index := range jobs {
+				if ctx.Err() == nil {
+					response.Endpoints[index] = checkEndpoint(ctx, dial, endpoints[index])
+				}
+			}
+		}()
+	}
+enqueue:
+	for index := range endpoints {
+		if ctx.Err() != nil {
+			break
+		}
+		select {
+		case jobs <- index:
+		case <-ctx.Done():
+			break enqueue
+		}
+	}
+	close(jobs)
+	pending.Wait()
 	return response
 }

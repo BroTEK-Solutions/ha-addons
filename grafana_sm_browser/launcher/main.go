@@ -100,7 +100,7 @@ func buildAgentProcess(opts options, environment []string) (agentProcess, error)
 	return agentProcess{
 		Path: agentPath,
 		Args: args,
-		Env:  setEnvironment(environment, tokenEnvVar, opts.APIToken),
+		Env:  setEnvironment(withoutSupervisorToken(environment), tokenEnvVar, opts.APIToken),
 	}, nil
 }
 
@@ -175,7 +175,7 @@ func startUI(path string, environment []string, opts options, log io.Writer) {
 		return
 	}
 	command := exec.Command(path)
-	command.Env = setEnvironment(withoutToken(environment), "SM_UI_OPTIONS", string(safeOptions))
+	command.Env = uiEnvironment(environment, string(safeOptions))
 	command.Stdout = log
 	command.Stderr = log
 	command.SysProcAttr = &syscall.SysProcAttr{
@@ -205,6 +205,22 @@ func dropPrivileges() error {
 // property of every call site rather than of the functions that must uphold it.
 // Stripping it where the child is built holds even if a future caller passes
 // the wrong slice.
+// Filter credentials at each child boundary. This reduces ambient exposure;
+// shared process identities still require separate OS isolation.
+func withoutSupervisorToken(environment []string) []string {
+	result := make([]string, 0, len(environment))
+	for _, entry := range environment {
+		if !strings.HasPrefix(entry, "SUPERVISOR_TOKEN=") && !strings.HasPrefix(entry, "HASSIO_TOKEN=") {
+			result = append(result, entry)
+		}
+	}
+	return result
+}
+
+func uiEnvironment(environment []string, safeOptions string) []string {
+	return setEnvironment(withoutSupervisorToken(withoutToken(environment)), "SM_UI_OPTIONS", safeOptions)
+}
+
 func withoutToken(environment []string) []string {
 	prefix := tokenEnvVar + "="
 	result := make([]string, 0, len(environment))

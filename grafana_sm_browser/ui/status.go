@@ -6,7 +6,9 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -26,22 +28,22 @@ type options struct {
 }
 
 type checkMetrics struct {
-	Type       string  `json:"type"`
-	Running    float64 `json:"running"`
-	Executions float64 `json:"executions"`
-	Errors     float64 `json:"errors"`
+	Type       string   `json:"type"`
+	Running    *float64 `json:"running"`
+	Executions *float64 `json:"executions"`
+	Errors     *float64 `json:"errors"`
 }
 
 type diagnostics struct {
-	Connected         bool           `json:"connected"`
+	Connected         *bool          `json:"connected"`
 	AgentVersion      string         `json:"agent_version,omitempty"`
-	ProcessUptime     float64        `json:"process_uptime_seconds,omitempty"`
-	PublisherHandlers float64        `json:"publisher_handlers"`
-	Pushes            float64        `json:"pushes"`
-	PushErrors        float64        `json:"push_errors"`
-	PushFailures      float64        `json:"push_failures"`
-	Retries           float64        `json:"retries"`
-	Dropped           float64        `json:"dropped"`
+	ProcessUptime     *float64       `json:"process_uptime_seconds"`
+	PublisherHandlers *float64       `json:"publisher_handlers"`
+	Pushes            *float64       `json:"pushes"`
+	PushErrors        *float64       `json:"push_errors"`
+	PushFailures      *float64       `json:"push_failures"`
+	Retries           *float64       `json:"retries"`
+	Dropped           *float64       `json:"dropped"`
 	Checks            []checkMetrics `json:"checks"`
 }
 
@@ -85,9 +87,10 @@ func loadOptions(path string) (options, error) {
 
 // parseMetrics retains only scalar samples and labels needed by the explicit
 // diagnostics allowlist below. Arbitrary upstream labels never reach JSON.
-func parseMetrics(reader io.Reader) []sample {
+func parseMetrics(reader io.Reader) ([]sample, error) {
 	var result []sample
-	scanner := bufio.NewScanner(io.LimitReader(reader, 16<<20))
+	limited := &io.LimitedReader{R: reader, N: (16 << 20) + 1}
+	scanner := bufio.NewScanner(limited)
 	scanner.Buffer(make([]byte, 0, 64<<10), 1<<20)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -99,7 +102,7 @@ func parseMetrics(reader io.Reader) []sample {
 		if open := strings.IndexByte(line, '{'); open >= 0 {
 			close := strings.IndexByte(line[open:], '}')
 			if close < 0 {
-				continue
+				return nil, errors.New("invalid metrics response")
 			}
 			close += open
 			name, rest = line[:open], strings.TrimSpace(line[close+1:])
@@ -112,17 +115,33 @@ func parseMetrics(reader io.Reader) []sample {
 		} else if space := strings.IndexAny(line, " \t"); space >= 0 {
 			name, rest = line[:space], strings.TrimSpace(line[space:])
 		} else {
-			continue
+			return nil, errors.New("invalid metrics response")
 		}
 		if space := strings.IndexAny(rest, " \t"); space >= 0 {
 			rest = rest[:space]
 		}
 		value, err := strconv.ParseFloat(rest, 64)
-		if err == nil {
-			result = append(result, sample{name: name, labels: labels, value: value})
+		if err != nil {
+			return nil, errors.New("invalid metrics value")
 		}
+		// Prometheus permits non-finite samples; they are unobservable here and
+		// must not reach JSON (which cannot represent NaN or infinity).
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			continue
+		}
+		result = append(result, sample{name: name, labels: labels, value: value})
 	}
-	return result
+	if scanner.Err() != nil || limited.N == 0 {
+		return nil, errors.New("incomplete metrics response")
+	}
+	return result, nil
+}
+
+func addObservation(total **float64, value float64) {
+	if *total == nil {
+		*total = new(float64)
+	}
+	**total += value
 }
 
 var safeCheckTypes = map[string]string{
@@ -136,23 +155,25 @@ func summarizeMetrics(samples []sample, now time.Time) diagnostics {
 	for _, item := range samples {
 		switch item.name {
 		case "sm_agent_api_connection_status":
-			result.Connected = item.value != 0
+			connected := item.value != 0
+			result.Connected = &connected
 		case "sm_agent_info":
 			result.AgentVersion = item.labels["version"]
 		case "process_start_time_seconds":
-			result.ProcessUptime = float64(max(0, now.Unix()-int64(item.value)))
+			uptime := math.Max(0, float64(now.Unix())-item.value)
+			result.ProcessUptime = &uptime
 		case "sm_agent_publisher_handlers_total":
-			result.PublisherHandlers += item.value
+			addObservation(&result.PublisherHandlers, item.value)
 		case "sm_agent_publisher_push_total":
-			result.Pushes += item.value
+			addObservation(&result.Pushes, item.value)
 		case "sm_agent_publisher_push_errors_total":
-			result.PushErrors += item.value
+			addObservation(&result.PushErrors, item.value)
 		case "sm_agent_publisher_push_failed_total":
-			result.PushFailures += item.value
+			addObservation(&result.PushFailures, item.value)
 		case "sm_agent_publisher_retries_total":
-			result.Retries += item.value
+			addObservation(&result.Retries, item.value)
 		case "sm_agent_publisher_drop_total":
-			result.Dropped += item.value
+			addObservation(&result.Dropped, item.value)
 		case "sm_agent_updater_scrapers_total", "sm_agent_scraper_operations_total", "sm_agent_scraper_errors_total":
 			display, ok := safeCheckTypes[strings.ToLower(item.labels["type"])]
 			if !ok {
@@ -165,11 +186,11 @@ func summarizeMetrics(samples []sample, now time.Time) diagnostics {
 			}
 			switch item.name {
 			case "sm_agent_updater_scrapers_total":
-				entry.Running += item.value
+				addObservation(&entry.Running, item.value)
 			case "sm_agent_scraper_operations_total":
-				entry.Executions += item.value
+				addObservation(&entry.Executions, item.value)
 			case "sm_agent_scraper_errors_total":
-				entry.Errors += item.value
+				addObservation(&entry.Errors, item.value)
 			}
 		}
 	}
@@ -193,7 +214,11 @@ func fetchMetrics(ctx context.Context, client *http.Client, url string, now time
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return diagnostics{Checks: []checkMetrics{}}, false
 	}
-	return summarizeMetrics(parseMetrics(response.Body), now), true
+	samples, err := parseMetrics(response.Body)
+	if err != nil {
+		return diagnostics{Checks: []checkMetrics{}}, false
+	}
+	return summarizeMetrics(samples, now), true
 }
 
 func checkEndpoint(ctx context.Context, address string, dial func(context.Context, string, string) (net.Conn, error)) endpointStatus {

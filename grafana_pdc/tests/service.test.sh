@@ -91,6 +91,8 @@ run_service() {
         PDC_BIN="${tmp}/bin/pdc" \
         S6_SETUIDGID="${tmp}/bin/s6-setuidgid" \
         GETENT_BIN="${tmp}/bin/getent" \
+        SUPERVISOR_TOKEN="SUPERVISOR_SENTINEL" \
+        HASSIO_TOKEN="LEGACY_SENTINEL" \
         PDC_TEST_ARGV="${RUN_ARGV}" \
         PDC_TEST_ENV="${RUN_ENV}" \
         PDC_TEST_SETUIDGID="${RUN_SETUIDGID}" \
@@ -195,6 +197,8 @@ elif ! contains "${RUN_SETUIDGID}" '30000:30000'; then
     fail "OpenSSH defaults did not use s6-setuidgid 30000 30000"
 elif ! contains "${RUN_ARGV}" '<-ssh-key-file=/data/ssh/grafana_pdc>'; then
     fail "OpenSSH defaults did not use the persistent fixed key path"
+elif contains "${RUN_ENV}" 'SUPERVISOR_SENTINEL' || contains "${RUN_ENV}" 'LEGACY_SENTINEL'; then
+    fail "agent inherited unrelated Supervisor credentials"
 elif ! contains "${RUN_ENV}" 'GCLOUD_PDC_SIGNING_TOKEN=SENTINEL_TOKEN'; then
     fail "OpenSSH defaults did not export the signing token"
 elif contains "${RUN_ARGV}" 'SENTINEL_TOKEN' || grep -qF 'SENTINEL_TOKEN' <<<"${RUN_OUT}"; then
@@ -209,6 +213,25 @@ elif ! contains "${RUN_ARGV}" '<-connections=1>' \
     fail "omitted advanced options did not use the pdc-agent 0.0.63 defaults"
 else
     pass "OpenSSH uses private token handling and upstream advanced defaults"
+fi
+cleanup; tmp=""
+
+echo "== status UI omits Supervisor credentials =="
+setup_case
+# Substitute only the exec target at the process edge; run the shipped service
+# body with the same ambient credential sentinels as a container launch.
+sed "s#/usr/bin/grafana-pdc-ui#${tmp}/bin/pdc#" \
+    "${ADDON_ROOT}/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc-ui/run" >"${tmp}/ui-run"
+SUPERVISOR_TOKEN=SUPERVISOR_SENTINEL HASSIO_TOKEN=LEGACY_SENTINEL UI_SENTINEL=started \
+    PDC_TEST_ARGV="${tmp}/ui-argv" PDC_TEST_ENV="${tmp}/ui-env" bash "${tmp}/ui-run"
+UI_RC=$?
+TESTS=$((TESTS + 1))
+if [ "$UI_RC" -ne 0 ] || ! contains "${tmp}/ui-env" 'UI_SENTINEL=started'; then
+    fail "status UI fixture did not execute successfully"
+elif contains "${tmp}/ui-env" SUPERVISOR_SENTINEL || contains "${tmp}/ui-env" LEGACY_SENTINEL; then
+    fail "status UI inherited Supervisor credentials"
+else
+    pass "status UI omits Supervisor credentials"
 fi
 cleanup; tmp=""
 

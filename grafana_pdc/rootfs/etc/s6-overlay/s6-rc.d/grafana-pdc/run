@@ -130,4 +130,7 @@ else
     args+=("-ssh-flag=-o ConnectTimeout=${CONNECT_TIMEOUT_SECONDS}")
 fi
 
+# Only the reporter needs Supervisor service access.
+unset SUPERVISOR_TOKEN HASSIO_TOKEN
+
 exec "$S6_SETUIDGID" 30000:30000 "$PDC_BIN" "${args[@]}"

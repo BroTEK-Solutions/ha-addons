@@ -42,10 +42,21 @@ job runs both on an Ubuntu VM. This proves Ubuntu AppArmor startup, not every HA
 - `scripts/cloud-environment-setup.sh` is the cloud-provisioning command and is deliberately not a
   recipe: it uses sudo and installs tools globally.
 
+The PDC and Synthetic Monitoring agents and status UIs omit Supervisor credentials from their
+exec environments; the MQTT reporters retain service access. Environment filtering reduces exposure
+but does not isolate processes sharing an identity. SM status JSON uses null for unobserved metrics;
+observed zero remains zero. The PDC and SM source UI tests exercise their embedded renderers with
+Node as well as Go HTTP fixtures, so Node is required for `just test-pdc` and `just test-sm`.
+
 Alloy API uploads are capped at 1 MiB and complete encoded settings at 2 MiB. Settings updates
 hold the shared cross-process lock across read, merge, validation and replacement, with cancellable
 lock acquisition. Safe mode ignores saved runtime flags and credentials; its ingress-only recovery
 action archives exact existing bytes before resetting settings. Never replace this with a silent reset.
+
+`just test-pdc-apparmor` boots the actual PDC agent, UI and reporter under the shipped policy
+on an enforcing Linux Docker host, using an isolated certificate signer and paired filesystem
+write controls. It is required by `just ci`; Ubuntu proof does not replace the separate real-HAOS
+pre-merge criterion for the confinement change.
 
 ## Rules that are easy to break by accident
 
