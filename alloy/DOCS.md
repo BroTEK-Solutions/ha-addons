@@ -247,7 +247,11 @@ Passwords and tokens are referenced from Alloy with `sys.env()` and are never
 written into `/etc/alloy/config.alloy` or returned to the browser. Operational
 settings are stored atomically in `/data/settings.json` with mode `0600` and are
 included in Home Assistant backups. The password control masks display, not
-storage.
+storage. Saves validate supported fields and their types before replacing the
+file. The JSON request limit is 1 MiB; the complete saved document, including
+retained inactive-mode settings and credentials, is limited to 2 MiB. An
+oversized save leaves the previous settings unchanged. Concurrent saves are
+serialized with initialization so an omitted token preserves the latest value.
 
 On first version 2 startup, recognized settings are imported once from the old
 Home Assistant App options. The former `fleet_password` value becomes the shared
@@ -273,7 +277,16 @@ needs a preview component.
 If Alloy cannot start, enable **Safe mode** in the Home Assistant Configuration
 tab and restart the App. Safe mode starts Alloy with only logging configured,
 while leaving the Web UI available so the stored operational configuration can
-be repaired. Disable safe mode and restart after the candidate saves cleanly.
+be repaired. Saved startup arguments and credentials are ignored in Safe mode.
+Disable safe mode and restart after the candidate saves cleanly.
+
+If the settings file itself cannot be read, the Web UI still shows **Recover saved
+settings** in Safe mode. Confirm that you will configure Alloy again, then select
+**Archive and reset saved settings**. The App first preserves the exact previous
+file under `/data/backups/` with owner-only permissions, then creates an empty
+configuration. Archives can contain credentials and remain in Home Assistant
+backups. If archiving fails, the active settings are left untouched. Recovery
+never deletes the previous file's contents.
 
 Configuration requests allow up to 10 seconds to upload their JSON body and
 30 seconds overall for API work, including Alloy validation. A validation timeout

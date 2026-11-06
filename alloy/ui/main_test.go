@@ -22,13 +22,25 @@ type fakeStore struct {
 	saves    int
 }
 
-func (f *fakeStore) Load() (map[string]any, error) { return f.settings, nil }
+func (f *fakeStore) Load(context.Context) (map[string]any, error) { return f.settings, nil }
 func (f *fakeStore) Save(settings map[string]any) error {
 	f.saved = settings
 	f.settings = settings
 	f.saves++
 	return nil
 }
+
+func (f *fakeStore) Update(ctx context.Context, update func(map[string]any) (map[string]any, error)) error {
+	settings, err := update(f.settings)
+	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return f.Save(settings)
+}
+func (f *fakeStore) Recover(context.Context) error { return f.Save(map[string]any{}) }
 
 type fakeValidator struct{ err error }
 

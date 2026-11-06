@@ -7,6 +7,25 @@
 # the ingress-owned v2 settings store. Native App options are recovery-only.
 SETTINGS_FILE="${SETTINGS_FILE:-/data/settings.json}"
 
+# Startup flags. The first three are fixed: ingress proxies the prefixed UI,
+# health and self-monitoring use the same listener, and the storage path is the
+# one excluded from backups.
+declare -a args=(
+    --server.http.listen-addr=127.0.0.1:12345
+    --server.http.ui-path-prefix=/alloy
+    --storage.path=/data/alloy
+)
+
+
+# Recovery must not consult persisted settings, even for runtime flags or
+# secrets: those settings may be malformed or be what prevents Alloy starting.
+if bashio::config.true 'safe_mode'; then
+    unset LOKI_PASSWORD PROMETHEUS_PASSWORD GCLOUD_RW_API_KEY TEMPO_PASSWORD PYROSCOPE_PASSWORD
+    unset GCLOUD_FM_COLLECTOR_ID
+    exec /usr/bin/alloy run "${args[@]}" --stability.level=generally-available \
+        --disable-reporting /etc/alloy/config.alloy
+fi
+
 setting() {
     jq -r --arg key "${1}" \
         'if has($key) and .[$key] != null then .[$key] else empty end' \
@@ -33,14 +52,6 @@ GCLOUD_FM_COLLECTOR_ID=$(setting instance_name)
 [ -n "${GCLOUD_FM_COLLECTOR_ID}" ] || GCLOUD_FM_COLLECTOR_ID=homeassistant
 export GCLOUD_FM_COLLECTOR_ID
 
-# Startup flags. The first four are fixed: ingress proxies the prefixed UI,
-# health and self-monitoring use the same listener, and the storage path is the
-# one excluded from backups.
-declare -a args=(
-    --server.http.listen-addr=127.0.0.1:12345
-    --server.http.ui-path-prefix=/alloy
-    --storage.path=/data/alloy
-)
 
 # Alloy refuses to load a component below the permitted stability level, so this
 # is the switch that makes public-preview and experimental components usable.

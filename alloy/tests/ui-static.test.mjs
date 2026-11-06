@@ -151,11 +151,21 @@ const restartResponses = {
   },
 };
 
+const settingsRecovery = { hidden: true };
+const confirmSettingsRecovery = { checked: false, addEventListener(_event, handler) { this.onChange = handler; } };
+const recoverSettingsButton = { disabled: true, addEventListener(_event, handler) { this.onClick = handler; } };
+let recoveryRequested = false;
+let settingsUnreadable = false;
+form.reset = () => { manualToggle.checked = false; manualField.value = ""; };
+
 globalThis.document = {
   querySelector(selector) {
     if (selector === "#config-form") return form;
     if (selector === "#notice") return notice;
     if (selector === "#runtime-status") return runtimeStatus;
+    if (selector === "#settings-recovery") return settingsRecovery;
+    if (selector === "#confirm-settings-recovery") return confirmSettingsRecovery;
+    if (selector === "#recover-settings") return recoverSettingsButton;
     if (selector === "#operation_mode") return modeSelect;
     if (selector === "#legacy-warning") return legacyWarning;
     if (selector === "#manual_config_enabled") return manualToggle;
@@ -205,11 +215,19 @@ globalThis.window = { scrollTo() {} };
 globalThis.fetch = async (url, options = {}) => {
   requests.push({ url, method: options.method || "GET", body: options.body });
   if (url === "api/restart") return restartResponses[restartOutcome];
+  if (url === "api/config" && options.method !== "POST" && settingsUnreadable) {
+    return { ok: false, json: async () => ({ message: "Saved settings cannot be read" }) };
+  }
+  if (url === "api/recover") {
+    recoveryRequested = true;
+    settingsUnreadable = false;
+    return { ok: true, json: async () => ({ message: "Previous settings archived" }) };
+  }
   return {
     ok: true,
     async json() {
       if (url === "api/status") {
-        return { alloy_ready: false, safe_mode: true, manual_override: true };
+        return { alloy_ready: false, safe_mode: true, manual_override: true, recovery_available: true, settings_readable: !settingsUnreadable };
       }
       if (url === "api/fleet-reference" && options.method === "POST") {
         return {
@@ -420,3 +438,21 @@ console.log("PASS: configuration reload resets secret controls");
 console.log("PASS: a restart that stops this App is not reported as a failure");
 console.log("PASS: startup flags stay editable during a manual override");
 console.log("PASS: a nested Fleet card cannot re-enable its required fields in Local configuration");
+
+// The reset control must remain available independently of a failed config
+// fetch; status is the separate recovery channel, not the damaged store.
+settingsUnreadable = true;
+await import(`../ui/static/app.js?recovery=${Date.now()}`);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(settingsRecovery.hidden, false, "failed config load must not hide safe-mode recovery");
+assert.equal(recoverSettingsButton.disabled, true, "recovery requires explicit confirmation");
+confirmSettingsRecovery.checked = true;
+confirmSettingsRecovery.onChange();
+assert.equal(recoverSettingsButton.disabled, false);
+recoverSettingsButton.onClick();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(recoveryRequested, true, "recovery button must call the recovery API");
+assert.equal(confirmSettingsRecovery.checked, false, "successful recovery must clear confirmation");
+assert.equal(recoverSettingsButton.disabled, true, "successful recovery must prevent accidental repeated resets");
+assert.match(notice.textContent, /Previous settings archived/);
+console.log("PASS: failed settings loads retain the explicit safe-mode recovery flow");

@@ -23,6 +23,12 @@
   <main>
     <div id="notice" role="status" aria-live="polite"></div>
     <aside id="runtime-status" role="status" aria-live="polite" hidden></aside>
+    <section id="settings-recovery" class="card" hidden>
+      <h2>Recover saved settings</h2>
+      <p>Reset only if the saved settings cannot be repaired. This archives the previous file, including stored credentials, in the App's private backup directory and starts an empty configuration.</p>
+      <label><input id="confirm-settings-recovery" type="checkbox"> I understand I will need to configure Alloy again.</label>
+      <button id="recover-settings" type="button" disabled>Archive and reset saved settings</button>
+    </section>
     <form id="config-form">
       <section class="card wizard-choice" data-wizard-step="mode">
         <p class="eyebrow">Step 1 of 3</p>

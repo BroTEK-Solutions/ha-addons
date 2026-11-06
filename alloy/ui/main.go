@@ -29,16 +29,20 @@ type apiResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
+var errInvalidCandidate = errors.New("invalid configuration")
+
 type saveRequest struct {
 	Options map[string]any     `json:"options"`
 	Secrets map[string]*string `json:"secrets"`
 }
 
 type statusResponse struct {
-	AlloyReady     bool `json:"alloy_ready"`
-	AlloyHealthy   bool `json:"alloy_healthy"`
-	SafeMode       bool `json:"safe_mode"`
-	ManualOverride bool `json:"manual_override"`
+	AlloyReady        bool `json:"alloy_ready"`
+	AlloyHealthy      bool `json:"alloy_healthy"`
+	SafeMode          bool `json:"safe_mode"`
+	ManualOverride    bool `json:"manual_override"`
+	RecoveryAvailable bool `json:"recovery_available"`
+	SettingsReadable  bool `json:"settings_readable"`
 }
 
 type fleetReferenceResponse struct {
@@ -71,23 +75,23 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 			writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
 			return
 		}
-		settings, err := store.Load()
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
-		}
+		// Recovery status must remain available even if the settings file
+		// itself is unreadable; configuration GET/POST still fail closed.
+		settings, err := store.Load(r.Context())
 		manualOverride, _ := settings["manual_config_enabled"].(bool)
 		writeJSON(w, http.StatusOK, statusResponse{
-			AlloyReady:     alloyReady(r.Context(), alloyURL),
-			AlloyHealthy:   alloyHealthy(r.Context(), alloyURL),
-			SafeMode:       envBool("SAFE_MODE"),
-			ManualOverride: manualOverride,
+			AlloyReady:        alloyReady(r.Context(), alloyURL),
+			AlloyHealthy:      alloyHealthy(r.Context(), alloyURL),
+			SafeMode:          envBool("SAFE_MODE"),
+			ManualOverride:    manualOverride,
+			RecoveryAvailable: envBool("SAFE_MODE"),
+			SettingsReadable:  err == nil,
 		})
 	})
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			options, err := store.Load()
+			options, err := store.Load(r.Context())
 			if err != nil {
 				writeError(w, http.StatusBadGateway, err)
 				return
@@ -111,27 +115,40 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 				writeError(w, http.StatusBadRequest, errors.New("choose Fleet Management or Local configuration before saving"))
 				return
 			}
-			current, err := store.Load()
-			if err != nil {
-				writeError(w, http.StatusBadGateway, err)
+			if err := decoder.Decode(&struct{}{}); err != io.EOF {
+				writeError(w, http.StatusBadRequest, errors.New("invalid request: only one JSON value is allowed"))
 				return
 			}
-			candidate := mergeOptions(current, input.Options, input.Secrets)
-			candidate["restart_required"] = true
-			if err := validateModeRequirements(candidate); err != nil {
+			if err := validateSubmittedSettings(input); err != nil {
 				writeError(w, http.StatusBadRequest, err)
 				return
 			}
-			if err := validator.Validate(r.Context(), candidate); err != nil {
-				writeRequestError(w, r, http.StatusBadRequest, err)
-				return
-			}
-			if err := r.Context().Err(); err != nil {
-				writeRequestError(w, r, http.StatusRequestTimeout, err)
-				return
-			}
-			if err := store.Save(candidate); err != nil {
-				writeError(w, http.StatusInternalServerError, err)
+			err := store.Update(r.Context(), func(current map[string]any) (map[string]any, error) {
+				candidate := mergeOptions(current, input.Options, input.Secrets)
+				candidate["restart_required"] = true
+				if err := validateModeRequirements(candidate); err != nil {
+					return nil, fmt.Errorf("%w: %v", errInvalidCandidate, err)
+				}
+				if _, err := encodeSettings(candidate); err != nil {
+					return nil, err
+				}
+				if err := validator.Validate(r.Context(), candidate); err != nil {
+					return nil, fmt.Errorf("%w: %v", errInvalidCandidate, err)
+				}
+				if err := r.Context().Err(); err != nil {
+					return nil, err
+				}
+				return candidate, nil
+			})
+			if err != nil {
+				status := http.StatusInternalServerError
+				if errors.Is(err, errSettingsTooLarge) {
+					status = http.StatusRequestEntityTooLarge
+				}
+				if errors.Is(err, errInvalidCandidate) {
+					status = http.StatusBadRequest
+				}
+				writeRequestError(w, r, status, err)
 				return
 			}
 			writeJSON(w, http.StatusOK, apiResponse{OK: true, Message: "Configuration saved. Restart Alloy to apply it."})
@@ -140,6 +157,40 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 			writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
 		}
 	})
+	mux.HandleFunc("/api/recover", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			writeError(w, http.StatusMethodNotAllowed, errors.New("method not allowed"))
+			return
+		}
+		if !envBool("SAFE_MODE") {
+			writeError(w, http.StatusForbidden, errors.New("enable Safe mode and restart before resetting saved settings"))
+			return
+		}
+		if r.Header.Get("Content-Type") != "application/json" {
+			writeError(w, http.StatusUnsupportedMediaType, errors.New("Content-Type must be application/json"))
+			return
+		}
+		var input struct {
+			Confirm bool `json:"confirm"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&input); err != nil || !input.Confirm {
+			writeError(w, http.StatusBadRequest, errors.New("confirm the settings reset before continuing"))
+			return
+		}
+		if err := decoder.Decode(&struct{}{}); err != io.EOF {
+			writeError(w, http.StatusBadRequest, errors.New("invalid recovery request"))
+			return
+		}
+		if err := store.Recover(r.Context()); err != nil {
+			writeRequestError(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResponse{OK: true, Message: "Previous settings archived. Configure Alloy again, then disable Safe mode and restart."})
+	})
+
 	mux.HandleFunc("/api/restart", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", "POST")
@@ -185,7 +236,7 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 		// longer requires a configured destination: anything the operator left
 		// blank comes back as a placeholder for them to edit. So there is nothing
 		// left to gate on beyond the mode and override checks in the renderer.
-		settings, err := store.Load()
+		settings, err := store.Load(r.Context())
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err)
 			return
@@ -287,7 +338,7 @@ func main() {
 			envOr("SETTINGS_FILE", "/data/settings.json"),
 			envOr("LEGACY_OPTIONS_FILE", "/data/options.json"),
 		)
-		if _, err := store.Load(); err != nil {
+		if _, err := store.Load(context.Background()); err != nil {
 			log.Fatal(err)
 		}
 		return

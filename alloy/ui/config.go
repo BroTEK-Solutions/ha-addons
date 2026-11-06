@@ -1,6 +1,10 @@
 package main
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
 
 var secretOptionNames = []string{
 	"loki_password",
@@ -86,7 +90,7 @@ func optionEnabled(options map[string]any, key string) bool {
 
 func validateModeRequirements(options map[string]any) error {
 	if optionEnabled(options, "manual_config_enabled") {
-		if !optionHasValue(options, "manual_config") {
+		if manual, ok := options["manual_config"].(string); !ok || strings.TrimSpace(manual) == "" {
 			return errors.New("manual configuration override requires complete config.alloy contents")
 		}
 		return nil
@@ -182,4 +186,60 @@ func isSecretOption(key string) bool {
 		}
 	}
 	return false
+}
+
+var booleanSettingNames = map[string]bool{
+	"logs_system": true, "logs_homeassistant": true, "logs_addons": true,
+	"host_metrics": true, "homeassistant_metrics": true, "alloy_metrics": true,
+	"traces_enabled": true, "traces_network_access": true, "alloy_profiling": true,
+	"fleet_default_attributes": true, "alloy_disable_telemetry": true, "manual_config_enabled": true,
+}
+
+func validateSettingType(key string, value any) error {
+	if _, allowed := operationalSettingNames[key]; !allowed && !isSecretOption(key) {
+		return fmt.Errorf("unknown setting %q", key)
+	}
+	if booleanSettingNames[key] {
+		if _, ok := value.(bool); !ok {
+			return fmt.Errorf("%s must be a boolean", key)
+		}
+	} else if _, ok := value.(string); !ok {
+		return fmt.Errorf("%s must be a string", key)
+	}
+	return nil
+}
+
+func validateStoredSettingsTypes(settings map[string]any) error {
+	for key, value := range settings {
+		switch key {
+		case "schema_version":
+			continue // Load checks the version; Save owns this value.
+		case "restart_required":
+			if _, ok := value.(bool); !ok {
+				return errors.New("restart_required must be a boolean")
+			}
+		default:
+			if err := validateSettingType(key, value); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateSubmittedSettings(input saveRequest) error {
+	for key, value := range input.Options {
+		if isSecretOption(key) {
+			return fmt.Errorf("%s must be supplied through secrets", key)
+		}
+		if err := validateSettingType(key, value); err != nil {
+			return err
+		}
+	}
+	for key := range input.Secrets {
+		if !isSecretOption(key) {
+			return fmt.Errorf("unknown secret setting %q", key)
+		}
+	}
+	return nil
 }
