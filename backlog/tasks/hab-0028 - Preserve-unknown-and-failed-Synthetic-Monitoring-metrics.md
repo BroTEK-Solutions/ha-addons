@@ -1,9 +1,11 @@
 ---
 id: HAB-0028
 title: Preserve unknown and failed Synthetic Monitoring metrics
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@codex'
 created_date: '2026-11-06T00:09:00Z'
+updated_date: '2026-11-06T00:15:00Z'
 labels:
   - unit:sm-shared
 dependencies: []
@@ -30,3 +32,9 @@ Empty, partial or truncated successful metrics responses currently become valid 
 - [ ] #1 just check
 - [ ] #2 Fast subset while iterating (not the gate): just fmt-check && just lint && just gen-check && just test-repo
 <!-- DOD:END -->
+
+## Implementation Plan
+
+<!-- SECTION:PLAN:BEGIN -->
+Represent absent diagnostic fields as null/unknown, preserve observed zeros, and reject truncated/invalid metrics reads. Exercise the source HTTP status handler and frontend formatting using existing test surfaces; regenerate variants.
+<!-- SECTION:PLAN:END -->
