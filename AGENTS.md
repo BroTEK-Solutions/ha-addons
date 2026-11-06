@@ -14,6 +14,15 @@ Full standard `go vet ./...` is the baseline: it adds the checks omitted by `go 
 second linter toolchain. Generated copies are checked for drift instead of vetted twice.
 The Synthetic Monitoring test recipe runs both the shared launcher and status-page suites.
 
+Publication uses a non-cancelling maximum queue; only PR runs supersede prior runs. The required
+`ci-success` check rejects skipped prerequisites, except an image build after successful no-change
+selection. Release Please depends on that same check. The release recovery procedure is in `README.md`.
+
+The local actionlint job copies the pinned shared reusable because actionlint 1.7.12 does not parse
+GitHub's supported `concurrency.queue`. Before the exact queue-key diagnostic is ignored,
+`just test-workflows` requires the sole permitted queue context and the PR/publication policies.
+Do not broaden that exception. Restore the shared reusable when its parser supports this feature.
+
 The four App metadata linters continue after failures and a final outcome check fails the job if
 any App did not pass. To reproduce one locally, clone `https://github.com/frenck/action-addon-linter`,
 check out the exact action SHA in `.github/workflows/builder.yaml`, then build its `src/` directory

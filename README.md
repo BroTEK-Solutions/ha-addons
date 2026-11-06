@@ -48,6 +48,19 @@ Merging ordinary App code builds and tests the image but does not replace an exi
 Manual runs of the Builder workflow also build without publishing. To force an exact version, use a
 `Release-As: X.Y.Z` footer on the relevant App commit and merge the resulting release PR normally.
 
+Main runs share a publication queue that retains running and pending runs; a following tracker-only
+push cannot cancel a version-changing build. PR checks still cancel superseded checks on the same PR.
+GitHub's queue holds up to 100 pending runs; overflow, manual cancellation, or a failed build still
+requires explicit recovery.
+
+To recover a missed version, find the original **Build Apps** push run for the merged release PR.
+Confirm its commit is on `main` and its selected App versions are still the current intended versions
+in `config.yaml`. Re-run **all jobs** of that original run (`gh run rerun <run-id>`), preserving its
+version-changing before/after revisions. Re-running a later tracker push or starting a manual Builder
+run will not publish that version. Wait for the full run to finish and check both architecture images,
+the signed multi-architecture manifest, and the release job. If newer versions have already shipped,
+do not rerun the older publication: it also writes `latest`. Release a new version normally instead.
+
 ## AI cloud environments
 
 Codex and Claude Code cloud tasks can use the repository's shared setup script to install the same

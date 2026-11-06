@@ -156,9 +156,15 @@ test-repo:
     step 'app_contract' uv run --locked tests/app_contract_test.py
     step 'app_version_changed' python3 tests/app_version_changed_test.py
     step 'renovate_config_contract' python3 tests/renovate_config_contract_test.py
-    step 'repository_workflow_contract' uv run --locked tests/repository_workflow_contract_test.py
+    step 'repository_workflow_contract' just test-workflows
     step 'synthetic_monitoring_variants' uv run --locked tests/synthetic_monitoring_variants_test.py
     printf 'timing %6sms  TOTAL test-repo\n' "$(( $(now_ms) - started ))" >&2
+
+# Validate workflow behavior, including publication queues unsupported by the pinned linter.
+[group('check')]
+[no-exit-message]
+test-workflows:
+    uv run --locked tests/repository_workflow_contract_test.py
 
 # Run Grafana PDC's schema, image-contract, and status-page tests.
 [group('check')]
