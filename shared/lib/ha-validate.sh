@@ -46,11 +46,19 @@ ha_valid_positive_duration() {
 }
 
 # A base-ten integer within an inclusive range. Leading zeroes are tolerated,
-# which is why the comparison forces base ten rather than letting bash infer it.
+# so normalize first. Compare decimal lengths and digits without converting the
+# untrusted value to shell arithmetic, where large integers silently wrap.
 ha_valid_integer_range() {
     local value="$1" minimum="$2" maximum="$3"
-    [[ "$value" =~ ^[0-9]+$ ]] &&
-        ((10#${value} >= minimum && 10#${value} <= maximum))
+    local LC_ALL=C
+    [[ "$value" =~ ^[0-9]+$ ]] || return 1
+    value="${value#"${value%%[!0]*}"}"
+    value="${value:-0}"
+    if ((${#value} < ${#minimum} || ${#value} > ${#maximum})); then
+        return 1
+    fi
+    [[ ${#value} -ne ${#minimum} || "$value" > "$minimum" || "$value" == "$minimum" ]] &&
+        [[ ${#value} -ne ${#maximum} || "$value" < "$maximum" || "$value" == "$maximum" ]]
 }
 
 # The standard full and compressed IPv6 forms. An IPv4 dotted-decimal tail
