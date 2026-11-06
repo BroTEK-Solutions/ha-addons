@@ -123,6 +123,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 	names := topicsFor(info.Slug)
+	connected := make(chan struct{}, 1)
 
 	// The retained will message is what marks every entity unavailable if this
 	// reporter dies, rather than leaving Home Assistant showing a stale value
@@ -132,8 +133,34 @@ func run(ctx context.Context) error {
 		KeepAlive:                     30,
 		CleanStartOnInitialConnection: true,
 		SessionExpiryInterval:         60,
-		ConnectUsername:               service.Username,
-		ConnectPassword:               []byte(service.Password),
+		// Paho builds CONNECT serially before dialing each attempt. Refresh both
+		// the destination and credentials together, never send new credentials
+		// to an obsolete destination after Supervisor changes the broker.
+		ConnectPacketBuilder: func(packet *paho.Connect, target *url.URL) (*paho.Connect, error) {
+			fresh, present, err := supervisor.MQTTService(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if !present {
+				return nil, errors.New("MQTT service is unavailable")
+			}
+			address, err := url.Parse(fresh.Address())
+			if err != nil {
+				return nil, err
+			}
+			*target = *address
+			packet.Username, packet.UsernameFlag = fresh.Username, fresh.Username != ""
+			packet.Password, packet.PasswordFlag = []byte(fresh.Password), fresh.Password != ""
+			return packet, nil
+		},
+		OnConnectionUp: func(*autopaho.ConnectionManager, *paho.Connack) {
+			// The callback must not block the connection manager. The main
+			// loop owns publication and coalesces rapid reconnect notifications.
+			select {
+			case connected <- struct{}{}:
+			default:
+			}
+		},
 		WillMessage: &paho.WillMessage{
 			Topic:   names.availability,
 			Payload: []byte(payloadOffline),
@@ -186,40 +213,32 @@ func run(ctx context.Context) error {
 	}
 	log.Printf("publishing %d Home Assistant entities for %s over MQTT", len(entities), info.Slug)
 
-	// Discovery messages are retained so Home Assistant rebuilds the entities
-	// after its own restart without waiting for this reporter to republish.
-	for _, entity := range entities {
-		payload, err := buildDiscovery(entity, info)
-		if err != nil {
-			return err
-		}
-		if _, err := connection.Publish(ctx, &paho.Publish{
-			Topic:   discoveryTopic(entity, info.Slug),
-			QoS:     1,
-			Retain:  true,
-			Payload: payload,
-		}); err != nil {
-			return err
-		}
-	}
-
-	if _, err := connection.Publish(ctx, &paho.Publish{
-		Topic:   names.availability,
-		QoS:     1,
-		Retain:  true,
-		Payload: []byte(payloadOnline),
-	}); err != nil {
-		return err
-	}
-
 	collector := newCollector(&http.Client{Timeout: probeTimeout})
+	announce := true
 	ticker := time.NewTicker(pollInterval())
 	defer ticker.Stop()
 	for {
+		select {
+		case <-connected:
+			announce = true
+		default:
+		}
+		if announce {
+			publication, cancel := context.WithTimeout(ctx, 15*time.Second)
+			err := announceDiscovery(publication, connection, entities, info)
+			cancel()
+			announce = err != nil
+			if err != nil && ctx.Err() == nil {
+				log.Printf("could not announce MQTT discovery/availability; will retry: %v", err)
+			}
+		}
+		// Each probe already has its own HTTP timeout. Give publication a
+		// fresh budget after collection so slow probes cannot leave stale state.
 		state, err := buildState(collector.Collect(ctx, entities))
+		publication, cancel := context.WithTimeout(ctx, 15*time.Second)
 		if err != nil {
 			log.Printf("could not encode the state payload: %v", err)
-		} else if _, err := connection.Publish(ctx, &paho.Publish{
+		} else if _, err := connection.Publish(publication, &paho.Publish{
 			Topic:   names.state,
 			QoS:     0,
 			Retain:  true,
@@ -228,7 +247,10 @@ func run(ctx context.Context) error {
 			log.Printf("could not publish state: %v", err)
 		}
 
+		cancel()
 		select {
+		case <-connected:
+			announce = true
 		case <-ctx.Done():
 			// Mark the entities unavailable on an orderly shutdown; the will
 			// message only covers the disorderly case.
@@ -245,6 +267,32 @@ func run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+// Repeat retained discovery and online on every connection. Failed publications
+// leave the announcement pending instead of terminating the supervised reporter.
+func announceDiscovery(ctx context.Context, connection *autopaho.ConnectionManager, entities []entitySpec, info appInfo) error {
+	for _, entity := range entities {
+		payload, err := buildDiscovery(entity, info)
+		if err != nil {
+			return err
+		}
+		ack, err := connection.Publish(ctx, &paho.Publish{Topic: discoveryTopic(entity, info.Slug), QoS: 1, Retain: true, Payload: payload})
+		if err != nil {
+			return err
+		}
+		if ack == nil || ack.ReasonCode >= 0x80 {
+			return errors.New("broker rejected discovery")
+		}
+	}
+	ack, err := connection.Publish(ctx, &paho.Publish{Topic: topicsFor(info.Slug).availability, QoS: 1, Retain: true, Payload: []byte(payloadOnline)})
+	if err != nil {
+		return err
+	}
+	if ack == nil || ack.ReasonCode >= 0x80 {
+		return errors.New("broker rejected availability")
+	}
+	return nil
 }
 
 func awaitAppInfo(ctx context.Context, supervisor *supervisorClient) (appInfo, error) {
