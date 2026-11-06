@@ -11,6 +11,7 @@ import ast
 import json
 import os
 import re
+import runpy
 import struct
 import subprocess
 import sys
@@ -142,6 +143,129 @@ def check_app_lint_results(steps: list[dict]) -> None:
                 fail(f"App lint aggregation hid {app}'s {outcome} result")
 
 
+def check_required_job_outcomes(jobs: dict, prerequisites: set[str]) -> None:
+    """Exercise the shipped required-check decision against real job-result shapes."""
+    gate = jobs["ci-success"]
+    steps = gate["steps"]
+    if gate.get("if") != "always()" or len(steps) != 1:
+        fail("the required gate must always evaluate all prerequisite results")
+    step = steps[0]
+    if step.get("if") or step.get("continue-on-error") or step.get("env") != {"NEEDS_JSON": "${{ toJSON(needs) }}"}:
+        fail("the required gate must consume actual needs results without skipping or tolerating failure")
+    successful = {name: {"result": "success"} for name in prerequisites}
+    successful["init"]["outputs"] = {"changed": "true"}
+    cases = [(successful, True)]
+
+    def changed_case(job: str, result: str, changed: str = "true") -> dict:
+        case = json.loads(json.dumps(successful))
+        case[job]["result"] = result
+        case["init"]["outputs"]["changed"] = changed
+        return case
+
+    cases.append((changed_case("build-app", "skipped", "false"), True))
+    for job in prerequisites:
+        for result in ("skipped", "failure", "cancelled"):
+            cases.append((changed_case(job, result), False))
+    for changed in ("", "unknown"):
+        cases.append((changed_case("build-app", "success", changed), False))
+        cases.append((changed_case("build-app", "skipped", changed), False))
+    cases.append((changed_case("init", "skipped", "false"), False))
+    for needs, success in cases:
+        result = subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", step["run"]],
+            env={**os.environ, "NEEDS_JSON": json.dumps(needs)},
+            text=True, capture_output=True, timeout=10, check=False,
+        )
+        if (result.returncode == 0) != success:
+            fail(f"required gate returned {result.returncode} for {needs}: {result.stdout}{result.stderr}")
+
+
+def check_publication_concurrency(caller: dict) -> None:
+    """Constrain the one queue key the pinned actionlint cannot yet validate."""
+    expected = {
+        "group": "${{ github.event_name == 'pull_request' && format('build-apps-pr-{0}', github.ref) || 'app-publication' }}",
+        "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
+        "queue": "${{ github.event_name == 'pull_request' && 'single' || 'max' }}",
+    }
+    if caller.get("concurrency") != expected:
+        fail("PRs must supersede their own checks; publications must share a non-cancelling max queue")
+    for path in sorted((ROOT / ".github/workflows").glob("*")):
+        if path.suffix not in {".yml", ".yaml"}:
+            continue
+        workflow = yaml.safe_load(path.read_text())
+        concurrency = workflow.get("concurrency")
+        if path.name != "builder.yaml" and isinstance(concurrency, dict) and "queue" in concurrency:
+            fail(f"unsupported additional queue context in {path.name}")
+        for job in workflow.get("jobs", {}).values():
+            concurrency = job.get("concurrency")
+            if isinstance(concurrency, dict) and "queue" in concurrency:
+                fail(f"unsupported job-level queue context in {path.name}")
+    security = yaml.safe_load((ROOT / ".github/workflows/security.yml").read_text())
+    lint_job = security["jobs"]["actionlint"]
+    steps = lint_job.get("steps", [])
+    guard_index = next((i for i, step in enumerate(steps) if step.get("run") == "just test-workflows </dev/null"), -1)
+    lint_index = next((i for i, step in enumerate(steps) if step.get("name") == "Run actionlint"), -1)
+    if lint_job.get("if") or lint_job.get("continue-on-error") or not 0 <= guard_index < lint_index:
+        fail("the mandatory queue guard must precede the local actionlint compatibility exception")
+    for index in (guard_index, lint_index):
+        if steps[index].get("if") or steps[index].get("continue-on-error"):
+            fail("queue validation and actionlint must not skip or tolerate failures")
+    lint_script = steps[lint_index]["run"]
+    exact_queue_exception = (
+        '''known_queue='^unexpected key "queue" for "concurrency" section\\. expected one of '\n'''
+        '''known_queue+='"cancel-in-progress", "group"$' '''.rstrip()
+    )
+    if exact_queue_exception not in lint_script:
+        fail("actionlint may exempt only its exact obsolete queue-key diagnostic")
+    if set(re.findall(r'-ignore\s+(\S+)', lint_script)) != {'"$known_runner"', '"$known_queue"'}:
+        fail("actionlint must not ignore additional diagnostics")
+
+
+def check_queued_publication_selection(caller: dict) -> None:
+    """Version pushes keep publishing work even when intervening pushes select nothing."""
+    repository_class = runpy.run_path(str(ROOT / "tests/app_version_changed_test.py"))["TemporaryRepository"]
+    repository = repository_class()
+    try:
+        repository.write("scripts/app_version_changed.py", (ROOT / "scripts/app_version_changed.py").read_text())
+        repository.write("example/config.yaml", 'version: "1.0.0"\n')
+        base = repository.commit("initial")
+        selector = next(step for step in caller["jobs"]["init"]["steps"] if step.get("id") == "filter")
+        # A running version push, a queued tracker push, another queued version
+        # push, and another tracker push. Default single-pending concurrency
+        # would discard work; check_publication_concurrency forbids that policy.
+        for name, content, publish in (
+            ("example/config.yaml", 'version: "1.0.1"\n', True),
+            ("tracker", "first update\n", False),
+            ("example/config.yaml", 'version: "1.0.2"\n', True),
+            ("tracker", "second update\n", False),
+        ):
+            repository.write(name, content)
+            head = repository.commit("fixture update")
+            output = repository.path / "outputs"
+            output.write_text("")
+            environment = {
+                **os.environ,
+                "APPS": "example", "CHANGED_FILES": name, "EVENT_NAME": "push",
+                "TRIGGER_REF": "refs/heads/main", "BASE_SHA": base, "HEAD_SHA": head,
+                "MONITORED_FILES": caller["env"]["MONITORED_FILES"], "GITHUB_OUTPUT": str(output),
+            }
+            result = subprocess.run(
+                ["bash", "-euo", "pipefail", "-c", selector["run"]],
+                env=environment, cwd=repository.path, text=True, capture_output=True, timeout=10, check=False,
+            )
+            if result.returncode:
+                fail(f"queued App selection failed: {result.stderr}")
+            values = dict(line.split("=", 1) for line in output.read_text().splitlines())
+            if publish:
+                if values.get("changed") != "true" or json.loads(values.get("changed_apps", "[]")) != [{"app": "example", "publish": True}]:
+                    fail("a queued version-changing push lost its required image publication")
+            elif values.get("changed") != "false":
+                fail("a following tracker push must not independently republish a stable version")
+            base = head
+    finally:
+        repository.close()
+
+
 def main() -> None:
     caller_path = ROOT / ".github/workflows/builder.yaml"
     reusable_path = ROOT / ".github/workflows/build-app.yaml"
@@ -159,6 +283,8 @@ def main() -> None:
     justfile = justfile_path.read_text()
     caller_config = yaml.safe_load(caller)
     jobs = caller_config["jobs"]
+    check_publication_concurrency(caller_config)
+    check_queued_publication_selection(caller_config)
     check_app_lint_results(jobs["quality"]["steps"])
 
     for release_file in (
@@ -471,23 +597,20 @@ def main() -> None:
     aggregate_gate = {"init", *test_lanes, "build-app", "security"}
     if set(jobs["ci-success"].get("needs", [])) != aggregate_gate:
         fail("ci-success must aggregate every build, security, and test result")
-    gate_failure_condition = jobs["ci-success"]["steps"][0].get("if", "")
-    if "needs.alloy-generator-test.result != 'success'" not in gate_failure_condition:
-        fail("ci-success must reject a skipped Alloy confinement job")
-    if set(jobs["release"].get("needs", [])) != aggregate_gate:
-        fail("release automation must wait for the same complete gate")
+    check_required_job_outcomes(jobs, aggregate_gate)
+    if jobs["release"].get("needs") != ["ci-success"]:
+        fail("release automation must wait for the complete required gate")
     release_condition = jobs["release"].get("if", "")
-    for result in (*sorted(test_lanes), "init", "security"):
-        if f"needs.{result}.result == 'success'" not in release_condition:
-            fail(f"release automation must require successful {result}")
     if not all(
         required in release_condition
         for required in (
-            "needs.build-app.result == 'success'",
-            "needs.build-app.result == 'skipped'",
+            "always()",
+            "github.event_name == 'push'",
+            "github.ref == 'refs/heads/main'",
+            "needs.ci-success.result == 'success'",
         )
     ):
-        fail("release automation must accept only successful or skipped App builds")
+        fail("release automation must require a passing main-push gate")
 
     for required in (
         "workflow_call:",

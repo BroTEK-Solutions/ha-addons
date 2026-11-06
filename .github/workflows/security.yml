@@ -1,7 +1,8 @@
 name: Security and workflow lint
 
-# Calls the shared rknightion reusables so this repo inherits fleet-wide policy
-# instead of carrying its own copies. Reusables are pinned to a release SHA, as the
+# Security scans use shared reusables. Actionlint temporarily runs locally
+# because its pinned parser predates the supported publication queue setting.
+# Reusables are pinned to a release SHA, as the
 # fleet requires (zizmor fails a reintroduced floating @main).
 
 on:
@@ -14,11 +15,84 @@ on:
 permissions: {}
 
 jobs:
-  # Workflow correctness, including ShellCheck over the embedded `run:` blocks.
+  # Copy of the pinned v1.25.31 reusable, with one guarded compatibility exception.
+  # Restore the shared call when its actionlint supports concurrency.queue.
+  # https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency
+  # https://github.com/rhysd/actionlint/pull/654
   actionlint:
+    name: Run actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
-    uses: rknightion/.github/.github/workflows/actionlint.yml@3aee36ed9f327d9238e387c7af7da9ec5369a263 # v1.25.31
+    steps:
+      - name: Harden the runner (audit egress)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: '1.59.0'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: '0.13.6'
+
+      - name: Validate publication queue semantics
+        run: just test-workflows </dev/null
+
+      - name: Run actionlint
+        shell: bash
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_LINUX_AMD64_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          RUNNER_ARCH: ${{ runner.arch }}
+          RUNNER_OS: ${{ runner.os }}
+        run: |
+          # actionlint 1.7.12 predates this official hosted runner (upstream #682).
+          # Keep caller config intact and exempt only this exact label diagnostic.
+          known_runner='^label "ubuntu-26\.04" is unknown\.'
+          # Only this diagnostic is obsolete. The preceding contract validates
+          # the sole permitted queue location, value and cancellation policy.
+          known_queue='^unexpected key "queue" for "concurrency" section\. expected one of '
+          known_queue+='"cancel-in-progress", "group"$'
+          if command -v actionlint >/dev/null 2>&1; then
+            installed_version="$(actionlint -version | sed -n '1{s/^v//;p;}')"
+            if [ "${installed_version}" != "${ACTIONLINT_VERSION}" ]; then
+              printf 'actionlint version mismatch: installed=%s expected=%s\n' \
+                "${installed_version:-<unknown>}" "${ACTIONLINT_VERSION}" >&2
+              exit 1
+            fi
+            actionlint -color -ignore "$known_runner" -ignore "$known_queue"
+          else
+            if [ "${RUNNER_OS}" != "Linux" ] || [ "${RUNNER_ARCH}" != "X64" ]; then
+              printf 'actionlint is not on PATH and no fallback artifact exists for os=%s arch=%s\n' \
+                "${RUNNER_OS}" "${RUNNER_ARCH}" >&2
+              exit 1
+            fi
+            archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+            curl \
+              --retry 5 \
+              --retry-all-errors \
+              --retry-delay 2 \
+              --fail \
+              --show-error \
+              --silent \
+              --location \
+              --output "${archive}" \
+              "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+            printf '%s  %s\n' "${ACTIONLINT_LINUX_AMD64_SHA256}" "${archive}" | sha256sum --check --strict
+            tar -xzf "${archive}" actionlint
+            ./actionlint -color -ignore "$known_runner" -ignore "$known_queue"
+          fi
 
   # Actions security audit: unpinned refs, over-broad permissions, credential
   # persistence. Guards against regressing the App build hardening.
