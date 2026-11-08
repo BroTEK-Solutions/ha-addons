@@ -255,6 +255,21 @@ check: fmt-check lint vet gen-check test
 [group('check')]
 ci: check test-pdc-image test-pdc-apparmor test-alloy-image test-alloy-apparmor test-alloy-init test-sm-image
 
+# GitHub issues and the BroTEK-Solutions Project; maintainers only (needs the tracker tools and credentials)
+[group('tracker')]
+[positional-arguments]
+tracker *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export TRACKER_REPO=BroTEK-Solutions/ha-addons TRACKER_PROJECT_OWNER=BroTEK-Solutions TRACKER_PROJECT=1
+    export TRACKER_ISSUE_IDENTITY=app TRACKER_PROJECT_IDENTITY=user
+    exec tracker-with-token "$@"
+
+# print the issue a legacy board id (HAB-0001) became
+[group('tracker')]
+issue id:
+    TRACKER_REPO=BroTEK-Solutions/ha-addons tracker legacy {{ quote(id) }}
+
 # Compile every source Go module without keeping artifacts.
 [group('build')]
 build:

@@ -150,11 +150,16 @@ def check_required_job_outcomes(jobs: dict, prerequisites: set[str]) -> None:
     if gate.get("if") != "always()" or len(steps) != 1:
         fail("the required gate must always evaluate all prerequisite results")
     step = steps[0]
-    if step.get("if") or step.get("continue-on-error") or step.get("env") != {"NEEDS_JSON": "${{ toJSON(needs) }}"}:
+    if step.get("if") or step.get("continue-on-error") or step.get("env") != {
+        "NEEDS_JSON": "${{ toJSON(needs) }}",
+        "EVENT_NAME": "${{ github.event_name }}",
+    }:
         fail("the required gate must consume actual needs results without skipping or tolerating failure")
     successful = {name: {"result": "success"} for name in prerequisites}
     successful["init"]["outputs"] = {"changed": "true"}
-    cases = [(successful, True)]
+    pull_request_only = {"ac-evidence", "privacy-sweep"}
+    # Each case is (needs, event name, expected success).
+    cases = [(successful, "pull_request", True), (successful, "push", True)]
 
     def changed_case(job: str, result: str, changed: str = "true") -> dict:
         case = json.loads(json.dumps(successful))
@@ -162,22 +167,30 @@ def check_required_job_outcomes(jobs: dict, prerequisites: set[str]) -> None:
         case["init"]["outputs"]["changed"] = changed
         return case
 
-    cases.append((changed_case("build-app", "skipped", "false"), True))
+    cases.append((changed_case("build-app", "skipped", "false"), "push", True))
     for job in prerequisites:
         for result in ("skipped", "failure", "cancelled"):
-            cases.append((changed_case(job, result), False))
+            for event in ("pull_request", "push"):
+                # Only the pull-request-only jobs may be skipped, and only off a pull request.
+                allowed = job in pull_request_only and result == "skipped" and event != "pull_request"
+                cases.append((changed_case(job, result), event, allowed))
     for changed in ("", "unknown"):
-        cases.append((changed_case("build-app", "success", changed), False))
-        cases.append((changed_case("build-app", "skipped", changed), False))
-    cases.append((changed_case("init", "skipped", "false"), False))
-    for needs, success in cases:
+        cases.append((changed_case("build-app", "success", changed), "push", False))
+        cases.append((changed_case("build-app", "skipped", changed), "push", False))
+    cases.append((changed_case("init", "skipped", "false"), "push", False))
+    for needs, event, success in cases:
         result = subprocess.run(
             ["bash", "-euo", "pipefail", "-c", step["run"]],
-            env={**os.environ, "NEEDS_JSON": json.dumps(needs)},
+            env={**os.environ, "NEEDS_JSON": json.dumps(needs), "EVENT_NAME": event},
             text=True, capture_output=True, timeout=10, check=False,
         )
         if (result.returncode == 0) != success:
-            fail(f"required gate returned {result.returncode} for {needs}: {result.stdout}{result.stderr}")
+            fail(f"required gate returned {result.returncode} for {event} {needs}: {result.stdout}{result.stderr}")
+    for job in sorted(pull_request_only):
+        if jobs[job].get("if") != "github.event_name == 'pull_request'":
+            fail(f"{job} must run on pull requests only, because its reusable fails on any other event")
+        if not re.fullmatch(r"rknightion/\.github/\.github/workflows/[a-z-]+\.yml@[0-9a-f]{40}", jobs[job].get("uses", "")):
+            fail(f"{job} must call its reusable workflow by full commit SHA")
 
 
 def check_publication_concurrency(caller: dict) -> None:
@@ -599,7 +612,7 @@ def main() -> None:
     for direct_trigger in ("\n  push:", "\n  pull_request:"):
         if direct_trigger in security_triggers:
             fail("security checks must run once through the required Build Apps gate")
-    aggregate_gate = {"init", *test_lanes, "build-app", "security"}
+    aggregate_gate = {"init", *test_lanes, "build-app", "security", "ac-evidence", "privacy-sweep"}
     if set(jobs["ci-success"].get("needs", [])) != aggregate_gate:
         fail("ci-success must aggregate every build, security, and test result")
     check_required_job_outcomes(jobs, aggregate_gate)

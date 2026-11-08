@@ -5,6 +5,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
   workflow_dispatch:
 
 permissions: {}
@@ -429,6 +430,21 @@ jobs:
       security-events: write
     uses: ./.github/workflows/security.yml
 
+  # Pull-request-only callers: the reusables fail on any other event.
+  ac-evidence:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: rknightion/.github/.github/workflows/ac-evidence.yml@8f00b7fb896191e598f12ed565395697c539add1 # v1.26.9
+
+  privacy-sweep:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: rknightion/.github/.github/workflows/privacy-sweep.yml@8f00b7fb896191e598f12ed565395697c539add1 # v1.26.9
+
   # The branch ruleset requires only this stable check. Keep all test, build,
   # and security results behind it so matrix names can change without weakening
   # Renovate's merge gate. A skipped build is valid when no App changed.
@@ -443,6 +459,8 @@ jobs:
       - synthetic-monitoring-test
       - build-app
       - security
+      - ac-evidence
+      - privacy-sweep
     if: always()
     runs-on: ubuntu-latest
     permissions: {}
@@ -450,14 +468,18 @@ jobs:
       - name: Check every required job outcome
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if jq -e '
+          if jq -e --arg event "$EVENT_NAME" '
             . as $jobs |
             all(to_entries[];
               if .key == "build-app" then
                 .value.result == "success" or
                 (.value.result == "skipped" and
                  $jobs.init.result == "success" and $jobs.init.outputs.changed == "false")
+              elif (.key | IN("ac-evidence", "privacy-sweep")) then
+                .value.result == "success" or
+                ($event != "pull_request" and .value.result == "skipped")
               else .value.result == "success" end
             ) and (.init.outputs.changed == "true" or .init.outputs.changed == "false")
           ' <<< "$NEEDS_JSON" >/dev/null; then
