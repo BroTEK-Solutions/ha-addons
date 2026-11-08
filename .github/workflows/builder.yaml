@@ -445,6 +445,44 @@ jobs:
       contents: read
     uses: rknightion/.github/.github/workflows/privacy-sweep.yml@8f00b7fb896191e598f12ed565395697c539add1 # v1.26.9
 
+  # The Backlog.md board is retired: issues are the queue. A pull request may delete files under
+  # backlog/ (or backlog.config.yml) or move them out, never add or change one. Reads the file list
+  # from the API, so no pull request code is checked out.
+  backlog-freeze:
+    name: backlog/ is frozen
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Refuse additions and changes under backlog/
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CHANGED_FILES: ${{ github.event.pull_request.changed_files }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ && "$CHANGED_FILES" =~ ^[0-9]+$ ]]; then
+            echo "::error title=backlog freeze::the pull request number or file count is malformed"
+            exit 1
+          fi
+          # The pull request files API lists at most 3000 files; refuse rather than check part of a change.
+          if (( CHANGED_FILES > 3000 )); then
+            echo "::error title=backlog freeze::${CHANGED_FILES} changed files is more than the API lists; split the pull request"
+            exit 1
+          fi
+          offending="$(gh api --paginate "repos/${REPO}/pulls/${PR_NUMBER}/files?per_page=100" \
+            --jq '.[] | select(.status != "removed") | select(.filename | startswith("backlog/") or . == "backlog.config.yml") | "\(.status) \(.filename | @json)"')"
+          if [[ -n "$offending" ]]; then
+            echo "::error title=backlog freeze::this pull request adds or changes the retired Backlog.md board; file the work as an issue"
+            printf '  %s\n' "$offending"
+            exit 1
+          fi
+          echo "No Backlog.md board file is added or changed."
+
   # The branch ruleset requires only this stable check. Keep all test, build,
   # and security results behind it so matrix names can change without weakening
   # Renovate's merge gate. A skipped build is valid when no App changed.
@@ -461,6 +499,7 @@ jobs:
       - security
       - ac-evidence
       - privacy-sweep
+      - backlog-freeze
     if: always()
     runs-on: ubuntu-latest
     permissions: {}
@@ -477,7 +516,7 @@ jobs:
                 .value.result == "success" or
                 (.value.result == "skipped" and
                  $jobs.init.result == "success" and $jobs.init.outputs.changed == "false")
-              elif (.key | IN("ac-evidence", "privacy-sweep")) then
+              elif (.key | IN("ac-evidence", "privacy-sweep", "backlog-freeze")) then
                 .value.result == "success" or
                 ($event != "pull_request" and .value.result == "skipped")
               else .value.result == "success" end

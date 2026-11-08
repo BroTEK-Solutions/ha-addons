@@ -101,7 +101,9 @@ jobs:
       contents: read
       security-events: write # Required to upload zizmor SARIF findings.
       actions: read # Required to read workflow metadata during the audit.
-    uses: rknightion/.github/.github/workflows/zizmor.yml@3aee36ed9f327d9238e387c7af7da9ec5369a263 # v1.25.31
+    uses: rknightion/.github/.github/workflows/zizmor.yml@e5b9f15bc8ccafdbad75e623bbd0dbb27127f049 # v1.28.0
+    with:
+      enforce: true # A pull request fails on any finding; push runs upload SARIF instead.
 
   # hadolint + Trivy recursively cover both App Dockerfiles and their filesystems.
   # Fork PRs cannot be granted security-events: write, so their SARIF upload would

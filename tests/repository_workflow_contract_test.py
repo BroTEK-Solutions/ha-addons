@@ -157,7 +157,7 @@ def check_required_job_outcomes(jobs: dict, prerequisites: set[str]) -> None:
         fail("the required gate must consume actual needs results without skipping or tolerating failure")
     successful = {name: {"result": "success"} for name in prerequisites}
     successful["init"]["outputs"] = {"changed": "true"}
-    pull_request_only = {"ac-evidence", "privacy-sweep"}
+    pull_request_only = {"ac-evidence", "privacy-sweep", "backlog-freeze"}
     # Each case is (needs, event name, expected success).
     cases = [(successful, "pull_request", True), (successful, "push", True)]
 
@@ -189,7 +189,9 @@ def check_required_job_outcomes(jobs: dict, prerequisites: set[str]) -> None:
     for job in sorted(pull_request_only):
         if jobs[job].get("if") != "github.event_name == 'pull_request'":
             fail(f"{job} must run on pull requests only, because its reusable fails on any other event")
-        if not re.fullmatch(r"rknightion/\.github/\.github/workflows/[a-z-]+\.yml@[0-9a-f]{40}", jobs[job].get("uses", "")):
+        if "uses" in jobs[job] and not re.fullmatch(
+            r"rknightion/\.github/\.github/workflows/[a-z-]+\.yml@[0-9a-f]{40}", jobs[job]["uses"]
+        ):
             fail(f"{job} must call its reusable workflow by full commit SHA")
 
 
@@ -612,7 +614,7 @@ def main() -> None:
     for direct_trigger in ("\n  push:", "\n  pull_request:"):
         if direct_trigger in security_triggers:
             fail("security checks must run once through the required Build Apps gate")
-    aggregate_gate = {"init", *test_lanes, "build-app", "security", "ac-evidence", "privacy-sweep"}
+    aggregate_gate = {"init", *test_lanes, "build-app", "security", "ac-evidence", "privacy-sweep", "backlog-freeze"}
     if set(jobs["ci-success"].get("needs", [])) != aggregate_gate:
         fail("ci-success must aggregate every build, security, and test result")
     check_required_job_outcomes(jobs, aggregate_gate)
@@ -637,6 +639,9 @@ def main() -> None:
     ):
         if required not in security + caller:
             fail(f"required CI gate is missing security contract: {required}")
+    zizmor_job = yaml.safe_load(security)["jobs"]["zizmor"]
+    if zizmor_job.get("with") != {"enforce": True} or "runs-on" in zizmor_job:
+        fail("zizmor must enforce on pull requests and keep the reusable's own runner")
     trusted_pr_guard = (
         "github.event_name != 'pull_request' || "
         "github.event.pull_request.head.repo.full_name == github.repository"
