@@ -3,11 +3,26 @@ tier: routine
 gate: just check
 ci-required: ci-success
 grafana-stack: none
+tracker: github
+landing: pr
 
-BroTEK-Solutions repository: no direct pushes to `main`, branch and PR always, except a commit whose
-every path is under `backlog/` or is `backlog.config.yml`. `just check` is the toolchain-only gate;
+BroTEK-Solutions repository: no direct pushes to `main`, branch and PR always. `just check` is the toolchain-only gate;
 `just ci` adds the Docker-backed image legs. No real identifier (email, host, Grafana stack or
-tenant ID) in any tracked file or loop artifact.
+tenant ID) in any tracked file, issue, pull request or loop artifact. Run `just` with stdin from
+`/dev/null`.
+
+The tracker working model is `~/repos/agent-docs/docs/github-tracker.md` (maintainers only).
+
+## Queue
+
+- The queue is `just tracker queue`: open issues at Project Status Ready on the BroTEK-Solutions Project.
+- A charter selects work by the `unit:` labels, the `type:` labels and Project fields (Status, Priority,
+  Effort, Lane). Never queue the Renovate Dependency Dashboard, an outside contributor's issue without
+  triage, or a `needs-triage` issue.
+- Only the root writes issues and the Project, through `just tracker`. A lane returns the status and
+  the AC ticks it wants.
+- A queue row names the issue as `#N`. A legacy board id (`HAB-0001`) resolves with `just issue <ID>`;
+  `.github/tracker/id-map.json` is the map.
 
 ## Credentials
 
@@ -31,22 +46,20 @@ tenant ID) in any tracked file or loop artifact.
   schema test. Anything that rewrites a generated artifact must round-trip byte-for-byte: run the
   generator twice.
 - `find-addons` enlists any top-level directory holding a `config.json|yaml|yml` into the build
-  matrix with no exclude. That is why the tracker config is `backlog.config.yml` at the repo root:
-  do not "tidy" it into `backlog/`. Its `definition_of_done` entries are folded scalars because
-  `.yamllint` caps lines at 120; reapply the folding if the `backlog` CLI re-flattens them.
+  matrix with no exclude. Never add one at depth 2 outside an App.
 - Reusable workflows are pinned to a release SHA with the version in a trailing comment; the pin
   and comment move together.
 - `scripts/cloud-environment-setup.sh` returns 0 without Docker, so a lane that could not run the
   image tests says so instead of checking the criterion.
-- Every task carries a `unit:` label (`docs/tracker-conventions.md`). A `Done` task cites the merge
-  commit SHA on `main`, not the branch SHA: work lands through a PR.
+- Every issue carries a `unit:` label (`docs/maintainers.md`). Close an issue with the merge commit
+  SHA on `main`, not the branch SHA: work lands through a PR.
 
 ## Mutexes
 
 - Smoke-test image tags `local/ha-alloy:smoke`, `local/ha-grafana-sm:smoke` and
   `local/ha-grafana-sm-browser:smoke` are fixed: two lanes building the same App retag each other's
   image. Serialize, or skip the image smoke tests in the lane and run them once at landing.
-- One lane per unit; `.github/workflows/`, `renovate.json`, `.yamllint`, `trivy.yaml` are a single
+- One lane per unit; `.github/workflows/`, `.github/tracker/`, `renovate.json`, `.yamllint`, `trivy.yaml` are a single
   wiring pass, never parallel. `tests/` and `scripts/` belong to the lane whose change they cover.
 
 ## Lane brief

@@ -4,11 +4,10 @@
 docs/superpowers/
 codex/
 
-# Per-machine agent state: worktrees, scheduler locks, settings.local.json. The
-# Backlog.md guard hook is NOT here on purpose — it is a global hook in the agent
-# config, parity-enforced across harnesses. Per-repo copies drifted into four
-# variants once and are not coming back.
-.claude/
+# Per-machine agent state: worktrees, scheduler locks, settings.local.json.
+# The contributor kit's skills under .claude/skills/ are tracked.
+.claude/*
+!.claude/skills/
 
 # Go build output from `go build` inside alloy/ui
 /alloy/ui/alloy-ui
