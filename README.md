@@ -64,9 +64,8 @@ do not rerun the older publication: it also writes `latest`. Release a new versi
 ## AI cloud environments
 
 Codex and Claude Code cloud tasks can use the repository's shared setup script to install the same
-Python and shell validation tools used by CI, download Go modules, and install the Backlog.md
-task-tracking CLI. Use this command as the manual setup script in either provider's environment
-settings (and disable Codex automatic setup):
+Python and shell validation tools used by CI and download Go modules. Use this command as the manual setup script in either
+provider's environment settings (and disable Codex automatic setup):
 
 ```bash
 bash scripts/cloud-environment-setup.sh
