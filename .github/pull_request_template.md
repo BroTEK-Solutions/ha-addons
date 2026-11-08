@@ -34,7 +34,7 @@ What you did not run or could not observe. Write "nothing" only if that is true.
 
 ## Issue
 
-<!-- Closes #<number> on a line of its own for each issue of this repository this change completes (Closes owner/repo#<number> means the same). Refs #<number> when it only relates to one. A change with no issue says "Task: none, <reason>" on a line of its own. -->
+<!-- Closes #<number> on a line of its own for each issue of this repository this change completes (Closes owner/repo#<number> means the same). Refs #<number> when it only relates to one. A change that touches .github/workflows/ or .github/actions/ never closes an issue by keyword: write "Refs #<number>" and close the issue by hand after review. A change with no issue says "Task: none, <reason>" on a line of its own. -->
 
 ## Acceptance evidence
 
