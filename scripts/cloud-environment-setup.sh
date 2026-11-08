@@ -5,7 +5,6 @@
 
 set -Eeuo pipefail
 
-readonly BACKLOG_VERSION="1.50.1"
 if ((EUID == 0)); then
   readonly NPM_PREFIX="/usr/local"
 else
@@ -81,15 +80,6 @@ verify_uv() {
   uvx yamllint --version >/dev/null
 }
 
-install_backlog() {
-  if command -v backlog >/dev/null 2>&1 && [[ "$(backlog --version)" == *"${BACKLOG_VERSION}"* ]]; then
-    return
-  fi
-
-  log "installing Backlog.md ${BACKLOG_VERSION}"
-  npm install --global --prefix "${NPM_PREFIX}" "backlog.md@${BACKLOG_VERSION}"
-}
-
 download_go_modules() {
   command -v go >/dev/null 2>&1 || {
     log "Go is not installed; enable it in the cloud environment"
@@ -109,7 +99,6 @@ verify_tools() {
   shellcheck --version | head -n 1
   node --version
   go version
-  backlog --version
 
   if command -v docker >/dev/null 2>&1; then
     docker info >/dev/null 2>&1 || {
@@ -127,7 +116,6 @@ main() {
   persist_user_path
   install_os_tools
   verify_uv
-  install_backlog
   download_go_modules
   verify_tools
   log "complete"
