@@ -1,0 +1,134 @@
+{
+ "held": {},
+ "issues": {
+  "HAB-0001": {
+   "number": 179,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/179"
+  },
+  "HAB-0002": {
+   "number": 180,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/180"
+  },
+  "HAB-0003": {
+   "number": 181,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/181"
+  },
+  "HAB-0004": {
+   "number": 182,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/182"
+  },
+  "HAB-0005": {
+   "number": 183,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/183"
+  },
+  "HAB-0006": {
+   "number": 184,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/184"
+  },
+  "HAB-0007": {
+   "number": 185,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/185"
+  },
+  "HAB-0008": {
+   "number": 186,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/186"
+  },
+  "HAB-0009": {
+   "number": 187,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/187"
+  },
+  "HAB-0010": {
+   "number": 188,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/188"
+  },
+  "HAB-0011": {
+   "number": 189,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/189"
+  },
+  "HAB-0012": {
+   "number": 190,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/190"
+  },
+  "HAB-0013": {
+   "number": 191,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/191"
+  },
+  "HAB-0014": {
+   "number": 192,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/192"
+  },
+  "HAB-0015": {
+   "number": 193,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/193"
+  },
+  "HAB-0016": {
+   "number": 194,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/194"
+  },
+  "HAB-0017": {
+   "number": 195,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/195"
+  },
+  "HAB-0018": {
+   "number": 196,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/196"
+  },
+  "HAB-0019": {
+   "number": 197,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/197"
+  },
+  "HAB-0020": {
+   "number": 198,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/198"
+  },
+  "HAB-0021": {
+   "number": 199,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/199"
+  },
+  "HAB-0022": {
+   "number": 200,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/200"
+  },
+  "HAB-0023": {
+   "number": 201,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/201"
+  },
+  "HAB-0024": {
+   "number": 178,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/178"
+  },
+  "HAB-0025": {
+   "number": 202,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/202"
+  },
+  "HAB-0026": {
+   "number": 203,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/203"
+  },
+  "HAB-0027": {
+   "number": 204,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/204"
+  },
+  "HAB-0028": {
+   "number": 205,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/205"
+  },
+  "HAB-0029": {
+   "number": 206,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/206"
+  },
+  "HAB-0030": {
+   "number": 207,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/207"
+  },
+  "HAB-0031": {
+   "number": 208,
+   "url": "https://github.com/BroTEK-Solutions/ha-addons/issues/208"
+  }
+ },
+ "prefix": "HAB",
+ "repo": "BroTEK-Solutions/ha-addons",
+ "schema": 1,
+ "source_sha": "46bbdbf1c96a33bd1f205c46813f3f5e9b38432d",
+ "synthetic": []
+}
