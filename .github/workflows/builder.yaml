@@ -483,6 +483,16 @@ jobs:
           fi
           echo "No Backlog.md board file is added or changed."
 
+  # zizmor fails a pull request on any finding (enforce); push runs upload SARIF instead.
+  zizmor:
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    uses: rknightion/.github/.github/workflows/zizmor.yml@3d332ffa11827d468db8de6d323288c4a48a595f # v1.29.3
+    with:
+      enforce: true
+
   # The branch ruleset requires only this stable check. Keep all test, build,
   # and security results behind it so matrix names can change without weakening
   # Renovate's merge gate. A skipped build is valid when no App changed.
@@ -531,7 +541,7 @@ jobs:
 
   release:
     name: Prepare or publish App releases
-    needs: [ci-success]
+    needs: [ci-success, zizmor]
     if: >-
       ${{
         always() &&
