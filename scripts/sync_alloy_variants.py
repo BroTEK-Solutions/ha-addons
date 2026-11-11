@@ -95,6 +95,7 @@ SUBSTITUTIONS: dict[str, list[tuple[str, str, int]]] = {
     ],
     "ui/static/index.html": [
         (f'name="instance_name" value="{INSTANCE[0]}"', f'name="instance_name" value="{INSTANCE[1]}"', 1),
+        (f"Default: <strong>{INSTANCE[0]}</strong>", f"Default: <strong>{INSTANCE[1]}</strong>", 1),
         (f"internal port {ALLOY_PORT[0]}", f"internal port {ALLOY_PORT[1]}", 1),
         (f'name="logs_exclude_addons" value="{EXCLUDED[0]}"', f'name="logs_exclude_addons" value="{EXCLUDED[1]}"', 1),
     ],

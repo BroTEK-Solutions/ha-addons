@@ -186,10 +186,26 @@ if [ -n "${APPARMOR_PROFILE}" ]; then
     echo "PASS: the shipped profile stops the App signalling a host process"
 fi
 
+# The kernel start time of a host PID (field 22 of /proc/PID/stat, counted after
+# the parenthesised command name, which may contain spaces). Any user can read
+# it, unlike `kill -0`, which an unprivileged runner gets EPERM from for every
+# root-owned process. Comparing it also tells a reused PID from the original.
+start_time() {
+    local stat
+    stat="$(cat "/proc/$1/stat" 2>/dev/null)" || return 0
+    stat="${stat##*) }"
+    awk '{ print $20 }' <<<"${stat}"
+}
+
 # Clean shutdown. Record the container's processes, stop it the way Supervisor
 # does, and check every service ran its finish path and nothing outlived it.
-mapfile -t container_pids < <(docker top "${CONTAINER}" -eo pid | tail -n +2)
+mapfile -t container_pids < <(docker top "${CONTAINER}" -eo pid | tail -n +2 | tr -d ' ')
 [ "${#container_pids[@]}" -gt 3 ] || fail "could not list the container's processes"
+declare -A container_starts=()
+for pid in "${container_pids[@]}"; do
+    container_starts[${pid}]="$(start_time "${pid}")"
+    [ -n "${container_starts[${pid}]}" ] || fail "could not read the start time of container process ${pid}"
+done
 stop_started=${SECONDS}
 stop_app
 stop_seconds=$((SECONDS - stop_started))
@@ -201,7 +217,8 @@ grep -qF '[alloy-init] Stopping services.' "${tmp}/stop.log" || fail "the entryp
 grep -qF 'service alloy successfully stopped' "${tmp}/stop.log" || fail "s6-rc did not stop Alloy"
 grep -qF 'Alloy stopped.' "${tmp}/stop.log" || fail "Alloy's finish script did not report a clean stop"
 for pid in "${container_pids[@]}"; do
-    if kill -0 "${pid}" 2>/dev/null && [ "${pid}" != "${probe_pid}" ]; then
+    [ "${pid}" != "${probe_pid}" ] || continue
+    if [ "$(start_time "${pid}")" = "${container_starts[${pid}]}" ]; then
         fail "process ${pid} from the container outlived it"
     fi
 done
@@ -241,8 +258,19 @@ lock_pid=""
 exit_code="$(docker inspect --format '{{.State.ExitCode}}' "${CONTAINER}")"
 [ "${stop_seconds}" -lt 10 ] || fail "a stalled startup delayed shutdown for ${stop_seconds}s"
 [ "${exit_code}" = 0 ] || fail "SIGTERM during startup left exit code ${exit_code}"
-docker logs "${CONTAINER}" 2>&1 | grep -qF '[alloy-init] Stopping services.' \
-    || fail "the entrypoint did not handle SIGTERM during startup"
+# Exit code 0 already means the trap ran: an untrapped SIGTERM exits 143. The
+# log line is checked as well. CI once read the logs without it although the
+# exit code was 0; the cause is unconfirmed (possibly Docker recording the last
+# lines after `docker wait` returns), so give it a few seconds.
+handled=false
+for _ in {1..10}; do
+    if docker logs "${CONTAINER}" 2>&1 | grep -qF '[alloy-init] Stopping services.'; then
+        handled=true
+        break
+    fi
+    sleep 1
+done
+"${handled}" || fail "the entrypoint did not log its SIGTERM handling during startup"
 echo "PASS: SIGTERM during a stalled startup stops the App in ${stop_seconds}s with exit code 0"
 
 echo "== own PID namespace (protection mode on) =="
