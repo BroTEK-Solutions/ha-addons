@@ -80,6 +80,11 @@ run_init() {
     # the settings file itself is what broke, so it needs to be reachable here
     # without a Supervisor options cache.
     printf '%s' "${2:-}" >"${slot}/in.safemode"
+    # $3 is ALLOY_HOST_PROCESSES_VARIANT, which the variant image sets, and $4
+    # the ALLOY_HOST_PID value its entrypoint exports in the host PID namespace.
+    # Both default to unset, which is what the standard App always sees.
+    printf '%s' "${3:-}" >"${slot}/in.variant"
+    printf '%s' "${4:-}" >"${slot}/in.hostpid"
     # Placeholders: the recording pass evaluates the checks too, and its verdicts
     # are discarded. They only have to be well-formed enough not to abort it.
     RUN_RC=0
@@ -107,11 +112,15 @@ run_init_worker() {
   printf '%s' '{"safe_mode":false,"ui_log_level":"info"}' >"${tmp}/cache/addons.self.options.config.cache"
   printf '%s' '{"slug":"a141124a_alloy"}' >"${tmp}/cache/addons.self.info.cache"
   cp "${slot}/in.settings" "${tmp}/data/settings.json"
-  local safe_mode
+  local safe_mode variant host_pid
   safe_mode="$(cat "${slot}/in.safemode" 2>/dev/null || true)"
+  variant="$(cat "${slot}/in.variant" 2>/dev/null || true)"
+  host_pid="$(cat "${slot}/in.hostpid" 2>/dev/null || true)"
 
   out="$(
     SAFE_MODE_OVERRIDE="${safe_mode}" \
+    ALLOY_HOST_PROCESSES_VARIANT="${variant}" \
+    ALLOY_HOST_PID="${host_pid}" \
     CACHE_DIR="${tmp}/cache" \
     CONFIG_DIR="${tmp}/etc" \
     DATA_DIR="${tmp}/data" \
@@ -634,6 +643,94 @@ expect_fatal "home assistant metrics without a Prometheus endpoint" \
   "{${LOKI},\"homeassistant_metrics\":true}" \
   "homeassistant_metrics is enabled but prometheus_url is empty"
 
+
+echo
+echo "== host process metrics exist only in the variant with the host PID namespace =="
+PROCESSES="{${PROM},\"process_metrics\":true}"
+TESTS=$((TESTS + 1))
+run_init "${PROCESSES}" "" true true
+if [ "${RUN_RC}" -ne 0 ]; then
+  fail "variant with host PID: exited ${RUN_RC}"
+  indent "${RUN_OUT}"
+elif ! grep -qF 'prometheus.exporter.process "processes"' <<<"${RUN_CONFIG}"; then
+  fail "variant with host PID: the process exporter was not generated"
+elif ! grep -qF "Host process visibility is active: protection mode is off" <<<"${RUN_OUT}" \
+  || ! grep -qF "Fleet-delivered, additional" <<<"${RUN_OUT}"; then
+  fail "variant with host PID: the log did not say every pipeline can see host processes"
+  indent "${RUN_OUT}"
+else
+  pass "the variant with protection mode off generates host process metrics and says what is exposed"
+fi
+
+# Protection mode off decides visibility for every pipeline source: without the
+# Local selection only the generated pipeline is left out, and the log says so.
+TESTS=$((TESTS + 1))
+run_init "{${PROM}}" "" true true
+if [ "${RUN_RC}" -ne 0 ] || grep -qF 'prometheus.exporter.process' <<<"${RUN_CONFIG}"; then
+  fail "variant with host PID but no selection must start without the generated pipeline"
+  indent "${RUN_OUT}"
+elif ! grep -qF "Host process visibility is active" <<<"${RUN_OUT}"; then
+  fail "visibility was not reported when the generated pipeline is not selected"
+else
+  pass "visibility is reported whether or not the generated pipeline is selected"
+fi
+
+# AC3: the variant with protection mode still on.
+TESTS=$((TESTS + 1))
+run_init "${PROCESSES}" "" true ""
+if [ "${RUN_RC}" -ne 0 ]; then
+  fail "variant under protection mode: exited ${RUN_RC} instead of starting"
+  indent "${RUN_OUT}"
+elif grep -qF 'prometheus.exporter.process' <<<"${RUN_CONFIG}"; then
+  fail "variant under protection mode: generated a process exporter that sees only the App"
+elif ! grep -qF "prometheus.exporter.unix" <<<"${RUN_CONFIG}"; then
+  fail "variant under protection mode: the existing pipelines were dropped"
+elif ! grep -qF "Host process visibility is not active: protection mode is on" <<<"${RUN_OUT}"; then
+  fail "variant under protection mode: the log did not say visibility is inactive and why"
+  indent "${RUN_OUT}"
+else
+  pass "the variant under protection mode starts every other pipeline and explains why"
+fi
+
+# The standard App: never the variant, never the host namespace. A stale
+# selection is ignored and nothing is logged.
+TESTS=$((TESTS + 1))
+run_init "${PROCESSES}"
+if [ "${RUN_RC}" -ne 0 ] || grep -qF 'prometheus.exporter.process' <<<"${RUN_CONFIG}" \
+  || grep -qiF "host process" <<<"${RUN_OUT}" || grep -qF "host PID" <<<"${RUN_OUT}"; then
+  fail "the standard App must not mention or collect host processes"
+  indent "${RUN_OUT}"
+else
+  pass "the standard App neither collects nor mentions host processes"
+fi
+TESTS=$((TESTS + 1))
+run_init "{${LOKI},\"process_metrics\":true}"
+if [ "${RUN_RC}" -ne 0 ]; then
+  fail "a stale process_metrics without Prometheus must not stop the standard App"
+  indent "${RUN_OUT}"
+else
+  pass "a stale process_metrics selection cannot stop the standard App"
+fi
+
+# Selected and visible but nowhere to send it fails loudly, as homeassistant_metrics does.
+TESTS=$((TESTS + 1))
+run_init "{${LOKI},\"process_metrics\":true}" "" true true
+if [ "${RUN_RC}" -eq 0 ] || ! grep -qF "process_metrics is enabled but prometheus_url is empty" <<<"${RUN_OUT}"; then
+  fail "host process metrics without a Prometheus endpoint must be rejected"
+  indent "${RUN_OUT}"
+else
+  pass "host process metrics without a Prometheus endpoint are rejected"
+fi
+
+# The manual override still reports the namespace state.
+TESTS=$((TESTS + 1))
+run_init '{"manual_config_enabled":true,"manual_config":"logging { level = \"info\" }"}' "" true ""
+if [ "${RUN_RC}" -ne 0 ] || ! grep -qF "Host process visibility is not active" <<<"${RUN_OUT}"; then
+  fail "the manual override did not report inactive host process visibility"
+  indent "${RUN_OUT}"
+else
+  pass "the manual override reports inactive host process visibility too"
+fi
 echo
 echo "== an ingress-managed manual config replaces the generated one =="
 TESTS=$((TESTS + 1))

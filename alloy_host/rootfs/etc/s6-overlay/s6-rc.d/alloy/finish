@@ -1,0 +1,25 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Reports Alloy exits while leaving the configuration UI available.
+# ==============================================================================
+# The ingress UI is the recovery surface for invalid operational settings. S6
+# may restart Alloy, but an Alloy failure must not halt the whole App and make
+# that recovery surface unavailable.
+declare exit_code="${1:-1}"
+declare exit_signal="${2:-0}"
+
+# s6 passes 256 in $1 and the signal number in $2 when the service was killed.
+# SIGTERM is how an intentional service shutdown looks; any other signal means
+# Alloy crashed and will be handled by supervision.
+if [[ "${exit_code}" -eq 256 ]] && [[ "${exit_signal}" -ne 15 ]]; then
+    bashio::log.error "Alloy exited on signal ${exit_signal}; the configuration UI remains available while Alloy restarts."
+    exit 0
+fi
+
+if [[ "${exit_code}" -ne 0 ]] && [[ "${exit_code}" -ne 256 ]]; then
+    bashio::log.error "Alloy exited with code ${exit_code}; the configuration UI remains available while Alloy restarts."
+    exit 0
+fi
+
+bashio::log.info "Alloy stopped."

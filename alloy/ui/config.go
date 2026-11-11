@@ -127,6 +127,11 @@ func validateModeRequirements(options map[string]any) error {
 		if optionEnabled(options, "homeassistant_metrics") && !optionHasValue(options, "prometheus_url") {
 			return errors.New("Home Assistant metrics require a Prometheus endpoint")
 		}
+		// Only where the pipeline can exist, matching init-alloy: a stale
+		// selection in an App without host process visibility is ignored.
+		if optionEnabled(options, "process_metrics") && currentHostProcessStatus().Active && !optionHasValue(options, "prometheus_url") {
+			return errors.New("host process metrics require a Prometheus endpoint")
+		}
 		for _, auth := range []struct {
 			prefix string
 			label  string
@@ -190,7 +195,7 @@ func isSecretOption(key string) bool {
 
 var booleanSettingNames = map[string]bool{
 	"logs_system": true, "logs_homeassistant": true, "logs_addons": true,
-	"host_metrics": true, "homeassistant_metrics": true, "alloy_metrics": true,
+	"host_metrics": true, "homeassistant_metrics": true, "alloy_metrics": true, "process_metrics": true,
 	"traces_enabled": true, "traces_network_access": true, "alloy_profiling": true,
 	"fleet_default_attributes": true, "alloy_disable_telemetry": true, "manual_config_enabled": true,
 }
