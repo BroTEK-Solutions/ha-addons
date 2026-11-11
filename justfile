@@ -80,10 +80,13 @@ lint:
         alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy/finish \
         alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy-reporter/run \
         alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy-reporter/finish \
+        alloy/rootfs/etc/s6-overlay/s6-rc.d/alloy-ui/run \
+        alloy_host_overlay/rootfs/usr/bin/alloy-init \
         alloy/tests/generate-config.test.sh \
         alloy/tests/init-alloy.test.sh \
         alloy/tests/image-smoke.test.sh \
         alloy/tests/apparmor.test.sh \
+        alloy/tests/host-pid.test.sh \
         grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/init-grafana-pdc/run \
         grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/run \
         grafana_pdc/rootfs/etc/s6-overlay/s6-rc.d/grafana-pdc/finish \
@@ -102,6 +105,7 @@ lint:
 gen:
     python3 scripts/sync_shared_lib.py
     python3 scripts/sync_synthetic_monitoring_variants.py
+    python3 scripts/sync_alloy_variants.py
 
 # Re-resolve every PEP 723 script lockfile. Run after changing a script's
 # dependencies; `uv run --locked` fails until the lockfile matches the header.
@@ -115,6 +119,7 @@ lock:
 gen-check:
     python3 scripts/sync_shared_lib.py --check
     python3 scripts/sync_synthetic_monitoring_variants.py --check
+    python3 scripts/sync_alloy_variants.py --check
 
 # Run every test that needs only the language toolchain.
 [group('check')]
@@ -208,6 +213,8 @@ test-alloy:
 test-alloy-image:
     just image alloy local/ha-alloy:smoke
     bash alloy/tests/image-smoke.test.sh local/ha-alloy:smoke
+    just image alloy_host local/ha-alloy-host:smoke
+    bash alloy/tests/host-pid.test.sh local/ha-alloy-host:smoke local/ha-alloy:smoke
 
 # Install the parser on a disposable Ubuntu AppArmor test runner (requires sudo).
 [group('dev')]
@@ -219,7 +226,7 @@ setup-apparmor-tests:
 [group('check')]
 [no-exit-message]
 test-alloy-apparmor:
-    bash alloy/tests/apparmor.test.sh local/ha-alloy:smoke
+    bash alloy/tests/apparmor.test.sh local/ha-alloy:smoke local/ha-alloy-host:smoke
 
 # Run Alloy's initialization-service test inside its pinned base image.
 [group('check')]

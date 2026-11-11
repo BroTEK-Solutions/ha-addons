@@ -43,6 +43,21 @@ type statusResponse struct {
 	ManualOverride    bool `json:"manual_override"`
 	RecoveryAvailable bool `json:"recovery_available"`
 	SettingsReadable  bool `json:"settings_readable"`
+
+	HostProcesses hostProcessStatus `json:"host_processes"`
+}
+
+// hostProcessStatus reports host process visibility. Variant is set only in
+// the host-processes variant App's image. Active means its entrypoint found the
+// App in the host PID namespace, which Supervisor grants only with protection
+// mode off; the standard App never declares host_pid, so both stay false there.
+type hostProcessStatus struct {
+	Variant bool `json:"variant"`
+	Active  bool `json:"active"`
+}
+
+func currentHostProcessStatus() hostProcessStatus {
+	return hostProcessStatus{Variant: envBool("ALLOY_HOST_PROCESSES_VARIANT"), Active: envBool("ALLOY_HOST_PID")}
 }
 
 type fleetReferenceResponse struct {
@@ -86,6 +101,7 @@ func newAppHandlerWithReferences(store settingsStore, validator candidateValidat
 			ManualOverride:    manualOverride,
 			RecoveryAvailable: envBool("SAFE_MODE"),
 			SettingsReadable:  err == nil,
+			HostProcesses:     currentHostProcessStatus(),
 		})
 	})
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {

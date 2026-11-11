@@ -16,6 +16,17 @@
         }
       ]
     },
+    "alloy_host": {
+      "component": "alloy-host",
+      "package-name": "alloy-host",
+      "release-type": "simple",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "config.yaml"
+        }
+      ]
+    },
     "grafana_pdc": {
       "component": "grafana-pdc",
       "package-name": "grafana-pdc",

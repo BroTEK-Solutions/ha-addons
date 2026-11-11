@@ -215,7 +215,7 @@ func candidateEnvironment(settings map[string]any) []string {
 		"prometheus_username": "PROMETHEUS_USERNAME", "prometheus_password": "PROMETHEUS_PASSWORD",
 		"instance_name": "INSTANCE_NAME", "metrics_scrape_interval": "METRICS_SCRAPE_INTERVAL",
 		"host_metrics": "HOST_METRICS", "homeassistant_metrics": "HOMEASSISTANT_METRICS",
-		"alloy_metrics": "ALLOY_METRICS", "tempo_url": "TEMPO_URL",
+		"alloy_metrics": "ALLOY_METRICS", "process_metrics": "PROCESS_METRICS", "tempo_url": "TEMPO_URL",
 		"tempo_username": "TEMPO_USERNAME", "tempo_password": "TEMPO_PASSWORD",
 		"traces_enabled": "TRACES_ENABLED", "traces_network_access": "TRACES_NETWORK_ACCESS",
 		"pyroscope_url": "PYROSCOPE_URL", "pyroscope_username": "PYROSCOPE_USERNAME",
@@ -229,6 +229,8 @@ func candidateEnvironment(settings map[string]any) []string {
 			environment = append(environment, variable+"="+fmt.Sprint(value))
 		}
 	}
+	// The same gate init-alloy applies before rendering host process metrics.
+	environment = append(environment, "HOST_PROCESSES_ACTIVE="+strconv.FormatBool(currentHostProcessStatus().Active))
 	return environment
 }
 

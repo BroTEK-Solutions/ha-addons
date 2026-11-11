@@ -64,6 +64,23 @@ def main() -> int:
     check("native schema contains startup and health-reporting controls only", schema == EXPECTED_SCHEMA)
     check("native defaults contain startup and health-reporting controls only", options == EXPECTED_OPTIONS)
 
+    print("\n== the standard App's capabilities and security rating stay as they are ==")
+    # Host process visibility ships only in the generated alloy_host variant.
+    # Each key below either changes Home Assistant's security rating
+    # (supervisor/apps/utils.py rating_security) or what the container may do, and
+    # host_pid also exposes the protection-mode switch to every user.
+    for key in ("host_pid", "full_access", "docker_api", "privileged", "host_uts", "host_ipc",
+                "kernel_modules", "hassio_role", "auth_api", "devices", "uart", "usb", "gpio"):
+        check(f"{key} is not declared", key not in config)
+    check("AppArmor stays enabled", config.get("apparmor", True) is True)
+    check("the capabilities that are declared are unchanged", {
+        key: config.get(key)
+        for key in ("init", "host_network", "journald", "hassio_api", "homeassistant_api", "ingress")
+    } == {
+        "init": False, "host_network": True, "journald": True,
+        "hassio_api": True, "homeassistant_api": True, "ingress": True,
+    })
+
     print("\n== native values validate like Supervisor ==")
     for key, default in EXPECTED_OPTIONS.items():
         try:

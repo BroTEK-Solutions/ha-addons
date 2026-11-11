@@ -49,6 +49,7 @@ jobs:
         amd64-app-grafana-pdc,aarch64-app-grafana-pdc,app-grafana-sm,\
         amd64-app-grafana-sm,aarch64-app-grafana-sm,\
         app-grafana-sm-browser,amd64-app-grafana-sm-browser,\
-        aarch64-app-grafana-sm-browser"
+        aarch64-app-grafana-sm-browser,app-alloy-host,\
+        amd64-app-alloy-host,aarch64-app-alloy-host"
       # Scheduled runs prune for real; a manual dispatch defaults to dry-run.
       dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run || false }}

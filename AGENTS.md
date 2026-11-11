@@ -100,9 +100,12 @@ with `docker build -t local/app-linter <clone>/src`. From this repository run
 
 `just ci` also requires a Linux Docker host with enforcing AppArmor and passwordless sudo.
 On Ubuntu, `just setup-apparmor-tests` installs the parser. `just test-alloy-image` remains the
-portable image/startup check; after building that image, `just test-alloy-apparmor` loads a uniquely
-named copy of the shipped policy, boots `/init`, checks real Alloy readiness and service state, and
-checks allowed/denied writes. Missing confinement fails rather than skips. The required Alloy CI
+portable image/startup check: it builds both Alloy images, boots the standard one through `/init`,
+and boots the `alloy_host` variant through its `alloy-init` entrypoint in the host PID namespace,
+in its own namespace and beside the standard App. After building them, `just test-alloy-apparmor`
+loads uniquely named copies of both shipped policies, boots the standard image's `/init` and checks
+real Alloy readiness, service state and allowed/denied writes, then runs the variant's start paths
+under its own policy. Missing confinement fails rather than skips. The required Alloy CI
 job runs both on an Ubuntu VM. This proves Ubuntu AppArmor startup, not every HAOS runtime feature.
 
 - `just lint` owns the ShellCheck file list explicitly: the s6 service scripts have no extension, so
