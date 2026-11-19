@@ -47,6 +47,22 @@ setup:
     fi
     command -v docker >/dev/null 2>&1 || printf 'setup: docker absent - the image lanes in `just ci` will fail\n' >&2
 
+# Prepare the locked source toolchain for Cursor without running the test suites.
+[script('bash')]
+cloud-bootstrap: setup
+    set -euo pipefail
+    scratch="$(mktemp -d)"
+    trap 'rm -rf -- "$scratch"' EXIT
+    for module in {{ go_source_modules }}; do
+        output="$scratch/$module"
+        mkdir -p "$output"
+        (cd "$module" && go test -c -o "$output/" ./...)
+    done
+    for script in {{ locked_scripts }}; do
+        uv sync --locked --script "$script"
+    done
+    uvx yamllint@{{ yamllint_version }} --version
+
 # Format Go sources and this justfile in place, then refresh generated copies.
 [group('check')]
 fmt: && gen
