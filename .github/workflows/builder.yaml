@@ -64,6 +64,14 @@ jobs:
         with:
           path: "./alloy"
 
+      - name: Lint Alloy host-processes App metadata
+        id: lint_alloy_host
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: frenck/action-addon-linter@b9cfd1bc62ba60d2c4fc96317b5f7ada5923f4a7 # v2.21.1
+        with:
+          path: "./alloy_host"
+
       - name: Lint Grafana PDC App metadata
         id: lint_pdc
         if: ${{ !cancelled() }}
@@ -114,12 +122,13 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           ALLOY_RESULT: ${{ steps.lint_alloy.outcome }}
+          ALLOY_HOST_RESULT: ${{ steps.lint_alloy_host.outcome }}
           PDC_RESULT: ${{ steps.lint_pdc.outcome }}
           SM_RESULT: ${{ steps.lint_sm.outcome }}
           SM_BROWSER_RESULT: ${{ steps.lint_sm_browser.outcome }}
         run: |
           failed=0
-          for result in "alloy:$ALLOY_RESULT" "grafana_pdc:$PDC_RESULT" \
+          for result in "alloy:$ALLOY_RESULT" "alloy_host:$ALLOY_HOST_RESULT" "grafana_pdc:$PDC_RESULT" \
             "grafana_sm:$SM_RESULT" "grafana_sm_browser:$SM_BROWSER_RESULT"; do
             app=${result%%:*}
             outcome=${result#*:}

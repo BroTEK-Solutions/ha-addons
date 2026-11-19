@@ -1,0 +1,514 @@
+#!/usr/bin/with-contenv bashio
+# shellcheck shell=bash
+# ==============================================================================
+# Reads ingress-managed settings, validates them, and generates the Alloy config.
+# ==============================================================================
+set -e
+
+# Overridable so the test suite can run this script outside a container.
+CONFIG_DIR="${CONFIG_DIR:-/etc/alloy}"
+DATA_DIR="${DATA_DIR:-/data/alloy}"
+GENERATOR="${GENERATOR:-/usr/share/alloy/generate-config.sh}"
+SETTINGS_FILE="${SETTINGS_FILE:-/data/settings.json}"
+LEGACY_OPTIONS_FILE="${LEGACY_OPTIONS_FILE:-/data/options.json}"
+CONFIG_FILE="${CONFIG_DIR}/config.alloy"
+
+# The option validators are shared with the other Apps. The generated copy sits
+# at the same rootfs-relative path inside the image and in a checkout, so
+# resolving it from this script works in both without a container.
+SERVICE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HA_LIB_DIR="${HA_LIB_DIR:-${SERVICE_DIR}/../../../../usr/share/ha-lib}"
+# shellcheck source=../../../../usr/share/ha-lib/ha-validate.sh
+. "${HA_LIB_DIR}/ha-validate.sh"
+
+mkdir -p "${CONFIG_DIR}" "${DATA_DIR}"
+
+# The same Go store used by ingress performs the one-time v1 import. Tests and
+# development bases may not contain the compiled UI yet, so an absent store is
+# represented by a minimal v2 document there.
+if [ ! -f "${SETTINGS_FILE}" ]; then
+    if [ -x /usr/bin/alloy-ui ]; then
+        SETTINGS_FILE="${SETTINGS_FILE}" LEGACY_OPTIONS_FILE="${LEGACY_OPTIONS_FILE}" \
+            /usr/bin/alloy-ui --migrate-only
+    else
+        printf '%s\n' '{"schema_version":2}' >"${SETTINGS_FILE}"
+        chmod 0600 "${SETTINGS_FILE}"
+    fi
+fi
+
+# Serialize the settings snapshot, config generation, and applied marker with
+# ingress saves. A save that arrives during initialization waits, then retains
+# restart_required=true for the next restart instead of being marked applied.
+exec {SETTINGS_LOCK_FD}>"${SETTINGS_FILE}.lock"
+chmod 0600 "${SETTINGS_FILE}.lock"
+flock -x "${SETTINGS_LOCK_FD}"
+
+# Populated in one jq pass further down, after the safe-mode branch. Declared
+# here so the two accessors below can be defined next to each other.
+declare -A SETTINGS_CACHE=()
+settings_read=0
+
+# True when the option holds a value that is neither null nor empty once
+# stringified. Matches the jq predicate it replaces: the cache only holds
+# non-null keys, and stores each value already stringified.
+settings_has_value() {
+    [ -n "${SETTINGS_CACHE[${1}]-}" ]
+}
+
+# The option's value, or nothing when it is absent or null. Callers read this
+# through $(...), which strips the trailing newline jq -r used to add, so
+# printing without one is equivalent.
+settings_get() {
+    printf '%s' "${SETTINGS_CACHE[${1}]-}"
+}
+
+mark_settings_applied() {
+    jq -e '.restart_required == true' "${SETTINGS_FILE}" >/dev/null || return 0
+    local temporary
+    temporary=$(mktemp "${SETTINGS_FILE}.tmp.XXXXXX")
+    jq '.restart_required = false' "${SETTINGS_FILE}" >"${temporary}"
+    chmod 0600 "${temporary}"
+    mv -f "${temporary}" "${SETTINGS_FILE}"
+}
+
+# Host process visibility, which only the host-processes variant App can have.
+# Its image sets ALLOY_HOST_PROCESSES_VARIANT; Home Assistant puts it in the host
+# PID namespace when its protection mode is off, and its entrypoint then exports
+# ALLOY_HOST_PID=true. Protection mode is the only switch: once the namespace is
+# shared, every pipeline source (generated, Fleet-delivered, additional or
+# manual) can read every host process. The Local process metrics selection only
+# decides whether the generated pipeline is added. This runs before every mode
+# branch so Fleet, safe mode and the manual override report it too. The
+# standard App never sets either variable and logs nothing here.
+HOST_PROCESSES_ACTIVE=false
+if [ "${ALLOY_HOST_PID:-false}" = true ]; then
+    HOST_PROCESSES_ACTIVE=true
+    bashio::log.info "Host process visibility is active: protection mode is off, so the App shares the"
+    bashio::log.info "host PID namespace and every pipeline, generated, Fleet-delivered, additional"
+    bashio::log.info "or manual, can read all host processes and their command lines."
+elif [ "${ALLOY_HOST_PROCESSES_VARIANT:-false}" = true ]; then
+    bashio::log.warning "Host process visibility is not active: protection mode is on, so Home Assistant"
+    bashio::log.warning "kept the App in its own PID namespace. Every other pipeline runs normally. To see"
+    bashio::log.warning "host processes, turn protection mode off on the App's Info page and restart it."
+fi
+export HOST_PROCESSES_ACTIVE
+
+# Safe mode is deliberately the only native option that changes Alloy's
+# operational configuration. It bypasses persisted state so a user can always
+# recover through ingress.
+safe_mode="${SAFE_MODE_OVERRIDE:-}"
+if [ -z "${safe_mode}" ]; then
+    if bashio::config.true 'safe_mode'; then safe_mode=true; else safe_mode=false; fi
+fi
+if [ "${safe_mode}" = true ]; then
+    bashio::log.warning "Safe mode is enabled; persisted Alloy settings are ignored."
+    printf '%s\n' 'logging { level = "info" }' >"${CONFIG_FILE}"
+    exit 0
+fi
+
+# Read every persisted setting in one jq pass, populating SETTINGS_CACHE for the
+# two accessors defined above. This used to be two jq processes per option
+# lookup, and config_or performs one lookup for each of 31 options, so a single
+# run spawned 46 jq processes and spent about 1.4s in process startup - on every
+# App start, not just in tests.
+#
+# This deliberately runs AFTER the safe-mode branch. Safe mode exists so a user
+# can always recover through ingress, which means it must not depend on the
+# settings file being readable - reading it earlier makes a corrupt file
+# unrecoverable in exactly the situation safe mode is for.
+#
+# Credentials are cached as a presence marker rather than their value. Nothing
+# reads one by value - the checks below only ask whether each is set - and the
+# jq-per-lookup design this replaces kept every secret inside a short-lived
+# process. Storing the marker keeps that property: a stray `set -x` cannot dump
+# them out of a long-lived shell variable. Keep this list in step with
+# secretOptionNames in alloy/ui/config.go.
+#
+# Three properties the batch has to preserve, each of which is a silent
+# data-loss bug if it is lost:
+#
+#   - The file must be a single JSON object. jq can emit a complete first object
+#     and then fail on trailing garbage, so the exit status has to be checked
+#     before the values are trusted; a process substitution would discard it.
+#   - Values are NUL-separated because manual_config and additional_config are
+#     free text containing newlines. A JSON string may legally contain NUL, and
+#     an odd number of them shifts every later field by one while leaving the
+#     entry count intact - the guard below agrees and the settings are silently
+#     lost. Stripping NUL matches the old behaviour, where $( ) dropped it.
+#   - An empty key is `bad array subscript` in bash, which under `set -e` kills
+#     the script before the guard can report anything. The old code never looked
+#     one up, so dropping it here is behaviour-preserving.
+#
+# jq emits the entry count first and the loop counts what it reads, so a
+# truncated or desynchronised stream aborts loudly rather than yielding an empty
+# cache - which would turn every option into its default.
+SETTINGS_SECRET_KEYS='["loki_password","prometheus_password","tempo_password","pyroscope_password","gcloud_rw_api_key","fleet_password"]'
+if ! jq -e 'type == "object"' "${SETTINGS_FILE}" >/dev/null 2>&1; then
+    bashio::log.fatal "Could not parse ${SETTINGS_FILE}; it is not a readable JSON object."
+    bashio::exit.nok
+fi
+{
+    IFS= read -r -d '' settings_expected || settings_expected=""
+    while IFS= read -r -d '' settings_key && IFS= read -r -d '' settings_value; do
+        SETTINGS_CACHE["${settings_key}"]="${settings_value}"
+        settings_read=$((settings_read + 1))
+    done
+} < <(jq -j --argjson secrets "${SETTINGS_SECRET_KEYS}" '
+    def scrub: tostring | gsub("\u0000"; "");
+    [to_entries[] | select(.value != null) | select(.key != "")]
+    | (length | tostring), "\u0000",
+      (.[]
+       | .key, "\u0000",
+         (if (.key | IN($secrets[]))
+          then (if (.value | scrub | length) > 0 then "set" else "" end)
+          else (.value | scrub) end), "\u0000")
+' "${SETTINGS_FILE}")
+if [ "${settings_expected}" != "${settings_read}" ]; then
+    bashio::log.fatal "Could not read ${SETTINGS_FILE}: it declared ${settings_expected:-no} settings but ${settings_read} were read."
+    bashio::exit.nok
+fi
+unset settings_key settings_value settings_expected settings_read
+
+# The supported break-glass full configuration is stored through ingress. It
+# replaces generated pipelines while keeping secrets available through env.
+MANUAL_CONFIG=$(settings_get manual_config)
+MANUAL_CONFIG_ENABLED=$(settings_get manual_config_enabled)
+[ -n "${MANUAL_CONFIG_ENABLED}" ] || MANUAL_CONFIG_ENABLED=false
+if [ "${MANUAL_CONFIG_ENABLED}" = true ] && [ -n "${MANUAL_CONFIG}" ]; then
+    bashio::log.warning "Using the ingress-managed manual Alloy configuration override."
+    printf '%s\n' "${MANUAL_CONFIG}" >"${CONFIG_FILE}"
+    mark_settings_applied
+    bashio::log.info "Alloy config copied to ${CONFIG_FILE}"
+    exit 0
+fi
+
+# Read an option, falling back to $2 when it is unset, null or empty.
+# bashio::config.has_value is what distinguishes those three from a real value -
+# hand-rolling that check with jq is how the loki_url default ended up making a
+# supposedly optional option mandatory.
+config_or() {
+    if settings_has_value "${1}"; then
+        settings_get "${1}"
+    else
+        printf '%s' "${2:-}"
+    fi
+}
+
+# Passwords are deliberately NOT read here - they are exported by the alloy
+# service and referenced from the generated config via sys.env(). SETTINGS_CACHE
+# holds only a presence marker for them, never the value.
+LOKI_URL=$(config_or loki_url)
+LOKI_USERNAME=$(config_or loki_username)
+LOGS_SYSTEM=$(config_or logs_system true)
+LOGS_HOMEASSISTANT=$(config_or logs_homeassistant true)
+LOGS_ADDONS=$(config_or logs_addons true)
+LOGS_EXCLUDE_ADDONS=$(config_or logs_exclude_addons alloy_host)
+LOGS_MAX_AGE=$(config_or logs_max_age 24h)
+PROMETHEUS_URL=$(config_or prometheus_url)
+PROMETHEUS_USERNAME=$(config_or prometheus_username)
+INSTANCE_NAME=$(config_or instance_name homeassistant-host)
+METRICS_SCRAPE_INTERVAL=$(config_or metrics_scrape_interval 60s)
+HOST_METRICS=$(config_or host_metrics true)
+HOMEASSISTANT_METRICS=$(config_or homeassistant_metrics false)
+ALLOY_METRICS=$(config_or alloy_metrics true)
+PROCESS_METRICS=$(config_or process_metrics false)
+TEMPO_URL=$(config_or tempo_url)
+TEMPO_USERNAME=$(config_or tempo_username)
+TRACES_ENABLED=$(config_or traces_enabled false)
+TRACES_NETWORK_ACCESS=$(config_or traces_network_access false)
+PYROSCOPE_URL=$(config_or pyroscope_url)
+PYROSCOPE_USERNAME=$(config_or pyroscope_username)
+ALLOY_PROFILING=$(config_or alloy_profiling false)
+LOG_LEVEL=$(config_or log_level info)
+ADDITIONAL_CONFIG=$(config_or additional_config)
+FLEET_URL=$(config_or fleet_url)
+FLEET_USERNAME=$(config_or fleet_username)
+FLEET_COLLECTOR_NAME=$(config_or fleet_collector_name)
+FLEET_ATTRIBUTES=$(config_or fleet_attributes)
+FLEET_DEFAULT_ATTRIBUTES=$(config_or fleet_default_attributes true)
+FLEET_POLL_FREQUENCY=$(config_or fleet_poll_frequency 1m)
+OPERATION_MODE=$(config_or operation_mode)
+OPERATION_MODE_EXPLICIT=false
+[ -n "${OPERATION_MODE}" ] && OPERATION_MODE_EXPLICIT=true
+
+# Upgrade compatibility: old releases allowed remote and local pipelines at the
+# same time. Infer that state without advertising it as a new selectable mode.
+if [ -z "${OPERATION_MODE}" ]; then
+    local_destination="${LOKI_URL}${PROMETHEUS_URL}${TEMPO_URL}${PYROSCOPE_URL}"
+    if [ -n "${FLEET_URL}" ] && [ -n "${local_destination}" ]; then
+        OPERATION_MODE=legacy-hybrid
+    elif [ -n "${FLEET_URL}" ]; then
+        OPERATION_MODE=fleet
+    else
+        OPERATION_MODE=local
+    fi
+fi
+
+export LOKI_URL LOKI_USERNAME PROMETHEUS_URL PROMETHEUS_USERNAME
+export INSTANCE_NAME METRICS_SCRAPE_INTERVAL LOG_LEVEL ADDITIONAL_CONFIG
+export HOST_METRICS HOMEASSISTANT_METRICS ALLOY_METRICS PROCESS_METRICS
+export LOGS_SYSTEM LOGS_HOMEASSISTANT LOGS_ADDONS LOGS_EXCLUDE_ADDONS LOGS_MAX_AGE
+export TEMPO_URL TEMPO_USERNAME TRACES_ENABLED TRACES_NETWORK_ACCESS
+export PYROSCOPE_URL PYROSCOPE_USERNAME ALLOY_PROFILING
+export FLEET_URL FLEET_USERNAME FLEET_COLLECTOR_NAME FLEET_ATTRIBUTES FLEET_DEFAULT_ATTRIBUTES FLEET_POLL_FREQUENCY
+export OPERATION_MODE
+
+# Require a destination appropriate to the selected mode.
+case "${OPERATION_MODE}" in
+    fleet)
+        if [ -z "${FLEET_URL}" ]; then
+            bashio::log.fatal "Fleet mode requires fleet_url."
+            bashio::exit.nok
+        fi
+        ;;
+    local)
+        if [ -z "${LOKI_URL}" ] && [ -z "${PROMETHEUS_URL}" ] \
+            && [ -z "${TEMPO_URL}" ] && [ -z "${PYROSCOPE_URL}" ]; then
+            if [ "${OPERATION_MODE_EXPLICIT}" = true ]; then
+                bashio::log.fatal "Local mode requires at least one local destination."
+                bashio::log.fatal "Set at least one of loki_url, prometheus_url, tempo_url or pyroscope_url."
+                bashio::exit.nok
+            fi
+            bashio::log.warning "No telemetry destination is configured yet."
+            bashio::log.warning "Open the ingress UI to choose Fleet or Local configuration."
+        fi
+        ;;
+    legacy-hybrid)
+        if [ -z "${LOKI_URL}" ] && [ -z "${PROMETHEUS_URL}" ] \
+            && [ -z "${TEMPO_URL}" ] && [ -z "${PYROSCOPE_URL}" ] \
+            && [ -z "${FLEET_URL}" ]; then
+            bashio::log.fatal "Set at least one of loki_url, prometheus_url, tempo_url,"
+            bashio::log.fatal "pyroscope_url or fleet_url. All destinations are empty."
+            bashio::exit.nok
+        fi
+        ;;
+    *)
+        bashio::log.fatal "operation_mode must be fleet or local."
+        bashio::exit.nok
+        ;;
+esac
+
+# Basic auth needs both halves; half a pair would silently 401 against the backend.
+# $1 = option prefix (loki|prometheus|fleet)
+check_auth_pair() {
+    local user="" pass=""
+    if settings_has_value "${1}_username"; then user=1; fi
+    if settings_has_value "${1}_password"; then pass=1; fi
+    if [ -n "${user}" ] && [ -z "${pass}" ]; then
+        bashio::log.fatal "${1}_username is set but ${1}_password is empty."
+        bashio::exit.nok
+    fi
+    if [ -z "${user}" ] && [ -n "${pass}" ]; then
+        bashio::log.fatal "${1}_password is set but ${1}_username is empty."
+        bashio::exit.nok
+    fi
+}
+
+if [ "${OPERATION_MODE}" != fleet ]; then
+    check_auth_pair loki
+    check_auth_pair prometheus
+    check_auth_pair tempo
+    check_auth_pair pyroscope
+fi
+
+# Fleet uses a shared Grafana Cloud key. Accept fleet_password only as an
+# upgrade bridge for existing installs.
+fleet_secret=""
+if settings_has_value 'gcloud_rw_api_key'; then
+    fleet_secret=1
+fi
+if [ "${OPERATION_MODE_EXPLICIT}" = true ] && [ "${OPERATION_MODE}" = fleet ]; then
+    if [ -z "${FLEET_USERNAME}" ]; then
+        bashio::log.fatal "Fleet mode requires fleet_username. Copy the numeric username from Grafana Cloud."
+        bashio::exit.nok
+    fi
+    if [ -z "${fleet_secret}" ]; then
+        bashio::log.fatal "Fleet mode requires gcloud_rw_api_key."
+        bashio::exit.nok
+    fi
+fi
+if [ "${OPERATION_MODE}" != local ]; then
+    if [ -n "${FLEET_USERNAME}" ] && [ -z "${fleet_secret}" ]; then
+        bashio::log.fatal "fleet_username is set but gcloud_rw_api_key is empty."
+        bashio::exit.nok
+    fi
+    if [ -z "${FLEET_USERNAME}" ] && [ -n "${fleet_secret}" ]; then
+        bashio::log.fatal "gcloud_rw_api_key is set but fleet_username is empty."
+        bashio::exit.nok
+    fi
+fi
+
+# Endpoints are interpolated into quoted River strings. Repeat the schema's URL
+# checks here because options.json can be edited outside the UI, and an invalid
+# URL otherwise fails later with an error that does not name the add-on option.
+# The structural rules live in the shared library; this maps its classification
+# back onto the two distinct messages a user has to act on.
+validate_url() {
+    local name="${1}" value="${2}" problem
+    problem="$(ha_url_problem "${value}")"
+    case "${problem}" in
+        '') return 0 ;;
+        charset)
+            bashio::log.fatal "${name} contains a quote, backslash or whitespace: '${value}'"
+            bashio::exit.nok
+            ;;
+        *)
+            bashio::log.fatal "${name} is not a valid HTTP(S) URL: '${value}'"
+            bashio::exit.nok
+            ;;
+    esac
+}
+
+if [ "${OPERATION_MODE}" != fleet ]; then
+    validate_url loki_url "${LOKI_URL}"
+    validate_url prometheus_url "${PROMETHEUS_URL}"
+    validate_url tempo_url "${TEMPO_URL}"
+    validate_url pyroscope_url "${PYROSCOPE_URL}"
+fi
+if [ "${OPERATION_MODE}" != local ]; then
+    validate_url fleet_url "${FLEET_URL}"
+fi
+
+# These values are emitted inside quoted River strings. Repeat the schema guard
+# here because options.json can also be edited outside the Supervisor UI.
+validate_river_string() {
+    local name="${1}" value="${2}"
+    if ! ha_valid_river_string "${value}"; then
+        bashio::log.fatal "${name} contains a quote, backslash or control character."
+        bashio::exit.nok
+    fi
+}
+
+if [ "${OPERATION_MODE}" != fleet ]; then
+    validate_river_string loki_username "${LOKI_USERNAME}"
+    validate_river_string prometheus_username "${PROMETHEUS_USERNAME}"
+    validate_river_string tempo_username "${TEMPO_USERNAME}"
+    validate_river_string pyroscope_username "${PYROSCOPE_USERNAME}"
+fi
+if [ "${OPERATION_MODE}" != local ]; then
+    validate_river_string fleet_username "${FLEET_USERNAME}"
+    validate_river_string fleet_collector_name "${FLEET_COLLECTOR_NAME}"
+fi
+validate_river_string instance_name "${INSTANCE_NAME}"
+
+if [ "${OPERATION_MODE}" != fleet ] && [ "${TRACES_ENABLED}" = true ] && [ -z "${TEMPO_URL}" ]; then
+    bashio::log.fatal "traces_enabled is on but tempo_url is empty."
+    bashio::exit.nok
+fi
+if [ "${OPERATION_MODE}" != fleet ] && [ "${ALLOY_PROFILING}" = true ] && [ -z "${PYROSCOPE_URL}" ]; then
+    bashio::log.fatal "alloy_profiling is on but pyroscope_url is empty."
+    bashio::exit.nok
+fi
+
+# Both metric sources forward to the Prometheus remote_write receiver, which
+# only exists when prometheus_url is set. Enabling one without it would silently
+# collect nothing.
+if [ "${OPERATION_MODE}" != fleet ] && [ -z "${PROMETHEUS_URL}" ]; then
+    if [ "$(config_or homeassistant_metrics false)" = true ]; then
+        bashio::log.fatal "homeassistant_metrics is enabled but prometheus_url is empty."
+        bashio::log.fatal "Set prometheus_url, or turn homeassistant_metrics off."
+        bashio::exit.nok
+    fi
+    # Only where the pipeline could exist: a stale selection in an App without
+    # host process visibility is ignored, as the Web UI never offers it there.
+    if [ "${PROCESS_METRICS}" = true ] && [ "${HOST_PROCESSES_ACTIVE}" = true ]; then
+        bashio::log.fatal "process_metrics is enabled but prometheus_url is empty."
+        bashio::log.fatal "Set prometheus_url, or turn host process metrics off."
+        bashio::exit.nok
+    fi
+elif [ "${OPERATION_MODE}" != fleet ] && [ "${HOST_METRICS}" != "true" ] \
+    && [ "${HOMEASSISTANT_METRICS}" != "true" ] && [ "${ALLOY_METRICS}" != "true" ]; then
+    bashio::log.warning "prometheus_url is set but both host_metrics and"
+    bashio::log.warning "homeassistant_metrics are off, so no metrics will be sent."
+fi
+
+# Attributes are emitted verbatim into the Alloy config. The schema already
+# rejects a malformed pair in the UI; this repeats the check because a quote or
+# backslash would break River string syntax, and because options.json can be
+# edited outside the UI.
+validate_attributes() {
+    [ -n "${FLEET_ATTRIBUTES}" ] || return 0
+    local -a pairs
+    IFS=',' read -r -a pairs <<<"${FLEET_ATTRIBUTES}"
+    local -a retained_pairs=()
+    local pair
+    for pair in "${pairs[@]}"; do
+        case "${pair}" in
+            *'"'*|*[\\]*)
+                bashio::log.fatal "fleet_attributes entry '${pair}' contains a quote or backslash."
+                bashio::exit.nok
+                ;;
+        esac
+        case "${pair}" in
+            *=*) ;;
+            *)
+                bashio::log.fatal "fleet_attributes entry '${pair}' is not key=value."
+                bashio::exit.nok
+                ;;
+        esac
+        if [ -z "${pair%%=*}" ]; then
+            bashio::log.fatal "fleet_attributes entry '${pair}' has an empty key."
+            bashio::exit.nok
+        fi
+        case "${pair%%=*}" in
+            ha_addon_instance|haos|journal_path|alloy_container_name|alloy_legacy_container_name|ha_addon_slug)
+                bashio::log.warning "Ignoring reserved fleet_attributes key '${pair%%=*}';"
+                bashio::log.warning "the App manages this Fleet targeting attribute."
+                continue
+                ;;
+        esac
+        retained_pairs+=("${pair}")
+    done
+    local IFS=','
+    FLEET_ATTRIBUTES="${retained_pairs[*]}"
+}
+
+validate_attributes
+
+# Describe auth for the startup banner - never the secret itself.
+auth_note() {
+    if [ -n "$1" ]; then echo "(auth: basic, user=$1)"; else echo "(no auth)"; fi
+}
+
+# Detect journal path (logs only)
+export JOURNAL_PATH="/var/log/journal"
+if [ ! -d "${JOURNAL_PATH}" ] || [ -z "$(ls -A "${JOURNAL_PATH}" 2>/dev/null)" ]; then
+    export JOURNAL_PATH="/run/log/journal"
+fi
+
+if [ "${FLEET_DEFAULT_ATTRIBUTES}" = true ] && [ "${OPERATION_MODE}" != local ]; then
+    ADDON_SLUG=$(bashio::addons self)
+    case "${ADDON_SLUG}" in
+        ''|*[!A-Za-z0-9_-]*)
+            bashio::log.fatal "Could not determine a safe Supervisor App slug for Fleet attributes."
+            bashio::exit.nok
+            ;;
+    esac
+    export ADDON_SLUG ALLOY_CONTAINER_NAME="app_${ADDON_SLUG}" ALLOY_LEGACY_CONTAINER_NAME="addon_${ADDON_SLUG}"
+fi
+
+bashio::log.info "Grafana Alloy for Home Assistant"
+[ -n "${LOKI_URL}" ] && \
+    bashio::log.info "Logs    -> Loki:       ${LOKI_URL} $(auth_note "${LOKI_USERNAME}")"
+[ -n "${PROMETHEUS_URL}" ] && \
+    bashio::log.info "Metrics -> Prometheus: ${PROMETHEUS_URL} (every ${METRICS_SCRAPE_INTERVAL}) $(auth_note "${PROMETHEUS_USERNAME}")"
+[ -n "${PROMETHEUS_URL}" ] && \
+    bashio::log.info "Metric sources: host=${HOST_METRICS} homeassistant=${HOMEASSISTANT_METRICS}"
+if [ "${OPERATION_MODE}" != fleet ] && [ -n "${PROMETHEUS_URL}" ] && [ "${PROCESS_METRICS}" = true ] \
+    && [ "${HOST_PROCESSES_ACTIVE}" = true ]; then
+    bashio::log.info "Host process metrics: one series group per executable name."
+fi
+[ -n "${FLEET_URL}" ] && \
+    bashio::log.info "Fleet   -> Fleet Mgmt: ${FLEET_URL} (every ${FLEET_POLL_FREQUENCY}) $(auth_note "${FLEET_USERNAME}")"
+[ -n "${FLEET_ATTRIBUTES}" ] && bashio::log.info "Fleet attributes: ${FLEET_ATTRIBUTES}"
+[ -n "${LOKI_URL}" ] && bashio::log.info "Journal path: ${JOURNAL_PATH}"
+bashio::log.info "Instance: ${INSTANCE_NAME}"
+bashio::log.info "Log level: ${LOG_LEVEL}"
+
+# Generate Alloy config.
+# Invoke via `bash` (not the shebang) so the exported options above are inherited;
+# the generator must NOT run under with-contenv, which would reset the environment.
+bash "${GENERATOR}" > "${CONFIG_FILE}"
+mark_settings_applied
+
+bashio::log.info "Alloy config generated at ${CONFIG_FILE}"

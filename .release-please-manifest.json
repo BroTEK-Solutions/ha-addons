@@ -1,5 +1,6 @@
 {
   "alloy": "2.5.0",
+  "alloy_host": "1.0.0",
   "grafana_pdc": "1.3.0",
   "grafana_sm": "1.3.0",
   "grafana_sm_browser": "1.3.0"

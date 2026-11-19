@@ -14,11 +14,16 @@
   "rebaseWhen": "behind-base-branch",
   "internalChecksFilter": "strict",
   "description": [
-    "ignorePaths lists generated copies only. Each path below is rewritten by scripts/sync_shared_lib.py or scripts/sync_synthetic_monitoring_variants.py, so a Renovate PR against one is reverted by the next sync.",
+    "ignorePaths lists generated copies only. Each path below is rewritten by scripts/sync_shared_lib.py, scripts/sync_synthetic_monitoring_variants.py or scripts/sync_alloy_variants.py (which generates alloy_host/ from alloy/), so a Renovate PR against one is reverted by the next sync.",
+    "alloy_host/Dockerfile is generated too, but deliberately left managed: it carries the same ALLOY_VERSION, base-debian and golang pins as alloy/Dockerfile, so Renovate edits both in the same branch and the generated copy still matches its source. ignorePaths cannot negate, so alloy_host/ is ignored by subdirectory rather than with alloy_host/**.",
     "The source modules shared/reporter, synthetic_monitoring_shared/launcher and synthetic_monitoring_shared/ui must stay managed. A wildcard */reporter/** also matched shared/reporter, which silently took the module every App compiles from out of Renovate's reach and let a transitive CVE sit unproposed."
   ],
   "ignorePaths": [
     "alloy/reporter/**",
+    "alloy_host/reporter/**",
+    "alloy_host/rootfs/**",
+    "alloy_host/translations/**",
+    "alloy_host/ui/**",
     "grafana_pdc/reporter/**",
     "grafana_sm/reporter/**",
     "grafana_sm/launcher/**",
@@ -30,8 +35,8 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Track the Grafana Alloy release pinned in the App Dockerfile. This is the single source of truth for the version - alloy/tests/generate-config.test.sh parses it out of the same line.",
-      "managerFilePatterns": ["/^alloy/Dockerfile$/"],
+      "description": "Track the Grafana Alloy release pinned in the App Dockerfile. alloy/Dockerfile is the single source of truth for the version - alloy/tests/generate-config.test.sh parses it out of the same line - and alloy_host/Dockerfile, generated from it, is updated in the same branch so gen-check stays green.",
+      "managerFilePatterns": ["/^alloy/Dockerfile$/", "/^alloy_host/Dockerfile$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+ALLOY_VERSION=\"(?<currentValue>[^\"]+)\""
       ],

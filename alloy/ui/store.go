@@ -377,7 +377,7 @@ var operationalSettingNames = map[string]struct{}{
 	"logs_exclude_addons": {}, "logs_max_age": {},
 	"prometheus_url": {}, "prometheus_username": {}, "prometheus_password": {},
 	"instance_name": {}, "metrics_scrape_interval": {}, "host_metrics": {},
-	"homeassistant_metrics": {}, "alloy_metrics": {},
+	"homeassistant_metrics": {}, "alloy_metrics": {}, "process_metrics": {},
 	"tempo_url": {}, "tempo_username": {}, "tempo_password": {},
 	"traces_enabled": {}, "traces_network_access": {},
 	"pyroscope_url": {}, "pyroscope_username": {}, "pyroscope_password": {},

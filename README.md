@@ -12,6 +12,7 @@ Home Assistant App repository from BroTEK Solutions.
 | Home Assistant App | Architectures | Purpose |
 | --- | --- | --- |
 | [Grafana Alloy](alloy/) | `amd64`, `aarch64` | Ships Home Assistant OS logs to Loki and host metrics to Prometheus; can also be managed with Grafana Fleet Management. |
+| [Grafana Alloy with Host Processes](alloy_host/) | `amd64`, `aarch64` | Grafana Alloy that also sees every host process once its protection mode is off, for per-process metrics. Install it only if you need that; it runs beside the standard App. |
 | [Grafana Private Data Source Connect](grafana_pdc/) | `amd64`, `aarch64` | Creates an outbound Grafana Cloud Private Data Source Connect tunnel to data sources reachable from Home Assistant. |
 | [Grafana Synthetic Monitoring Probe](grafana_sm/) | `amd64`, `aarch64` | Runs a private Grafana Cloud probe without the Chromium browser runtime. |
 | [Grafana Synthetic Monitoring Probe with Browser Checks](grafana_sm_browser/) | `amd64`, `aarch64` | Runs the browser-capable private probe image for every Synthetic Monitoring check type. |
@@ -26,6 +27,7 @@ release PR publishes the new signed multi-architecture images before creating th
 tags and GitHub Releases:
 
 - Alloy: `alloy-vX.Y.Z`
+- Alloy with host processes: `alloy-host-vX.Y.Z`
 - Grafana PDC: `grafana-pdc-vX.Y.Z`
 - Grafana Synthetic Monitoring: `grafana-sm-vX.Y.Z`
 - Grafana Synthetic Monitoring with browser checks: `grafana-sm-browser-vX.Y.Z`
@@ -36,6 +38,11 @@ configuration, user documentation, translations or branding. CI runs the same co
 mode and rejects drift. Dockerfiles remain variant-owned so Renovate can update Grafana's standard
 and `-browser` images independently; a contract test requires every other Dockerfile line to stay
 equivalent. Changelogs are also variant-owned because Release Please updates each package directly.
+
+The Alloy with host processes App (`alloy_host/`) is generated from `alloy/` and
+`alloy_host_overlay/` by `scripts/sync_alloy_variants.py`, Dockerfile included, so the two Alloy
+images cannot drift apart. Edit those sources, never `alloy_host/` (its `CHANGELOG.md` excepted),
+then run `just gen`; `just gen-check` rejects drift.
 
 Use Conventional Commits for App changes. `feat` selects a minor release, fixes and other
 non-breaking changes select a patch release, and a `!` or `BREAKING CHANGE` footer selects a major

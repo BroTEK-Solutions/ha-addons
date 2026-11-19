@@ -1,0 +1,125 @@
+#!/bin/bash
+# shellcheck shell=bash
+# ==============================================================================
+# Entrypoint of the host-processes variant only; the standard Alloy App keeps
+# s6-overlay's /init. Hands straight over to /init whenever this process is
+# PID 1, which is every variant install with protection mode on.
+#
+# Home Assistant puts the App in the host PID namespace only when config.yaml
+# declares host_pid (the variant does) AND the user has switched protection
+# mode off. There this
+# process is not PID 1, and s6-overlay refuses to start ("s6-overlay-suexec:
+# fatal: can only run as pid 1"). Entering a fresh PID namespace would need
+# CAP_SYS_ADMIN, which this App deliberately does not hold. Instead this script
+# compiles and runs the same s6-rc service database under a plain s6-svscan,
+# which does not need to be PID 1, so service definitions, dependency order,
+# oneshot semantics and finish scripts are the same in both paths.
+# ==============================================================================
+set -euo pipefail
+
+if [ "$$" -eq 1 ]; then
+    exec /init "$@"
+fi
+
+# The same PATH s6-overlay's /init builds before it dumps the environment.
+for directory in /bin /usr/bin /command; do
+    case ":${PATH:-}:" in
+        *":${directory}:"*) ;;
+        *) PATH="${directory}${PATH:+:${PATH}}" ;;
+    esac
+done
+export PATH
+
+SCANDIR=/run/service
+LIVEDIR=/run/s6-rc
+DB=/run/s6/db
+ENVDIR=/run/s6/container_environment
+overlay_sources=(/package/admin/s6-overlay-*/etc/s6-rc/sources)
+if [ "${#overlay_sources[@]}" -ne 1 ] || [ ! -d "${overlay_sources[0]}" ]; then
+    echo "[alloy-init] fatal: expected exactly one s6-overlay source tree" >&2
+    exit 1
+fi
+
+log() { printf '[alloy-init] %s\n' "$*" >&2; }
+
+log "Not PID 1: Home Assistant started the App in the host PID namespace (protection mode is off)."
+log "Starting the App's s6-rc services under s6-svscan instead of s6-overlay's /init."
+
+# What s6-overlay's preinit would otherwise own. A restarted container keeps its
+# /run, so supervision state from a previous boot must not survive.
+rm -rf "${SCANDIR}" "${LIVEDIR}" "${LIVEDIR}".* /run/s6
+mkdir -p "${SCANDIR}" /run/s6
+
+# with-contenv rebuilds every service's environment from this directory, as it
+# does under s6-overlay. ALLOY_HOST_PID tells init-alloy and the ingress UI that
+# this start path ran; nothing else sets it.
+export ALLOY_HOST_PID=true
+s6-dumpenv -- "${ENVDIR}"
+chmod 0755 "${ENVDIR}"
+
+s6-svscan "${SCANDIR}" &
+svscan_pid=$!
+
+up_pid=""
+shutting_down=false
+shutdown() {
+    "${shutting_down}" && return 0
+    shutting_down=true
+    log "Stopping services."
+    # A stop that arrives during startup must not wait for it: a hung oneshot
+    # would otherwise hold the s6-rc lock until Supervisor's stop timeout.
+    # s6-rc waits for a pending oneshot even after SIGTERM, so it gets two
+    # seconds and is then killed; the oneshot itself goes with the container.
+    if [ -n "${up_pid}" ] && kill -0 "${up_pid}" 2>/dev/null; then
+        kill -TERM "${up_pid}" 2>/dev/null || true
+        for _ in $(seq 1 20); do
+            kill -0 "${up_pid}" 2>/dev/null || break
+            sleep 0.1
+        done
+        kill -KILL "${up_pid}" 2>/dev/null || true
+        wait "${up_pid}" 2>/dev/null || true
+    fi
+    # Bring everything down through s6-rc, so finish scripts and oneshot down
+    # scripts run in reverse dependency order as they do under s6-overlay. The
+    # timeout stays inside Supervisor's stop timeout; s6-svscan's own teardown
+    # then terminates anything still running.
+    s6-rc -v2 -bda -t 5000 change || true
+    s6-svscanctl -t "${SCANDIR}" 2>/dev/null || kill -TERM "${svscan_pid}" 2>/dev/null || true
+    wait "${svscan_pid}" 2>/dev/null || true
+    exit "${1}"
+}
+trap 'shutdown 0' TERM INT QUIT HUP
+
+# s6-rc-init needs a live s6-svscan on the scan directory.
+for _ in $(seq 1 50); do
+    [ -p "${SCANDIR}/.s6-svscan/control" ] && break
+    sleep 0.1
+done
+
+if ! s6-rc-compile -v1 -- "${DB}" /etc/s6-overlay/s6-rc.d /etc/s6-overlay/user-bundles.d "${overlay_sources[0]}" \
+    || ! s6-rc-init -c "${DB}" -l "${LIVEDIR}" "${SCANDIR}"; then
+    log "fatal: could not prepare the s6-rc service database; stopping the container."
+    shutdown 1
+fi
+
+# Bash defers a trapped signal until a foreground command returns, so startup
+# runs in the background and `wait` keeps SIGTERM deliverable throughout.
+s6-rc -v2 -u -t 0 change top &
+up_pid=$!
+up_status=0
+wait "${up_pid}" || up_status=$?
+up_pid=""
+if [ "${up_status}" -ne 0 ]; then
+    # The base image sets S6_BEHAVIOUR_IF_STAGE2_FAILS=2: stop the container.
+    log "fatal: services failed to start; stopping the container."
+    shutdown 1
+fi
+
+# `wait` returns early when a trapped signal arrives, and the trap then shuts
+# down. A supervisor that dies on its own takes the container down with it, so
+# Supervisor's watchdog can restart the App.
+while kill -0 "${svscan_pid}" 2>/dev/null; do
+    wait "${svscan_pid}" || true
+done
+log "fatal: s6-svscan exited unexpectedly; stopping the container."
+exit 1
