@@ -36,7 +36,7 @@ jobs:
 
       - name: Read app metadata
         id: info
-        uses: home-assistant/actions/helpers/info@86d4564712fa02543c808e3a693dd04f9d3f8361 # master
+        uses: home-assistant/actions/helpers/info@86d4564712fa02543c808e3a693dd04f9d3f8361 # commit: 86d4564712fa02543c808e3a693dd04f9d3f8361
         with:
           path: "./${{ inputs.app }}"
 
