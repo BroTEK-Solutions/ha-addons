@@ -92,7 +92,7 @@ jobs:
         run: just gen-check </dev/null
 
       - name: Set up Go for the shared MQTT reporter
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: shared/reporter/go.mod
           cache: true
@@ -158,7 +158,7 @@ jobs:
           version: '0.13.9'
 
       - name: Set up Go for the PDC status page
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: grafana_pdc/ui/go.mod
           cache: true
@@ -213,7 +213,7 @@ jobs:
           version: '0.13.9'
 
       - name: Set up Go for the ingress UI
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: alloy/ui/go.mod
           cache: true
@@ -287,7 +287,7 @@ jobs:
           just-version: '1.59.0'
 
       - name: Set up Go for the shared launcher and status page
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: synthetic_monitoring_shared/launcher/go.mod
           cache: true
