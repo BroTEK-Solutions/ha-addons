@@ -60,7 +60,7 @@ jobs:
         id: lint_alloy
         if: ${{ !cancelled() }}
         continue-on-error: true
-        uses: frenck/action-addon-linter@b9cfd1bc62ba60d2c4fc96317b5f7ada5923f4a7 # v2.21.1
+        uses: frenck/action-addon-linter@d51677290aef26cdfc835271dd3c7343ce502809 # v2.21.2
         with:
           path: "./alloy"
 
@@ -68,7 +68,7 @@ jobs:
         id: lint_pdc
         if: ${{ !cancelled() }}
         continue-on-error: true
-        uses: frenck/action-addon-linter@b9cfd1bc62ba60d2c4fc96317b5f7ada5923f4a7 # v2.21.1
+        uses: frenck/action-addon-linter@d51677290aef26cdfc835271dd3c7343ce502809 # v2.21.2
         with:
           path: "./grafana_pdc"
 
@@ -76,7 +76,7 @@ jobs:
         id: lint_sm
         if: ${{ !cancelled() }}
         continue-on-error: true
-        uses: frenck/action-addon-linter@b9cfd1bc62ba60d2c4fc96317b5f7ada5923f4a7 # v2.21.1
+        uses: frenck/action-addon-linter@d51677290aef26cdfc835271dd3c7343ce502809 # v2.21.2
         with:
           path: "./grafana_sm"
 
@@ -84,7 +84,7 @@ jobs:
         id: lint_sm_browser
         if: ${{ !cancelled() }}
         continue-on-error: true
-        uses: frenck/action-addon-linter@b9cfd1bc62ba60d2c4fc96317b5f7ada5923f4a7 # v2.21.1
+        uses: frenck/action-addon-linter@d51677290aef26cdfc835271dd3c7343ce502809 # v2.21.2
         with:
           path: "./grafana_sm_browser"
 
