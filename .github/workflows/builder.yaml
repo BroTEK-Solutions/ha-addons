@@ -46,7 +46,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: '0.13.6'
+          version: '0.13.9'
 
       # -x follows the `# shellcheck source=` directives into the shared
       # validator library, and --source-path=SCRIPTDIR is what makes them
@@ -155,7 +155,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: '0.13.6'
+          version: '0.13.9'
 
       - name: Set up Go for the PDC status page
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -210,7 +210,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          version: '0.13.6'
+          version: '0.13.9'
 
       - name: Set up Go for the ingress UI
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
