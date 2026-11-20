@@ -437,13 +437,13 @@ jobs:
       contents: read
       issues: read
       pull-requests: read
-    uses: rknightion/.github/.github/workflows/ac-evidence.yml@8f00b7fb896191e598f12ed565395697c539add1 # v1.26.9
+    uses: rknightion/.github/.github/workflows/ac-evidence.yml@ca74fcb4f700fd85b81082de75cbc5f1915167aa # v1.30.22
 
   privacy-sweep:
     if: github.event_name == 'pull_request'
     permissions:
       contents: read
-    uses: rknightion/.github/.github/workflows/privacy-sweep.yml@8f00b7fb896191e598f12ed565395697c539add1 # v1.26.9
+    uses: rknightion/.github/.github/workflows/privacy-sweep.yml@ca74fcb4f700fd85b81082de75cbc5f1915167aa # v1.30.22
 
   # The Backlog.md board is retired: issues are the queue. A pull request may delete files under
   # backlog/ (or backlog.config.yml) or move them out, never add or change one. Reads the file list
