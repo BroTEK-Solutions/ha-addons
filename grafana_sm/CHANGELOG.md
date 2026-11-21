@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-sm-v1.3.0...grafana-sm-v1.3.1) (2026-11-21)
+
+
+### Bug Fixes
+
+* **deps:** update grafana/synthetic-monitoring-agent docker tag to v0.71.0 ([#241](https://github.com/BroTEK-Solutions/ha-addons/issues/241)) ([9ea3a15](https://github.com/BroTEK-Solutions/ha-addons/commit/9ea3a1540b7c71c8e2e2af6207dc1bc2280887d2))
+
 ## [1.3.0](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-sm-v1.2.2...grafana-sm-v1.3.0) (2026-11-06)
 
 
