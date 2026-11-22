@@ -42,7 +42,7 @@ jobs:
     permissions:
       contents: read
       packages: write # delete package versions
-    uses: rknightion/.github/.github/workflows/ghcr-cleanup.yml@51dd8bae34a71a2905a765402cf637c0a673bab8 # v1.31.3
+    uses: rknightion/.github/.github/workflows/ghcr-cleanup.yml@774210034cb603b840df2d136fd3e8fe33469d27 # v1.31.5
     with:
       packages: "app-alloy,amd64-addon-alloy,aarch64-addon-alloy,\
         amd64-app-alloy,aarch64-app-alloy,app-grafana-pdc,\
