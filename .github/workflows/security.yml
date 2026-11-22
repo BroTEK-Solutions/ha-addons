@@ -101,7 +101,7 @@ jobs:
       contents: read
       security-events: write # Required to upload zizmor SARIF findings.
       actions: read # Required to read workflow metadata during the audit.
-    uses: rknightion/.github/.github/workflows/zizmor.yml@774210034cb603b840df2d136fd3e8fe33469d27 # v1.31.5
+    uses: rknightion/.github/.github/workflows/zizmor.yml@c1cc41bc7a0ea1d027567f9a7003ae79e35fe870 # v1.31.6
     with:
       enforce: true # A pull request fails on any finding; push runs upload SARIF instead.
 
@@ -113,4 +113,4 @@ jobs:
     permissions:
       contents: read
       security-events: write # Required to upload Docker scan SARIF findings.
-    uses: rknightion/.github/.github/workflows/docker-security.yml@774210034cb603b840df2d136fd3e8fe33469d27 # v1.31.5
+    uses: rknightion/.github/.github/workflows/docker-security.yml@c1cc41bc7a0ea1d027567f9a7003ae79e35fe870 # v1.31.6
