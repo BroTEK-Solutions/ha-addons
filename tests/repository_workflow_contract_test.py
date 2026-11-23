@@ -108,9 +108,9 @@ def check_python_invocation(justfile: str) -> None:
 def check_app_lint_results(steps: list[dict]) -> None:
     """Every App gets diagnostics, but continuing past a linter never hides failure."""
     linters = [step for step in steps if str(step.get("uses", "")).startswith("frenck/action-addon-linter@")]
-    apps = {"alloy", "grafana_pdc", "grafana_sm", "grafana_sm_browser"}
+    apps = {"alloy", "alloy_host", "grafana_pdc", "grafana_sm", "grafana_sm_browser"}
     if {step.get("with", {}).get("path", "").removeprefix("./") for step in linters} != apps:
-        fail("metadata lint must cover all four Apps")
+        fail("metadata lint must cover all five Apps")
     for step in linters:
         if step.get("continue-on-error") is not True or step.get("if") != "${{ !cancelled() }}":
             fail("every App linter must run after earlier failures and preserve its outcome")
@@ -316,7 +316,7 @@ def main() -> None:
 
     expected_versions = {
         app: str(yaml.safe_load((ROOT / app / "config.yaml").read_text())["version"])
-        for app in ("alloy", "grafana_pdc", "grafana_sm", "grafana_sm_browser")
+        for app in ("alloy", "alloy_host", "grafana_pdc", "grafana_sm", "grafana_sm_browser")
     }
     if release_manifest != expected_versions:
         fail("Release Please manifest versions must match the published App metadata")
@@ -334,6 +334,7 @@ def main() -> None:
 
     expected_components = {
         "alloy": "alloy",
+        "alloy_host": "alloy-host",
         "grafana_pdc": "grafana-pdc",
         "grafana_sm": "grafana-sm",
         "grafana_sm_browser": "grafana-sm-browser",
@@ -349,13 +350,13 @@ def main() -> None:
             fail(f"{app} must use the simple semantic release strategy")
         expected_extra_file = (
             {"type": "generic", "path": "config.yaml"}
-            if app in {"grafana_sm", "grafana_sm_browser"}
+            if app in {"alloy_host", "grafana_sm", "grafana_sm_browser"}
             else {"type": "yaml", "path": "config.yaml", "jsonpath": "$.version"}
         )
         if package.get("extra-files") != [expected_extra_file]:
             fail(f"{app} release must update its config.yaml root version")
 
-    for app in ("grafana_sm", "grafana_sm_browser"):
+    for app in ("alloy_host", "grafana_sm", "grafana_sm_browser"):
         config_text = (ROOT / app / "config.yaml").read_text()
         if not re.search(
             r"^version:\s+\S+\s+# x-release-please-version$",
@@ -474,6 +475,7 @@ def main() -> None:
         "uv run --locked tests/synthetic_monitoring_variants_test.py",
         "python3 scripts/sync_shared_lib.py --check",
         "python3 scripts/sync_synthetic_monitoring_variants.py --check",
+        "python3 scripts/sync_alloy_variants.py --check",
         "uv run --locked grafana_pdc/tests/config-schema.test.py",
         "python3 grafana_pdc/tests/image-contract.test.py",
         "(cd grafana_pdc/ui && go test ./...)",
@@ -487,6 +489,8 @@ def main() -> None:
         "bash alloy/tests/generate-config.test.sh",
         "just image alloy local/ha-alloy:smoke",
         "bash alloy/tests/image-smoke.test.sh local/ha-alloy:smoke",
+        "just image alloy_host local/ha-alloy-host:smoke",
+        "bash alloy/tests/host-pid.test.sh local/ha-alloy-host:smoke local/ha-alloy:smoke",
         "bash alloy/tests/init-alloy.test.sh",
         "(cd synthetic_monitoring_shared/launcher && go test ./...)",
         "(cd synthetic_monitoring_shared/ui && go test ./...)",
@@ -677,6 +681,7 @@ def main() -> None:
     trivy_ignores = yaml.safe_load((ROOT / ".trivyignore.yaml").read_text())
     expected_root_paths = {
         "alloy/Dockerfile",
+        "alloy_host/Dockerfile",
         "grafana_pdc/Dockerfile",
         "grafana_sm/Dockerfile",
         "grafana_sm_browser/Dockerfile",
@@ -687,7 +692,7 @@ def main() -> None:
     if len(root_ignores) != 1 or root_ignores[0].get("id") != "AVD-DS-0002":
         fail("Trivy may ignore only the intentional S6 root-bootstrap finding")
     if set(root_ignores[0].get("paths", [])) != expected_root_paths:
-        fail("the root-startup exception must be scoped to the four current App Dockerfiles")
+        fail("the root-startup exception must be scoped to the five current App Dockerfiles")
     if root_ignores[0].get("expired_at") != date(2026, 10, 31):
         fail("the S6 root exception must expire for review on 2026-10-31")
     if not root_ignores[0].get("statement"):
@@ -700,13 +705,14 @@ def main() -> None:
         "grafana-pdc-vX.Y.Z",
         "grafana-sm-vX.Y.Z",
         "grafana-sm-browser-vX.Y.Z",
+        "alloy-host-vX.Y.Z",
         "Conventional Commits",
         "Do not edit an App version manually",
     ):
         if release_documentation not in readme:
             fail(f"README is missing release guidance: {release_documentation}")
 
-    for app in ("alloy", "grafana_pdc", "grafana_sm", "grafana_sm_browser"):
+    for app in ("alloy", "alloy_host", "grafana_pdc", "grafana_sm", "grafana_sm_browser"):
         app_dir = ROOT / app
         for filename in ("README.md", "DOCS.md", "CHANGELOG.md", "translations/en.yaml"):
             if not (app_dir / filename).is_file():
@@ -718,6 +724,44 @@ def main() -> None:
             dimensions = struct.unpack(">II", data[16:24])
             if dimensions != expected:
                 fail(f"{app}/{filename} is {dimensions}, expected {expected}")
+
+    check_generated_alloy_dockerfile_renovate()
+
+
+def check_generated_alloy_dockerfile_renovate() -> None:
+    """Renovate must edit both Alloy Dockerfiles together and no other generated file.
+
+    alloy_host/ is generated from alloy/ by scripts/sync_alloy_variants.py, so
+    gen-check rejects any Renovate PR that bumps alloy/Dockerfile alone. Both
+    Dockerfiles carry the same pins, so Renovate updates them in one branch and
+    the generated copy still matches. Every other generated file stays ignored,
+    because a Renovate edit there is reverted by the next `just gen`.
+    """
+    from fnmatch import fnmatch
+
+    config = json.loads((ROOT / "renovate.json").read_text())
+    ignore = config.get("ignorePaths", [])
+
+    def ignored(path: str) -> bool:
+        return any(fnmatch(path, pattern) for pattern in ignore)
+
+    if ignored("alloy_host/Dockerfile"):
+        fail("Renovate must manage alloy_host/Dockerfile beside alloy/Dockerfile")
+    for path in sorted((ROOT / "alloy_host").rglob("*")):
+        relative = path.relative_to(ROOT).as_posix()
+        if path.is_file() and path.parent != ROOT / "alloy_host" and not ignored(relative):
+            fail(f"Renovate must ignore the generated file {relative}")
+    alloy_manager = next(
+        (manager for manager in config.get("customManagers", [])
+         if any("ALLOY_VERSION" in pattern for pattern in manager.get("matchStrings", []))),
+        None,
+    )
+    if alloy_manager is None:
+        fail("Renovate must track the Alloy release pinned in the Dockerfiles")
+    patterns = [pattern.strip("/") for pattern in alloy_manager.get("managerFilePatterns", [])]
+    for dockerfile in ("alloy/Dockerfile", "alloy_host/Dockerfile"):
+        if not any(re.search(pattern, dockerfile) for pattern in patterns):
+            fail(f"the Alloy release manager must update {dockerfile}")
 
 
 if __name__ == "__main__":

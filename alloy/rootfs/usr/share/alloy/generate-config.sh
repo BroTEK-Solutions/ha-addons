@@ -44,6 +44,11 @@ ALLOY_CONTAINER_NAME="${ALLOY_CONTAINER_NAME:-app_${ADDON_SLUG}}"
 ALLOY_LEGACY_CONTAINER_NAME="${ALLOY_LEGACY_CONTAINER_NAME:-addon_${ADDON_SLUG}}"
 ADDITIONAL_CONFIG="${ADDITIONAL_CONFIG:-}"
 FLEET_REFERENCE_PIPELINE="${FLEET_REFERENCE_PIPELINE:-false}"
+# Host process metrics need both the ingress selection and host process
+# visibility. init-alloy sets HOST_PROCESSES_ACTIVE only when the App really runs
+# in the host PID namespace, which only the host-processes variant App can.
+PROCESS_METRICS="${PROCESS_METRICS:-false}"
+HOST_PROCESSES_ACTIVE="${HOST_PROCESSES_ACTIVE:-false}"
 
 # A Fleet starter pipeline is rendered from the same controls as Local mode,
 # but it runs inside Fleet's remote controller. It must not contain another
@@ -378,6 +383,45 @@ prometheus.scrape "alloy" {
   scrape_interval = "${METRICS_SCRAPE_INTERVAL}"
   metrics_path    = "/metrics"
   job_name        = "integrations/alloy"
+}
+ALLOYCONFIG
+fi
+
+if pipeline_enabled && [ "${FLEET_REFERENCE_PIPELINE}" != "true" ] && [ -n "${PROMETHEUS_URL}" ] \
+  && [ "${PROCESS_METRICS}" = "true" ] && [ "${HOST_PROCESSES_ACTIVE}" = "true" ]; then
+cat <<ALLOYCONFIG
+
+// --- Host process metrics (host-processes variant) ---
+// The App shares the host PID namespace, so /proc lists every host process.
+// Cardinality stays bounded: one group per executable name, no per-thread
+// series, no smaps, and a group disappears when its last process exits. Kernel
+// threads have an empty command line, so they match nothing.
+prometheus.exporter.process "processes" {
+  track_children      = false
+  track_threads       = false
+  gather_smaps        = false
+  remove_empty_groups = true
+
+  matcher {
+    name    = "{{.Comm}}"
+    cmdline = [".+"]
+  }
+}
+
+discovery.relabel "processes" {
+  targets = prometheus.exporter.process.processes.targets
+
+  rule {
+    target_label = "instance"
+    replacement  = "${INSTANCE_NAME}"
+  }
+}
+
+prometheus.scrape "processes" {
+  targets         = discovery.relabel.processes.output
+  forward_to      = [prometheus.remote_write.metrics.receiver]
+  scrape_interval = "${METRICS_SCRAPE_INTERVAL}"
+  job_name        = "integrations/process_exporter"
 }
 ALLOYCONFIG
 fi

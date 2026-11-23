@@ -33,10 +33,14 @@ let healthPollTimer = null;
 let wizardStep = "mode";
 let wizardInitialized = false;
 let starterDismissed = false;
+// Host process visibility as reported by api/status. Only the host-processes
+// variant App with protection mode off has it; until it is known, the process
+// metrics control stays hidden and is never submitted.
+let hostProcessesActive = false;
 const defaults = {
   instance_name: "homeassistant", metrics_scrape_interval: "60s", fleet_poll_frequency: "1m",
   logs_exclude_addons: "alloy", logs_max_age: "24h", log_level: "info",
-  host_metrics: true, homeassistant_metrics: false,
+  host_metrics: true, homeassistant_metrics: false, process_metrics: false,
   alloy_metrics: true, logs_system: true, logs_homeassistant: true, logs_addons: true,
   traces_enabled: false, traces_network_access: false, alloy_profiling: false,
   alloy_disable_telemetry: true,
@@ -66,6 +70,16 @@ async function loadStatus() {
   alloyHealthy = Boolean(status.alloy_healthy);
   if (status.alloy_ready && !alloyHealthy) messages.push("Alloy has started but one or more components are unhealthy.");
   if (status.manual_override) messages.push("The full manual configuration override is active.");
+  const hostProcesses = status.host_processes || {};
+  if (hostProcesses.active) {
+    messages.push("Host process visibility is active: protection mode is off, so every pipeline, whether generated here, delivered by Fleet Management, appended or manual, can read all host processes and their command lines.");
+  } else if (hostProcesses.variant) {
+    messages.push("Host process visibility is not active: protection mode is on, so Home Assistant kept the App in its own PID namespace. Turn protection mode off on the App's Info page and restart the App to see host processes.");
+  }
+  if (hostProcessesActive !== Boolean(hostProcesses.active)) {
+    hostProcessesActive = Boolean(hostProcesses.active);
+    refreshWizardVisibility();
+  }
   runtimeStatus.textContent = messages.join(" ");
   runtimeStatus.hidden = messages.length === 0;
   updateFleetStarterVisibility();
@@ -119,6 +133,8 @@ function scheduleFleetHealthPoll() {
 // the Alloy startup flags need, because they apply to a manual configuration
 // just as much as to a generated one.
 function sectionSelfActive(section, selectedMode) {
+  // Host process metrics are offered only where host processes are visible.
+  if (section.dataset.hostProcesses !== undefined && !hostProcessesActive) return false;
   const isManualControl = section.dataset.manualControl !== undefined;
   const modeActive = section.dataset.mode === undefined
     || (isManualControl ? manualToggle.checked || selectedMode === "local" : section.dataset.mode.split(/\s+/).includes(selectedMode));

@@ -58,13 +58,18 @@ const manualPanel = {
   querySelectorAll() { return [manualField]; },
 };
 const form = {
-  elements: { namedItem(name) { return name === "manual_config_enabled" ? manualToggle : name === "manual_config" ? manualField : null; } },
+  elements: {
+    namedItem(name) {
+      if (name === "process_metrics") return processMetricsField;
+      return name === "manual_config_enabled" ? manualToggle : name === "manual_config" ? manualField : null;
+    },
+  },
   querySelector(selector) {
     return selector === '[data-clear-secret="loki_password"]' ? clearSecret : null;
   },
   querySelectorAll(selector) {
     if (selector === "[name]:not([disabled]):not([data-secret])") {
-      return [logLevelField, additionalArgsField, additionalConfigField, fleetUrlField, fleetUsernameField]
+      return [logLevelField, additionalArgsField, additionalConfigField, processMetricsField, fleetUrlField, fleetUsernameField]
         .filter((field) => !field.disabled);
     }
     return [];
@@ -104,6 +109,12 @@ const advancedSection = {
 };
 const logLevelWrapper = { dataset: { mode: "local fleet" }, hidden: true, querySelectorAll() { return [logLevelField]; } };
 const additionalConfigWrapper = { dataset: { mode: "local" }, hidden: true, querySelectorAll() { return [additionalConfigField]; } };
+// Host process metrics are offered in Local mode only where host process
+// visibility is active; otherwise the control stays hidden and is never submitted.
+const processMetricsField = { name: "process_metrics", type: "checkbox", checked: false, disabled: false, dataset: {} };
+const processMetricsWrapper = { dataset: { mode: "local", hostProcesses: "" }, hidden: false, querySelectorAll() { return [processMetricsField]; } };
+let hostProcessStatus = { variant: false, active: false };
+let configFixture = null;
 // The Fleet container and the card nested inside it, exactly as the page nests
 // them: the container carries the mode, the card carries only the wizard step.
 // Reading the card on its own re-enables required Fleet fields while Local
@@ -193,6 +204,7 @@ globalThis.document = {
         advancedSection,
         logLevelWrapper,
         additionalConfigWrapper,
+        processMetricsWrapper,
         manualSection,
       ];
     }
@@ -227,7 +239,10 @@ globalThis.fetch = async (url, options = {}) => {
     ok: true,
     async json() {
       if (url === "api/status") {
-        return { alloy_ready: false, safe_mode: true, manual_override: true, recovery_available: true, settings_readable: !settingsUnreadable };
+        return {
+          alloy_ready: false, safe_mode: true, manual_override: true, recovery_available: true,
+          settings_readable: !settingsUnreadable, host_processes: hostProcessStatus,
+        };
       }
       if (url === "api/fleet-reference" && options.method === "POST") {
         return {
@@ -238,6 +253,7 @@ globalThis.fetch = async (url, options = {}) => {
       if (url === "api/config" && options.method === "POST") {
         return { ok: true, message: "saved" };
       }
+      if (configFixture) return configFixture;
       return {
         options: { manual_config_enabled: true, manual_config: "logging {}" },
         secrets: { loki_password: false },
@@ -425,6 +441,11 @@ assert.equal(configSaves().length, savesBeforeLocal + 1, "the Local save must re
 const localOptions = JSON.parse(configSaves().pop().body).options;
 assert.ok(!("fleet_url" in localOptions), "a Local save must not submit the inactive Fleet URL");
 assert.ok(!("fleet_username" in localOptions), "a Local save must not submit the inactive Fleet username");
+// Without host process visibility, Local mode does not offer process metrics
+// and a save leaves any stored value untouched. (Visibility is checked below with
+// a Local configuration loaded; this save ran while Local was selected.)
+assert.ok(!("process_metrics" in localOptions), "a save without host process visibility must not submit process metrics");
+assert.doesNotMatch(runtimeStatus.textContent, /host process|host PID/i, "a default install must not mention host processes");
 
 // Inheriting the container's state must not strand Fleet mode itself.
 modeSelect.value = "fleet";
@@ -456,3 +477,45 @@ assert.equal(confirmSettingsRecovery.checked, false, "successful recovery must c
 assert.equal(recoverSettingsButton.disabled, true, "successful recovery must prevent accidental repeated resets");
 assert.match(notice.textContent, /Previous settings archived/);
 console.log("PASS: failed settings loads retain the explicit safe-mode recovery flow");
+
+// app.js has no module syntax, so Node loads it as CommonJS and a re-import with
+// a new query string returns the cached instance. The recovery action reloads
+// both the configuration and the status in that live instance, so it is used
+// here to present each host process state to the page.
+async function reloadPage() {
+  confirmSettingsRecovery.checked = true;
+  confirmSettingsRecovery.onChange();
+  recoverSettingsButton.onClick();
+  await settle();
+}
+configFixture = {
+  options: { operation_mode: "local", prometheus_url: "https://prom.example.net/api/prom/push", process_metrics: true },
+  secrets: {}, mode: "local", mode_configured: true, legacy_hybrid: false, restart_required: false,
+};
+// The fake stands for the Local radio; the Fleet checks above repointed it.
+modeSelect.value = "local";
+
+// The variant with protection mode off: Local mode offers the generated
+// pipeline, and the status line says every pipeline source can see the host.
+hostProcessStatus = { variant: true, active: true };
+await reloadPage();
+assert.equal(manualToggle.checked, false, "the Local fixture must have loaded");
+assert.equal(processMetricsWrapper.hidden, false, "Local mode must offer process metrics where visibility is active");
+assert.equal(processMetricsField.disabled, false, "the offered process metrics control must be editable");
+assert.equal(processMetricsField.checked, true, "the stored process metrics selection must be shown");
+assert.match(runtimeStatus.textContent, /Host process visibility is active: protection mode is off/);
+assert.match(runtimeStatus.textContent, /delivered by Fleet Management/, "the exposure of every pipeline source must be stated");
+
+// The variant with protection mode on: nothing to offer, and the status says why.
+hostProcessStatus = { variant: true, active: false };
+await reloadPage();
+assert.equal(processMetricsWrapper.hidden, true, "process metrics must stay hidden without visibility");
+assert.equal(processMetricsField.disabled, true, "hidden process metrics must not be submitted");
+assert.match(runtimeStatus.textContent, /Host process visibility is not active: protection mode is on/, "inactive visibility and its cause must be reported");
+
+// The standard App: never offered, never mentioned.
+hostProcessStatus = { variant: false, active: false };
+await reloadPage();
+assert.equal(processMetricsWrapper.hidden, true);
+assert.doesNotMatch(runtimeStatus.textContent, /host process|host PID/i, "the standard App must not mention host processes");
+console.log("PASS: host process metrics are offered only where visibility is active, and its state is explained");

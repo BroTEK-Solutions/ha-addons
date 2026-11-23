@@ -71,6 +71,28 @@ mark_settings_applied() {
     mv -f "${temporary}" "${SETTINGS_FILE}"
 }
 
+# Host process visibility, which only the host-processes variant App can have.
+# Its image sets ALLOY_HOST_PROCESSES_VARIANT; Home Assistant puts it in the host
+# PID namespace when its protection mode is off, and its entrypoint then exports
+# ALLOY_HOST_PID=true. Protection mode is the only switch: once the namespace is
+# shared, every pipeline source (generated, Fleet-delivered, additional or
+# manual) can read every host process. The Local process metrics selection only
+# decides whether the generated pipeline is added. This runs before every mode
+# branch so Fleet, safe mode and the manual override report it too. The
+# standard App never sets either variable and logs nothing here.
+HOST_PROCESSES_ACTIVE=false
+if [ "${ALLOY_HOST_PID:-false}" = true ]; then
+    HOST_PROCESSES_ACTIVE=true
+    bashio::log.info "Host process visibility is active: protection mode is off, so the App shares the"
+    bashio::log.info "host PID namespace and every pipeline, generated, Fleet-delivered, additional"
+    bashio::log.info "or manual, can read all host processes and their command lines."
+elif [ "${ALLOY_HOST_PROCESSES_VARIANT:-false}" = true ]; then
+    bashio::log.warning "Host process visibility is not active: protection mode is on, so Home Assistant"
+    bashio::log.warning "kept the App in its own PID namespace. Every other pipeline runs normally. To see"
+    bashio::log.warning "host processes, turn protection mode off on the App's Info page and restart it."
+fi
+export HOST_PROCESSES_ACTIVE
+
 # Safe mode is deliberately the only native option that changes Alloy's
 # operational configuration. It bypasses persisted state so a user can always
 # recover through ingress.
@@ -189,6 +211,7 @@ METRICS_SCRAPE_INTERVAL=$(config_or metrics_scrape_interval 60s)
 HOST_METRICS=$(config_or host_metrics true)
 HOMEASSISTANT_METRICS=$(config_or homeassistant_metrics false)
 ALLOY_METRICS=$(config_or alloy_metrics true)
+PROCESS_METRICS=$(config_or process_metrics false)
 TEMPO_URL=$(config_or tempo_url)
 TEMPO_USERNAME=$(config_or tempo_username)
 TRACES_ENABLED=$(config_or traces_enabled false)
@@ -223,7 +246,7 @@ fi
 
 export LOKI_URL LOKI_USERNAME PROMETHEUS_URL PROMETHEUS_USERNAME
 export INSTANCE_NAME METRICS_SCRAPE_INTERVAL LOG_LEVEL ADDITIONAL_CONFIG
-export HOST_METRICS HOMEASSISTANT_METRICS ALLOY_METRICS
+export HOST_METRICS HOMEASSISTANT_METRICS ALLOY_METRICS PROCESS_METRICS
 export LOGS_SYSTEM LOGS_HOMEASSISTANT LOGS_ADDONS LOGS_EXCLUDE_ADDONS LOGS_MAX_AGE
 export TEMPO_URL TEMPO_USERNAME TRACES_ENABLED TRACES_NETWORK_ACCESS
 export PYROSCOPE_URL PYROSCOPE_USERNAME ALLOY_PROFILING
@@ -386,6 +409,13 @@ if [ "${OPERATION_MODE}" != fleet ] && [ -z "${PROMETHEUS_URL}" ]; then
         bashio::log.fatal "Set prometheus_url, or turn homeassistant_metrics off."
         bashio::exit.nok
     fi
+    # Only where the pipeline could exist: a stale selection in an App without
+    # host process visibility is ignored, as the Web UI never offers it there.
+    if [ "${PROCESS_METRICS}" = true ] && [ "${HOST_PROCESSES_ACTIVE}" = true ]; then
+        bashio::log.fatal "process_metrics is enabled but prometheus_url is empty."
+        bashio::log.fatal "Set prometheus_url, or turn host process metrics off."
+        bashio::exit.nok
+    fi
 elif [ "${OPERATION_MODE}" != fleet ] && [ "${HOST_METRICS}" != "true" ] \
     && [ "${HOMEASSISTANT_METRICS}" != "true" ] && [ "${ALLOY_METRICS}" != "true" ]; then
     bashio::log.warning "prometheus_url is set but both host_metrics and"
@@ -464,6 +494,10 @@ bashio::log.info "Grafana Alloy for Home Assistant"
     bashio::log.info "Metrics -> Prometheus: ${PROMETHEUS_URL} (every ${METRICS_SCRAPE_INTERVAL}) $(auth_note "${PROMETHEUS_USERNAME}")"
 [ -n "${PROMETHEUS_URL}" ] && \
     bashio::log.info "Metric sources: host=${HOST_METRICS} homeassistant=${HOMEASSISTANT_METRICS}"
+if [ "${OPERATION_MODE}" != fleet ] && [ -n "${PROMETHEUS_URL}" ] && [ "${PROCESS_METRICS}" = true ] \
+    && [ "${HOST_PROCESSES_ACTIVE}" = true ]; then
+    bashio::log.info "Host process metrics: one series group per executable name."
+fi
 [ -n "${FLEET_URL}" ] && \
     bashio::log.info "Fleet   -> Fleet Mgmt: ${FLEET_URL} (every ${FLEET_POLL_FREQUENCY}) $(auth_note "${FLEET_USERNAME}")"
 [ -n "${FLEET_ATTRIBUTES}" ] && bashio::log.info "Fleet attributes: ${FLEET_ATTRIBUTES}"
