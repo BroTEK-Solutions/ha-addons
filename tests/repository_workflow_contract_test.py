@@ -157,7 +157,7 @@ def check_required_job_outcomes(jobs: dict, prerequisites: set[str]) -> None:
         fail("the required gate must consume actual needs results without skipping or tolerating failure")
     successful = {name: {"result": "success"} for name in prerequisites}
     successful["init"]["outputs"] = {"changed": "true"}
-    pull_request_only = {"ac-evidence", "privacy-sweep", "backlog-freeze"}
+    pull_request_only = {"privacy-sweep", "backlog-freeze"}
     # Each case is (needs, event name, expected success).
     cases = [(successful, "pull_request", True), (successful, "push", True)]
 
@@ -614,10 +614,22 @@ def main() -> None:
     for direct_trigger in ("\n  push:", "\n  pull_request:"):
         if direct_trigger in security_triggers:
             fail("security checks must run once through the required Build Apps gate")
-    aggregate_gate = {"init", *test_lanes, "build-app", "security", "ac-evidence", "privacy-sweep", "backlog-freeze"}
+    aggregate_gate = {"init", *test_lanes, "build-app", "security", "privacy-sweep", "backlog-freeze"}
     if set(jobs["ci-success"].get("needs", [])) != aggregate_gate:
         fail("ci-success must aggregate every build, security, and test result")
     check_required_job_outcomes(jobs, aggregate_gate)
+    # The acceptance-evidence check reads the pull request body, so it lives in its own workflow:
+    # a body edit re-runs only that workflow, never the builds. Its gate is pr-metadata-success.
+    if "edited" in caller_config[True]["pull_request"].get("types", []):
+        fail("builder must not run on pull request body edits")
+    metadata = yaml.safe_load((ROOT / ".github/workflows/pr-metadata.yml").read_text())
+    if "edited" not in metadata[True]["pull_request"].get("types", []):
+        fail("the PR metadata workflow must re-run the evidence check when the body changes")
+    evidence = metadata["jobs"].get("ac-evidence") or {}
+    if not re.fullmatch(r"rknightion/\.github/\.github/workflows/ac-evidence\.yml@[0-9a-f]{40}", evidence.get("uses", "")):
+        fail("ac-evidence must call the acceptance-evidence reusable by full commit SHA")
+    if metadata["jobs"].get("pr-metadata-success", {}).get("needs") != ["ac-evidence"]:
+        fail("pr-metadata-success must gate on the acceptance-evidence check")
     if jobs["release"].get("needs") != ["ci-success"]:
         fail("release automation must wait for the complete required gate")
     release_condition = jobs["release"].get("if", "")
