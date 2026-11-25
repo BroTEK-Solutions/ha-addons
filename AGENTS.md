@@ -139,15 +139,6 @@ on an enforcing Linux Docker host, using an isolated certificate signer and pair
 write controls. It is required by `just ci`; Ubuntu proof does not replace the separate real-HAOS
 pre-merge criterion for the confinement change.
 
-## Cursor Cloud specific instructions
-
-The development environment in `.cursor/environment.json` runs `just cloud-bootstrap`, which
-prepares the locked Go and Python dependencies and compiles Go test binaries without starting Apps.
-Run the fast checks with `just fmt-check lint gen-check </dev/null`. The full `just check </dev/null`
-uses Docker for Alloy configuration validation. Use hosted CI or a Linux Docker host for that step,
-and enforcing AppArmor for the App tests in `just ci`. Use Home Assistant OS for HAOS-specific
-runtime checks.
-
 ## Rules that are easy to break by accident
 
 **`grafana_sm/` and `grafana_sm_browser/` are generated.** Edit `synthetic_monitoring_shared/` and
