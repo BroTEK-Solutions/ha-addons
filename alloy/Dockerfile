@@ -1,4 +1,4 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/base-debian:bookworm@sha256:27d97db25871ea21095eb6f8e32ea5564797ab380eb5e947d0caa75e606513f4
+ARG BUILD_FROM=ghcr.io/home-assistant/base-debian:bookworm@sha256:50b61b60c3b2bb5ac553ec531e7bc0414b5cfd68938cb24bf9b1d0eb9b83efbb
 
 FROM golang:1.27.4-bookworm@sha256:ce59b41415e2524ae99926fe1f37ce48ba8c194dcbd2a56a65436cdcefa2bd34 AS ui-builder
 
