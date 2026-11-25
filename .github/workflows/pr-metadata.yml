@@ -1,0 +1,45 @@
+name: PR metadata
+
+# Pull request checks that read the pull request itself rather than the code, kept apart from the
+# heavy CI workflow so that editing a pull request's body or title re-runs only these jobs. The
+# required check is pr-metadata-success. The workflow name differs from the heavy workflow's because
+# the hub reusables key their own concurrency groups on github.workflow.
+run-name: PR ${{ github.event.pull_request.number }} metadata
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-meta-caller-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # Pull-request-only callers: the reusables fail on any other event.
+  ac-evidence:
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    uses: rknightion/.github/.github/workflows/ac-evidence.yml@0bb3cc94c03a011b4ba8c86d9716898211de2d2b # v1.32.4
+
+  # The check a ruleset requires. A skipped or cancelled dependency fails it.
+  pr-metadata-success:
+    name: pr-metadata-success
+    needs: [ac-evidence]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require every job to succeed
+        env:
+          EVIDENCE: ${{ needs.ac-evidence.result }}
+        run: |
+          if [ "$EVIDENCE" != "success" ]; then
+            echo "ac-evidence: $EVIDENCE (must succeed)"
+            exit 1
+          fi
