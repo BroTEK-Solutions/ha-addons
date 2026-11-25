@@ -1,5 +1,5 @@
 {
-  "image": "ghcr.io/rknightion/cursor-cloud-base:1@sha256:ea97a0c79849151e4c823ec9d42f9692fdda68d93e17d6dfe653a4e4bcee17d6",
+  "image": "ghcr.io/rknightion/cursor-cloud-base:1@sha256:d682eea83896694ce529c2035816610edd723c9acbd39ccaf8056743e7ed1756",
   "user": "ubuntu",
   "install": "just cloud-bootstrap </dev/null",
   "egressMode": "network_settings_only",
