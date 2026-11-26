@@ -435,7 +435,7 @@ jobs:
     if: github.event_name == 'pull_request'
     permissions:
       contents: read
-    uses: rknightion/.github/.github/workflows/privacy-sweep.yml@9278035a95cca2de3e202817e536fc7f9fc774fc # v1.34.0
+    uses: rknightion/.github/.github/workflows/privacy-sweep.yml@3dacb3010d3967dfa9d7619c2d61dc7af14d72dc # v1.34.1
 
   # The Backlog.md board is retired: issues are the queue. A pull request may delete files under
   # backlog/ (or backlog.config.yml) or move them out, never add or change one. Reads the file list
