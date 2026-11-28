@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.5.1](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.5.0...alloy-v2.5.1) (2026-11-28)
+
+
+### Bug Fixes
+
+* **deps:** update dependency grafana/alloy to v1.22.0 ([#240](https://github.com/BroTEK-Solutions/ha-addons/issues/240)) ([d8c6390](https://github.com/BroTEK-Solutions/ha-addons/commit/d8c639032605d505d7770aee304b45c8ebf5004c))
+* **deps:** update ghcr.io/home-assistant/base-debian:bookworm docker digest to 27d97db ([#229](https://github.com/BroTEK-Solutions/ha-addons/issues/229)) ([cb2f089](https://github.com/BroTEK-Solutions/ha-addons/commit/cb2f0891acb855e8cb343f8dd5eabd7b85db3347))
+* **deps:** update ghcr.io/home-assistant/base-debian:bookworm docker digest to 50b61b6 ([#284](https://github.com/BroTEK-Solutions/ha-addons/issues/284)) ([6c93293](https://github.com/BroTEK-Solutions/ha-addons/commit/6c9329361bfa394b0fd1747d98931dfc0ab83e82))
+
 ## [2.5.0](https://github.com/BroTEK-Solutions/ha-addons/compare/alloy-v2.4.4...alloy-v2.5.0) (2026-11-06)
 
 

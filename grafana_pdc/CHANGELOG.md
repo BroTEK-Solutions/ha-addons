@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.1](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.3.0...grafana-pdc-v1.3.1) (2026-11-28)
+
+
+### Bug Fixes
+
+* **deps:** update ghcr.io/home-assistant/base:3.24 docker digest to 5021aac ([#285](https://github.com/BroTEK-Solutions/ha-addons/issues/285)) ([16d3476](https://github.com/BroTEK-Solutions/ha-addons/commit/16d347661e13ff15e97a387bcebfb6c29124db53))
+* **deps:** update ghcr.io/home-assistant/base:3.24 docker digest to 5842248 ([#230](https://github.com/BroTEK-Solutions/ha-addons/issues/230)) ([f053761](https://github.com/BroTEK-Solutions/ha-addons/commit/f05376133c2b3cb52bfb53c28b50b31a48afae5a))
+* **deps:** update grafana/pdc-agent docker tag to v0.0.69 ([#234](https://github.com/BroTEK-Solutions/ha-addons/issues/234)) ([c426269](https://github.com/BroTEK-Solutions/ha-addons/commit/c4262690c019828f520044d41100efc423e520c0))
+
 ## [1.3.0](https://github.com/BroTEK-Solutions/ha-addons/compare/grafana-pdc-v1.2.3...grafana-pdc-v1.3.0) (2026-11-06)
 
 
